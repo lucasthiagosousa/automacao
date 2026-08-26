@@ -1,0 +1,2066 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Controle de Estoque | Operações de TI</title>
+
+  <style>
+    :root {
+      --azul: #175cd3;
+      --azul-forte: #0b4bc3;
+      --azul-claro: #eaf2ff;
+      --azul-suave: #f4f8ff;
+      --marinho: #0b1739;
+      --texto: #101828;
+      --texto-secundario: #667085;
+      --borda: #e4eaf2;
+      --fundo: #f4f7fb;
+      --branco: #ffffff;
+      --verde: #00966d;
+      --verde-claro: #e8faf4;
+      --amarelo: #b54708;
+      --amarelo-claro: #fff6e5;
+      --vermelho: #d92d20;
+      --vermelho-claro: #fff0ee;
+      --sombra:
+        0 16px 40px rgba(16, 24, 40, 0.07);
+      --sombra-suave:
+        0 4px 18px rgba(16, 24, 40, 0.05);
+      --raio: 22px;
+      --raio-menor: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--fundo);
+      color: var(--texto);
+      font-family:
+        Inter,
+        "Segoe UI",
+        Arial,
+        sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .topo {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      height: 76px;
+      background: rgba(255, 255, 255, 0.94);
+      border-bottom: 1px solid var(--borda);
+      backdrop-filter: blur(18px);
+    }
+
+    .topo-conteudo {
+      width: min(1460px, calc(100% - 40px));
+      height: 100%;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .marca {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+    }
+
+    .marca-icone {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      color: white;
+      background:
+        linear-gradient(145deg, #2878ff, #0b4bc3);
+      box-shadow:
+        0 10px 22px rgba(23, 92, 211, 0.25);
+    }
+
+    .marca-icone svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .marca-titulo {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .marca-subtitulo {
+      margin-top: 3px;
+      color: var(--texto-secundario);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .conexao {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 14px;
+      border: 1px solid #ccefe4;
+      border-radius: 999px;
+      background: var(--verde-claro);
+      color: #067657;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .conexao-ponto {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #12b76a;
+      box-shadow: 0 0 0 5px rgba(18, 183, 106, 0.12);
+    }
+
+    .conexao.erro {
+      color: var(--vermelho);
+      background: var(--vermelho-claro);
+      border-color: #ffd2cc;
+    }
+
+    .conexao.erro .conexao-ponto {
+      background: var(--vermelho);
+      box-shadow: 0 0 0 5px rgba(217, 45, 32, 0.1);
+    }
+
+    .pagina {
+      width: min(1460px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 54px;
+    }
+
+    .cabecalho {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 28px;
+      margin-bottom: 26px;
+    }
+
+    .rotulo {
+      margin: 0 0 10px;
+      color: var(--azul);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(34px, 4vw, 54px);
+      line-height: 1;
+      letter-spacing: -0.055em;
+    }
+
+    .descricao {
+      max-width: 720px;
+      margin: 13px 0 0;
+      color: var(--texto-secundario);
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.6;
+    }
+
+    .acoes {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .botao {
+      min-height: 44px;
+      padding: 0 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      border: 1px solid var(--borda);
+      border-radius: 13px;
+      background: var(--branco);
+      color: var(--texto);
+      font-weight: 800;
+      transition:
+        transform 160ms ease,
+        box-shadow 160ms ease,
+        border-color 160ms ease;
+    }
+
+    .botao:hover:not(:disabled) {
+      transform: translateY(-2px);
+      border-color: #b9c8dd;
+      box-shadow: var(--sombra-suave);
+    }
+
+    .botao:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
+
+    .botao svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .botao-primario {
+      color: white;
+      border-color: var(--azul);
+      background:
+        linear-gradient(135deg, #216fea, #0b4bc3);
+      box-shadow:
+        0 10px 22px rgba(23, 92, 211, 0.22);
+    }
+
+    .botao-carregando svg {
+      animation: girar 900ms linear infinite;
+    }
+
+    @keyframes girar {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .kpi {
+      position: relative;
+      overflow: hidden;
+      min-height: 132px;
+      padding: 20px;
+      border: 1px solid var(--borda);
+      border-radius: var(--raio);
+      background: var(--branco);
+      box-shadow: var(--sombra-suave);
+    }
+
+    .kpi::after {
+      content: "";
+      position: absolute;
+      right: -34px;
+      bottom: -42px;
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      background:
+        radial-gradient(
+          circle,
+          rgba(23, 92, 211, 0.10),
+          transparent 68%
+        );
+    }
+
+    .kpi-topo {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .kpi-titulo {
+      color: var(--texto-secundario);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .kpi-icone {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      color: var(--azul);
+      background: var(--azul-claro);
+    }
+
+    .kpi-icone svg {
+      width: 17px;
+      height: 17px;
+    }
+
+    .kpi-valor {
+      margin-top: 13px;
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: -0.045em;
+    }
+
+    .kpi-legenda {
+      margin-top: 4px;
+      color: #98a2b3;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .resumo {
+      display: grid;
+      grid-template-columns: minmax(0, 2.3fr) minmax(280px, 0.9fr);
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .arquivo-card,
+    .cobertura-card {
+      min-height: 130px;
+      border-radius: var(--raio);
+      box-shadow: var(--sombra-suave);
+    }
+
+    .arquivo-card {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 22px;
+      border: 1px solid var(--borda);
+      background: var(--branco);
+    }
+
+    .arquivo-icone {
+      flex: 0 0 auto;
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 15px;
+      color: var(--azul);
+      background: var(--azul-claro);
+    }
+
+    .arquivo-icone svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .arquivo-nome {
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .arquivo-data {
+      margin-top: 5px;
+      color: var(--texto-secundario);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .cobertura-card {
+      padding: 22px;
+      color: white;
+      background:
+        linear-gradient(135deg, #0b1739, #10265c);
+    }
+
+    .cobertura-titulo {
+      color: #77b3ff;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .cobertura-valor {
+      margin-top: 10px;
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+    }
+
+    .barra {
+      height: 8px;
+      margin-top: 15px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .barra-preenchimento {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background:
+        linear-gradient(90deg, #56a5ff, #8bc8ff);
+      transition: width 600ms ease;
+    }
+
+    .painel {
+      overflow: hidden;
+      border: 1px solid var(--borda);
+      border-radius: var(--raio);
+      background: var(--branco);
+      box-shadow: var(--sombra);
+    }
+
+    .painel-topo {
+      padding: 19px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      border-bottom: 1px solid var(--borda);
+    }
+
+    .painel-titulo {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .painel-subtitulo {
+      margin-top: 4px;
+      color: var(--texto-secundario);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .filtros {
+      display: flex;
+      gap: 9px;
+    }
+
+    .campo,
+    .seletor {
+      height: 42px;
+      border: 1px solid var(--borda);
+      border-radius: 12px;
+      outline: none;
+      background: #fbfcfe;
+      color: var(--texto);
+      font-weight: 700;
+      transition:
+        border-color 160ms ease,
+        box-shadow 160ms ease;
+    }
+
+    .campo {
+      width: 280px;
+      padding: 0 14px;
+    }
+
+    .seletor {
+      padding: 0 38px 0 13px;
+    }
+
+    .campo:focus,
+    .seletor:focus,
+    .minimo-input:focus {
+      border-color: #77aaf5;
+      box-shadow:
+        0 0 0 4px rgba(23, 92, 211, 0.10);
+    }
+
+    .tabela-container {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th {
+      padding: 14px 16px;
+      background: #f8fafc;
+      color: var(--texto-secundario);
+      font-size: 11px;
+      font-weight: 900;
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 15px 16px;
+      border-top: 1px solid #eef1f5;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    tbody tr {
+      transition: background 150ms ease;
+    }
+
+    tbody tr:hover {
+      background: #fafcff;
+    }
+
+    .categoria {
+      font-weight: 900;
+    }
+
+    .numero {
+      font-weight: 900;
+    }
+
+    .minimo-input {
+      width: 72px;
+      height: 38px;
+      border: 1px solid var(--borda);
+      border-radius: 10px;
+      outline: none;
+      background: #f8fafc;
+      color: var(--texto);
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .solicitar {
+      min-width: 44px;
+      display: inline-flex;
+      justify-content: center;
+      padding: 7px 11px;
+      border-radius: 10px;
+      background: #edf2f7;
+      color: var(--texto-secundario);
+      font-weight: 900;
+    }
+
+    .solicitar.necessario {
+      color: var(--vermelho);
+      background: var(--vermelho-claro);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-adequado {
+      color: #067657;
+      background: var(--verde-claro);
+    }
+
+    .status-limite {
+      color: var(--amarelo);
+      background: var(--amarelo-claro);
+    }
+
+    .status-repor {
+      color: var(--vermelho);
+      background: var(--vermelho-claro);
+    }
+
+    .modelos {
+      max-width: 520px;
+      color: #52709b;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.55;
+    }
+
+    .vazio {
+      padding: 54px 20px;
+      color: var(--texto-secundario);
+      text-align: center;
+      font-weight: 700;
+    }
+
+    .automacao {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 60;
+      width: min(410px, calc(100% - 44px));
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      color: white;
+      background:
+        linear-gradient(145deg, #0b1739, #10275e);
+      box-shadow:
+        0 22px 60px rgba(5, 15, 38, 0.30);
+      transform: translateY(140%);
+      opacity: 0;
+      transition:
+        transform 260ms ease,
+        opacity 260ms ease;
+    }
+
+    .automacao.visivel {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .automacao-topo {
+      padding: 17px 18px 13px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .automacao-titulo {
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .automacao-mensagem {
+      margin-top: 5px;
+      color: #cbd8f2;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .automacao-fechar {
+      border: 0;
+      color: white;
+      background: transparent;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .automacao-progresso {
+      height: 4px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .automacao-progresso span {
+      display: block;
+      width: 42%;
+      height: 100%;
+      background: #65b2ff;
+      animation: progresso 1.4s ease-in-out infinite;
+    }
+
+    @keyframes progresso {
+      from {
+        transform: translateX(-110%);
+      }
+
+      to {
+        transform: translateX(350%);
+      }
+    }
+
+    .automacao-log {
+      max-height: 150px;
+      margin: 0;
+      padding: 13px 18px 17px;
+      overflow: auto;
+      color: #9eb4dc;
+      font-family: Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      z-index: 80;
+      min-width: 280px;
+      max-width: calc(100% - 32px);
+      padding: 14px 18px;
+      border-radius: 13px;
+      color: white;
+      background: var(--marinho);
+      box-shadow: var(--sombra);
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+      transform: translate(-50%, 130%);
+      opacity: 0;
+      transition:
+        transform 220ms ease,
+        opacity 220ms ease;
+    }
+
+    .toast.visivel {
+      transform: translate(-50%, 0);
+      opacity: 1;
+    }
+
+    .toast.sucesso {
+      background: #067657;
+    }
+
+    .toast.erro {
+      background: var(--vermelho);
+    }
+
+    @media (max-width: 1050px) {
+      .kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .cabecalho {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .acoes {
+        justify-content: flex-start;
+      }
+
+      .painel-topo {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .filtros {
+        width: 100%;
+      }
+
+      .campo {
+        flex: 1;
+        width: auto;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topo {
+        height: 68px;
+      }
+
+      .topo-conteudo,
+      .pagina {
+        width: min(100% - 24px, 1460px);
+      }
+
+      .pagina {
+        padding-top: 24px;
+      }
+
+      .marca-subtitulo {
+        display: none;
+      }
+
+      .conexao {
+        padding: 8px 10px;
+        font-size: 10px;
+      }
+
+      h1 {
+        font-size: 38px;
+      }
+
+      .acoes {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        width: 100%;
+      }
+
+      .botao {
+        width: 100%;
+      }
+
+      .botao-primario {
+        grid-column: 1 / -1;
+      }
+
+      .kpis {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .kpi {
+        min-height: 120px;
+        padding: 16px;
+        border-radius: 17px;
+      }
+
+      .kpi-valor {
+        font-size: 27px;
+      }
+
+      .resumo {
+        grid-template-columns: 1fr;
+      }
+
+      .arquivo-card,
+      .cobertura-card,
+      .painel {
+        border-radius: 17px;
+      }
+
+      .filtros {
+        flex-direction: column;
+      }
+
+      .campo,
+      .seletor {
+        width: 100%;
+      }
+
+      th,
+      td {
+        padding: 13px 12px;
+      }
+
+      .automacao {
+        right: 12px;
+        bottom: 12px;
+        width: calc(100% - 24px);
+      }
+    }
+
+    @media (max-width: 440px) {
+      .kpis {
+        grid-template-columns: 1fr;
+      }
+
+      .acoes {
+        grid-template-columns: 1fr;
+      }
+
+      .botao-primario {
+        grid-column: auto;
+      }
+
+      .descricao {
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="topo">
+    <div class="topo-conteudo">
+      <div class="marca">
+        <div class="marca-icone">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <rect x="4" y="3" width="16" height="18" rx="2"></rect>
+            <path d="M8 7h8M8 11h8M8 15h3M14 15h2"></path>
+          </svg>
+        </div>
+
+        <div>
+          <p class="marca-titulo">Controle de Estoque</p>
+          <div class="marca-subtitulo">Operações de TI</div>
+        </div>
+      </div>
+
+      <div class="conexao" id="conexao">
+        <span class="conexao-ponto"></span>
+        <span id="conexaoTexto">Conectando...</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="pagina">
+    <section class="cabecalho">
+      <div>
+        <p class="rotulo">Visão executiva</p>
+        <h1>Ativos em estoque</h1>
+
+        <p class="descricao">
+          Dados sincronizados com o relatório mais recente do
+          NXT4Insight. Defina os estoques mínimos e acompanhe
+          automaticamente as necessidades de reposição.
+        </p>
+      </div>
+
+      <div class="acoes">
+        <button
+          class="botao"
+          type="button"
+          onclick="baixarHTML()"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M12 3v12"></path>
+            <path d="m7 10 5 5 5-5"></path>
+            <path d="M5 21h14"></path>
+          </svg>
+          Baixar HTML
+        </button>
+
+        <button
+          class="botao"
+          type="button"
+          onclick="exportarCSV()"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M4 4h16v16H4z"></path>
+            <path d="M8 9h8M8 13h8M8 17h5"></path>
+          </svg>
+          Exportar CSV
+        </button>
+
+        <button
+          class="botao botao-primario"
+          id="botaoAtualizar"
+          type="button"
+          onclick="iniciarAtualizacao()"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M20 6v5h-5"></path>
+            <path d="M4 18v-5h5"></path>
+            <path d="M18.5 9a7 7 0 0 0-12-2L4 11"></path>
+            <path d="M5.5 15a7 7 0 0 0 12 2L20 13"></path>
+          </svg>
+          <span id="textoAtualizar">Atualizar dados</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="kpis">
+      <article class="kpi">
+        <div class="kpi-topo">
+          <span class="kpi-titulo">Total de ativos</span>
+          <span class="kpi-icone">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M4 7h16v13H4z"></path>
+              <path d="M8 7V4h8v3"></path>
+            </svg>
+          </span>
+        </div>
+
+        <div class="kpi-valor" id="totalAtivos">—</div>
+        <div class="kpi-legenda">Registros disponíveis</div>
+      </article>
+
+      <article class="kpi">
+        <div class="kpi-topo">
+          <span class="kpi-titulo">Categorias</span>
+          <span class="kpi-icone">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+            </svg>
+          </span>
+        </div>
+
+        <div class="kpi-valor" id="totalCategorias">—</div>
+        <div class="kpi-legenda">Tipos de ativos encontrados</div>
+      </article>
+
+      <article class="kpi">
+        <div class="kpi-topo">
+          <span class="kpi-titulo">Abaixo do mínimo</span>
+          <span class="kpi-icone">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M12 3 2 21h20L12 3z"></path>
+              <path d="M12 9v5M12 18h.01"></path>
+            </svg>
+          </span>
+        </div>
+
+        <div class="kpi-valor" id="abaixoMinimo">—</div>
+        <div class="kpi-legenda">Necessitam de reposição</div>
+      </article>
+
+      <article class="kpi">
+        <div class="kpi-topo">
+          <span class="kpi-titulo">Total a solicitar</span>
+          <span class="kpi-icone">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M6 6h15l-2 8H8L6 3H3"></path>
+              <circle cx="9" cy="20" r="1"></circle>
+              <circle cx="18" cy="20" r="1"></circle>
+            </svg>
+          </span>
+        </div>
+
+        <div class="kpi-valor" id="totalSolicitar">—</div>
+        <div class="kpi-legenda">Unidades para atingir o mínimo</div>
+      </article>
+    </section>
+
+    <section class="resumo">
+      <article class="arquivo-card">
+        <div class="arquivo-icone">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M6 2h9l5 5v15H6z"></path>
+            <path d="M14 2v6h6"></path>
+            <path d="M9 13h6M9 17h6"></path>
+          </svg>
+        </div>
+
+        <div>
+          <div class="arquivo-nome" id="arquivoNome">
+            Carregando planilha...
+          </div>
+
+          <div class="arquivo-data" id="arquivoData">
+            Aguarde enquanto os dados são processados.
+          </div>
+        </div>
+      </article>
+
+      <article class="cobertura-card">
+        <div class="cobertura-titulo">
+          Cobertura do estoque
+        </div>
+
+        <div class="cobertura-valor" id="coberturaValor">
+          0%
+        </div>
+
+        <div class="barra">
+          <div
+            class="barra-preenchimento"
+            id="coberturaBarra"
+          ></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="painel">
+      <div class="painel-topo">
+        <div>
+          <h2 class="painel-titulo">
+            Levantamento detalhado
+          </h2>
+
+          <div class="painel-subtitulo">
+            Altere o estoque mínimo para recalcular as solicitações.
+          </div>
+        </div>
+
+        <div class="filtros">
+          <input
+            class="campo"
+            id="busca"
+            type="search"
+            placeholder="Buscar categoria ou modelo..."
+            oninput="renderizarTabela()"
+          >
+
+          <select
+            class="seletor"
+            id="filtroStatus"
+            onchange="renderizarTabela()"
+          >
+            <option value="todos">Todos os status</option>
+            <option value="repor">Repor estoque</option>
+            <option value="limite">No limite</option>
+            <option value="adequado">Adequado</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="tabela-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Categoria</th>
+              <th>Atual</th>
+              <th>Mínimo</th>
+              <th>Solicitar</th>
+              <th>Status</th>
+              <th>Modelos encontrados</th>
+            </tr>
+          </thead>
+
+          <tbody id="corpoTabela">
+            <tr>
+              <td colspan="6" class="vazio">
+                Carregando os dados da planilha...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <aside class="automacao" id="painelAutomacao">
+    <div class="automacao-topo">
+      <div>
+        <div class="automacao-titulo">
+          Atualização NXT4Insight
+        </div>
+
+        <div
+          class="automacao-mensagem"
+          id="automacaoMensagem"
+        >
+          Preparando a automação...
+        </div>
+      </div>
+
+      <button
+        class="automacao-fechar"
+        type="button"
+        aria-label="Fechar"
+        onclick="fecharPainelAutomacao()"
+      >
+        ×
+      </button>
+    </div>
+
+    <div
+      class="automacao-progresso"
+      id="automacaoProgresso"
+    >
+      <span></span>
+    </div>
+
+    <pre class="automacao-log" id="automacaoLog"></pre>
+  </aside>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const CHAVE_MINIMOS = "nxt-controle-estoque-minimos-v3";
+
+    const MINIMOS_PADRAO = {
+      "TECLADO": 6,
+      "MOUSE": 15,
+      "SUPORTE": 6,
+      "CABO": 6,
+      "CARREGADOR": 3,
+      "HEADSET": 12
+    };
+
+    let dadosEstoque = null;
+    let temporizadorAtualizacao = null;
+
+    function escaparHTML(valor) {
+      return String(valor ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function normalizar(valor) {
+      return String(valor ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase()
+        .trim();
+    }
+
+    function carregarMinimos() {
+      try {
+        return JSON.parse(
+          localStorage.getItem(CHAVE_MINIMOS) || "{}"
+        );
+      } catch {
+        return {};
+      }
+    }
+
+    function salvarMinimos(minimos) {
+      localStorage.setItem(
+        CHAVE_MINIMOS,
+        JSON.stringify(minimos)
+      );
+    }
+
+    function obterMinimo(nomeCategoria) {
+      const salvos = carregarMinimos();
+      const chave = normalizar(nomeCategoria);
+
+      if (Number.isFinite(Number(salvos[chave]))) {
+        return Math.max(0, Number(salvos[chave]));
+      }
+
+      for (const [termo, minimo] of Object.entries(
+        MINIMOS_PADRAO
+      )) {
+        if (chave.includes(termo)) {
+          return minimo;
+        }
+      }
+
+      return 0;
+    }
+
+    function alterarMinimo(nomeCategoria, valor) {
+      const salvos = carregarMinimos();
+      const chave = normalizar(nomeCategoria);
+
+      salvos[chave] = Math.max(
+        0,
+        Number.parseInt(valor, 10) || 0
+      );
+
+      salvarMinimos(salvos);
+      atualizarIndicadores();
+      renderizarTabela();
+    }
+
+    function calcularCategoria(categoria) {
+      const atual = Number(
+        categoria.atual ?? categoria.quantidade ?? 0
+      );
+
+      const minimo = obterMinimo(categoria.nome);
+      const solicitar = Math.max(minimo - atual, 0);
+
+      let status = "adequado";
+      let statusTexto = "Adequado";
+
+      if (solicitar > 0) {
+        status = "repor";
+        statusTexto = atual === 0
+          ? "Crítico"
+          : "Repor";
+      } else if (minimo > 0 && atual === minimo) {
+        status = "limite";
+        statusTexto = "No limite";
+      }
+
+      return {
+        ...categoria,
+        atual,
+        minimo,
+        solicitar,
+        status,
+        statusTexto
+      };
+    }
+
+    function categoriasCalculadas() {
+      if (!dadosEstoque?.categorias) {
+        return [];
+      }
+
+      return dadosEstoque.categorias.map(
+        calcularCategoria
+      );
+    }
+
+    function formatarData(data) {
+      if (!data) {
+        return "Data não informada";
+      }
+
+      const objetoData = new Date(data);
+
+      if (Number.isNaN(objetoData.getTime())) {
+        return String(data);
+      }
+
+      return objetoData.toLocaleString("pt-BR");
+    }
+
+    function mostrarToast(mensagem, tipo = "") {
+      const toast = document.getElementById("toast");
+
+      toast.textContent = mensagem;
+      toast.className = `toast visivel ${tipo}`;
+
+      clearTimeout(mostrarToast.tempo);
+
+      mostrarToast.tempo = setTimeout(() => {
+        toast.className = "toast";
+      }, 4500);
+    }
+
+    function definirConexao(conectado, texto) {
+      const conexao = document.getElementById("conexao");
+
+      conexao.classList.toggle("erro", !conectado);
+
+      document.getElementById(
+        "conexaoTexto"
+      ).textContent = texto;
+    }
+
+    function atualizarIndicadores() {
+      if (!dadosEstoque) {
+        return;
+      }
+
+      const categorias = categoriasCalculadas();
+
+      const totalAtivos = Number(
+        dadosEstoque.totalAtivos ??
+        dadosEstoque.total ??
+        0
+      );
+
+      const abaixoMinimo = categorias.filter(
+        (categoria) => categoria.solicitar > 0
+      ).length;
+
+      const totalSolicitar = categorias.reduce(
+        (total, categoria) =>
+          total + categoria.solicitar,
+        0
+      );
+
+      const totalNecessario = categorias.reduce(
+        (total, categoria) =>
+          total + Math.max(
+            categoria.atual,
+            categoria.minimo
+          ),
+        0
+      );
+
+      const cobertura = totalNecessario > 0
+        ? Math.min(
+            100,
+            Math.round(
+              (totalAtivos / totalNecessario) * 100
+            )
+          )
+        : 100;
+
+      document.getElementById(
+        "totalAtivos"
+      ).textContent = totalAtivos;
+
+      document.getElementById(
+        "totalCategorias"
+      ).textContent = categorias.length;
+
+      document.getElementById(
+        "abaixoMinimo"
+      ).textContent = abaixoMinimo;
+
+      document.getElementById(
+        "totalSolicitar"
+      ).textContent = totalSolicitar;
+
+      document.getElementById(
+        "coberturaValor"
+      ).textContent = `${cobertura}%`;
+
+      document.getElementById(
+        "coberturaBarra"
+      ).style.width = `${cobertura}%`;
+    }
+
+    function renderizarTabela() {
+      const corpo = document.getElementById(
+        "corpoTabela"
+      );
+
+      if (!dadosEstoque) {
+        return;
+      }
+
+      const busca = normalizar(
+        document.getElementById("busca").value
+      );
+
+      const filtroStatus = document.getElementById(
+        "filtroStatus"
+      ).value;
+
+      const categorias = categoriasCalculadas().filter(
+        (categoria) => {
+          const modelosTexto = (categoria.modelos || [])
+            .map((modelo) => modelo.nome)
+            .join(" ");
+
+          const correspondeBusca =
+            !busca ||
+            normalizar(categoria.nome).includes(busca) ||
+            normalizar(modelosTexto).includes(busca);
+
+          const correspondeStatus =
+            filtroStatus === "todos" ||
+            categoria.status === filtroStatus;
+
+          return correspondeBusca && correspondeStatus;
+        }
+      );
+
+      if (!categorias.length) {
+        corpo.innerHTML = `
+          <tr>
+            <td colspan="6" class="vazio">
+              Nenhuma categoria encontrada para os filtros informados.
+            </td>
+          </tr>
+        `;
+
+        return;
+      }
+
+      corpo.innerHTML = categorias
+        .map((categoria) => {
+          const modelos = (categoria.modelos || [])
+            .map(
+              (modelo) =>
+                `${escaparHTML(modelo.nome)} (${modelo.quantidade})`
+            )
+            .join(", ");
+
+          return `
+            <tr>
+              <td class="categoria">
+                ${escaparHTML(categoria.nome)}
+              </td>
+
+              <td class="numero">
+                ${categoria.atual}
+              </td>
+
+              <td>
+                <input
+                  class="minimo-input"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value="${categoria.minimo}"
+                  aria-label="Estoque mínimo de ${escaparHTML(categoria.nome)}"
+                  onchange="alterarMinimo(
+                    '${escaparHTML(categoria.nome).replaceAll("'", "\\'")}',
+                    this.value
+                  )"
+                >
+              </td>
+
+              <td>
+                <span class="solicitar ${
+                  categoria.solicitar > 0
+                    ? "necessario"
+                    : ""
+                }">
+                  ${categoria.solicitar}
+                </span>
+              </td>
+
+              <td>
+                <span class="status status-${categoria.status}">
+                  ${categoria.statusTexto}
+                </span>
+              </td>
+
+              <td class="modelos">
+                ${modelos || "Modelo não informado"}
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
+    async function carregarDados(mostrarMensagem = false) {
+      try {
+        definirConexao(
+          true,
+          "Lendo planilha..."
+        );
+
+        const resposta = await fetch(
+          `/api/estoque?t=${Date.now()}`,
+          {
+            cache: "no-store"
+          }
+        );
+
+        const dados = await resposta.json();
+
+        if (!resposta.ok || dados.sucesso === false) {
+          throw new Error(
+            dados.mensagem ||
+            "Não foi possível carregar a planilha."
+          );
+        }
+
+        dadosEstoque = dados;
+
+        const arquivo = dados.arquivo || {};
+
+        document.getElementById(
+          "arquivoNome"
+        ).textContent =
+          arquivo.nome ||
+          dados.nomeArquivo ||
+          "estoque-atual.xlsx";
+
+        document.getElementById(
+          "arquivoData"
+        ).textContent =
+          `Última atualização: ${
+            formatarData(
+              arquivo.atualizadoEm ||
+              dados.atualizadoEm
+            )
+          }`;
+
+        definirConexao(
+          true,
+          "Planilha conectada"
+        );
+
+        atualizarIndicadores();
+        renderizarTabela();
+
+        if (mostrarMensagem) {
+          mostrarToast(
+            "Dashboard atualizado com sucesso.",
+            "sucesso"
+          );
+        }
+      } catch (erro) {
+        definirConexao(
+          false,
+          "Falha na planilha"
+        );
+
+        document.getElementById(
+          "corpoTabela"
+        ).innerHTML = `
+          <tr>
+            <td colspan="6" class="vazio">
+              ${escaparHTML(erro.message)}
+            </td>
+          </tr>
+        `;
+
+        mostrarToast(erro.message, "erro");
+      }
+    }
+
+    function definirBotaoAtualizacao(executando) {
+      const botao = document.getElementById(
+        "botaoAtualizar"
+      );
+
+      const texto = document.getElementById(
+        "textoAtualizar"
+      );
+
+      botao.disabled = executando;
+      botao.classList.toggle(
+        "botao-carregando",
+        executando
+      );
+
+      texto.textContent = executando
+        ? "Atualizando..."
+        : "Atualizar dados";
+    }
+
+    function abrirPainelAutomacao() {
+      document.getElementById(
+        "painelAutomacao"
+      ).classList.add("visivel");
+    }
+
+    function fecharPainelAutomacao() {
+      document.getElementById(
+        "painelAutomacao"
+      ).classList.remove("visivel");
+    }
+
+    function atualizarPainelAutomacao(estado) {
+      document.getElementById(
+        "automacaoMensagem"
+      ).textContent =
+        estado.mensagem ||
+        "Automação em andamento...";
+
+      document.getElementById(
+        "automacaoLog"
+      ).textContent =
+        (estado.log || []).slice(-12).join("\n");
+
+      document.getElementById(
+        "automacaoProgresso"
+      ).style.display =
+        estado.executando ? "block" : "none";
+
+      definirBotaoAtualizacao(estado.executando);
+    }
+
+    async function consultarAtualizacao() {
+      try {
+        const resposta = await fetch(
+          `/api/atualizacao?t=${Date.now()}`,
+          {
+            cache: "no-store"
+          }
+        );
+
+        const estado = await resposta.json();
+
+        atualizarPainelAutomacao(estado);
+
+        if (estado.executando) {
+          abrirPainelAutomacao();
+          return;
+        }
+
+        clearInterval(temporizadorAtualizacao);
+        temporizadorAtualizacao = null;
+
+        if (estado.sucesso === true) {
+          await carregarDados(true);
+
+          mostrarToast(
+            "Nova planilha baixada e dashboard atualizado.",
+            "sucesso"
+          );
+
+          setTimeout(
+            fecharPainelAutomacao,
+            4500
+          );
+        } else if (estado.sucesso === false) {
+          abrirPainelAutomacao();
+
+          mostrarToast(
+            estado.mensagem ||
+            "A automação encontrou um erro.",
+            "erro"
+          );
+        }
+      } catch (erro) {
+        clearInterval(temporizadorAtualizacao);
+        temporizadorAtualizacao = null;
+
+        definirBotaoAtualizacao(false);
+        mostrarToast(erro.message, "erro");
+      }
+    }
+
+    async function iniciarAtualizacao() {
+      try {
+        definirBotaoAtualizacao(true);
+        abrirPainelAutomacao();
+
+        document.getElementById(
+          "automacaoMensagem"
+        ).textContent =
+          "Iniciando acesso ao NXT4Insight...";
+
+        document.getElementById(
+          "automacaoLog"
+        ).textContent =
+          "Aguardando o navegador da automação.";
+
+        const resposta = await fetch(
+          "/api/atualizar",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            }
+          }
+        );
+
+        const resultado = await resposta.json();
+
+        if (!resposta.ok) {
+          throw new Error(
+            resultado.mensagem ||
+            "Não foi possível iniciar a atualização."
+          );
+        }
+
+        mostrarToast(
+          "Automação iniciada. Aguarde o navegador concluir.",
+          "sucesso"
+        );
+
+        clearInterval(temporizadorAtualizacao);
+
+        temporizadorAtualizacao = setInterval(
+          consultarAtualizacao,
+          2000
+        );
+
+        await consultarAtualizacao();
+      } catch (erro) {
+        definirBotaoAtualizacao(false);
+
+        document.getElementById(
+          "automacaoMensagem"
+        ).textContent = erro.message;
+
+        document.getElementById(
+          "automacaoProgresso"
+        ).style.display = "none";
+
+        mostrarToast(erro.message, "erro");
+      }
+    }
+
+    function exportarCSV() {
+      if (!dadosEstoque) {
+        mostrarToast(
+          "Aguarde o carregamento da planilha.",
+          "erro"
+        );
+
+        return;
+      }
+
+      const linhas = [
+        [
+          "CATEGORIA",
+          "ESTOQUE ATUAL",
+          "ESTOQUE MÍNIMO",
+          "SOLICITAR",
+          "STATUS",
+          "MODELOS"
+        ]
+      ];
+
+      for (const categoria of categoriasCalculadas()) {
+        const modelos = (categoria.modelos || [])
+          .map(
+            (modelo) =>
+              `${modelo.nome} (${modelo.quantidade})`
+          )
+          .join(", ");
+
+        linhas.push([
+          categoria.nome,
+          categoria.atual,
+          categoria.minimo,
+          categoria.solicitar,
+          categoria.statusTexto,
+          modelos
+        ]);
+      }
+
+      const csv = linhas
+        .map((linha) =>
+          linha
+            .map((valor) =>
+              `"${String(valor).replaceAll('"', '""')}"`
+            )
+            .join(";")
+        )
+        .join("\n");
+
+      const arquivo = new Blob(
+        ["\uFEFF" + csv],
+        {
+          type: "text/csv;charset=utf-8"
+        }
+      );
+
+      baixarArquivo(
+        arquivo,
+        `levantamento-estoque-${
+          new Date().toISOString().slice(0, 10)
+        }.csv`
+      );
+    }
+
+    function baixarHTML() {
+      if (!dadosEstoque) {
+        mostrarToast(
+          "Aguarde o carregamento da planilha.",
+          "erro"
+        );
+
+        return;
+      }
+
+      const categorias = categoriasCalculadas();
+
+      const linhas = categorias
+        .map((categoria) => {
+          const modelos = (categoria.modelos || [])
+            .map(
+              (modelo) =>
+                `${escaparHTML(modelo.nome)} (${modelo.quantidade})`
+            )
+            .join(", ");
+
+          return `
+            <tr>
+              <td>${escaparHTML(categoria.nome)}</td>
+              <td>${categoria.atual}</td>
+              <td>${categoria.minimo}</td>
+              <td>${categoria.solicitar}</td>
+              <td>${categoria.statusTexto}</td>
+              <td>${modelos}</td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      const relatorio = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Levantamento de Estoque</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 40px;
+      color: #101828;
+      background: #f4f7fb;
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+
+    .pagina {
+      max-width: 1200px;
+      margin: auto;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+      font-size: 36px;
+    }
+
+    p {
+      color: #667085;
+    }
+
+    .resumo {
+      display: flex;
+      gap: 12px;
+      margin: 28px 0;
+    }
+
+    .card {
+      flex: 1;
+      padding: 20px;
+      border: 1px solid #e4eaf2;
+      border-radius: 16px;
+      background: white;
+    }
+
+    .valor {
+      margin-top: 8px;
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+    }
+
+    th,
+    td {
+      padding: 13px;
+      border: 1px solid #e4eaf2;
+      text-align: left;
+    }
+
+    th {
+      background: #0b1739;
+      color: white;
+    }
+  </style>
+</head>
+
+<body>
+  <main class="pagina">
+    <h1>Levantamento de estoque</h1>
+
+    <p>
+      Gerado em ${new Date().toLocaleString("pt-BR")}
+    </p>
+
+    <section class="resumo">
+      <div class="card">
+        Total de ativos
+        <div class="valor">
+          ${dadosEstoque.totalAtivos ?? dadosEstoque.total ?? 0}
+        </div>
+      </div>
+
+      <div class="card">
+        Categorias
+        <div class="valor">
+          ${categorias.length}
+        </div>
+      </div>
+
+      <div class="card">
+        Total a solicitar
+        <div class="valor">
+          ${categorias.reduce(
+            (total, item) => total + item.solicitar,
+            0
+          )}
+        </div>
+      </div>
+    </section>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Categoria</th>
+          <th>Atual</th>
+          <th>Mínimo</th>
+          <th>Solicitar</th>
+          <th>Status</th>
+          <th>Modelos</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        ${linhas}
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>
+      `;
+
+      const arquivo = new Blob(
+        [relatorio],
+        {
+          type: "text/html;charset=utf-8"
+        }
+      );
+
+      baixarArquivo(
+        arquivo,
+        `dashboard-estoque-${
+          new Date().toISOString().slice(0, 10)
+        }.html`
+      );
+    }
+
+    function baixarArquivo(arquivo, nome) {
+      const endereco = URL.createObjectURL(arquivo);
+      const link = document.createElement("a");
+
+      link.href = endereco;
+      link.download = nome;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      URL.revokeObjectURL(endereco);
+    }
+
+    async function verificarAutomacaoExistente() {
+      try {
+        const resposta = await fetch(
+          `/api/atualizacao?t=${Date.now()}`,
+          {
+            cache: "no-store"
+          }
+        );
+
+        const estado = await resposta.json();
+
+        if (estado.executando) {
+          atualizarPainelAutomacao(estado);
+          abrirPainelAutomacao();
+
+          temporizadorAtualizacao = setInterval(
+            consultarAtualizacao,
+            2000
+          );
+        }
+      } catch {
+        /*
+         * O carregamento principal mostrará qualquer erro
+         * de comunicação com o servidor.
+         */
+      }
+    }
+
+    carregarDados();
+    verificarAutomacaoExistente();
+
+    setInterval(
+      () => {
+        if (!temporizadorAtualizacao) {
+          carregarDados(false);
+        }
+      },
+      60000
+    );
+  </script>
+</body>
+</html>
