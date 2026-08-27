@@ -2,2065 +2,986 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-
-  <title>Controle de Estoque | Operações de TI</title>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Controle de Estoque de Ativos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
   <style>
     :root {
-      --azul: #175cd3;
-      --azul-forte: #0b4bc3;
-      --azul-claro: #eaf2ff;
-      --azul-suave: #f4f8ff;
-      --marinho: #0b1739;
-      --texto: #101828;
-      --texto-secundario: #667085;
-      --borda: #e4eaf2;
-      --fundo: #f4f7fb;
-      --branco: #ffffff;
-      --verde: #00966d;
-      --verde-claro: #e8faf4;
-      --amarelo: #b54708;
-      --amarelo-claro: #fff6e5;
-      --vermelho: #d92d20;
-      --vermelho-claro: #fff0ee;
-      --sombra:
-        0 16px 40px rgba(16, 24, 40, 0.07);
-      --sombra-suave:
-        0 4px 18px rgba(16, 24, 40, 0.05);
-      --raio: 22px;
-      --raio-menor: 14px;
+      --navy: #102a43;
+      --navy-2: #183b56;
+      --blue: #1677ff;
+      --cyan: #06b6d4;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --violet: #8b5cf6;
+      --ink: #172b4d;
+      --muted: #6b7c93;
+      --line: #dfe7ef;
+      --surface: #ffffff;
+      --canvas: #f4f7fb;
+      --soft: #eef5ff;
+      --shadow: 0 8px 24px rgba(16, 42, 67, .08);
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
-    }
-
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; margin: 0; }
     body {
-      margin: 0;
-      background: var(--fundo);
-      color: var(--texto);
-      font-family:
-        Inter,
-        "Segoe UI",
-        Arial,
-        sans-serif;
-      -webkit-font-smoothing: antialiased;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: Inter, "Segoe UI", sans-serif;
     }
-
-    button,
-    input,
-    select {
-      font: inherit;
-    }
-
-    button {
-      cursor: pointer;
-    }
-
-    .topo {
-      position: sticky;
-      top: 0;
-      z-index: 30;
-      height: 76px;
-      background: rgba(255, 255, 255, 0.94);
-      border-bottom: 1px solid var(--borda);
-      backdrop-filter: blur(18px);
-    }
-
-    .topo-conteudo {
-      width: min(1460px, calc(100% - 40px));
-      height: 100%;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-    }
-
-    .marca {
-      display: flex;
-      align-items: center;
-      gap: 13px;
-    }
-
-    .marca-icone {
-      width: 44px;
-      height: 44px;
-      display: grid;
-      place-items: center;
-      border-radius: 14px;
-      color: white;
-      background:
-        linear-gradient(145deg, #2878ff, #0b4bc3);
-      box-shadow:
-        0 10px 22px rgba(23, 92, 211, 0.25);
-    }
-
-    .marca-icone svg {
-      width: 22px;
-      height: 22px;
-    }
-
-    .marca-titulo {
-      margin: 0;
-      font-size: 15px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-
-    .marca-subtitulo {
-      margin-top: 3px;
-      color: var(--texto-secundario);
-      font-size: 11px;
-      font-weight: 700;
-    }
-
-    .conexao {
-      display: inline-flex;
-      align-items: center;
-      gap: 9px;
-      padding: 9px 14px;
-      border: 1px solid #ccefe4;
-      border-radius: 999px;
-      background: var(--verde-claro);
-      color: #067657;
-      font-size: 12px;
-      font-weight: 800;
-    }
-
-    .conexao-ponto {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #12b76a;
-      box-shadow: 0 0 0 5px rgba(18, 183, 106, 0.12);
-    }
-
-    .conexao.erro {
-      color: var(--vermelho);
-      background: var(--vermelho-claro);
-      border-color: #ffd2cc;
-    }
-
-    .conexao.erro .conexao-ponto {
-      background: var(--vermelho);
-      box-shadow: 0 0 0 5px rgba(217, 45, 32, 0.1);
-    }
-
-    .pagina {
-      width: min(1460px, calc(100% - 40px));
-      margin: 0 auto;
-      padding: 34px 0 54px;
-    }
-
-    .cabecalho {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      gap: 28px;
-      margin-bottom: 26px;
-    }
-
-    .rotulo {
-      margin: 0 0 10px;
-      color: var(--azul);
-      font-size: 12px;
-      font-weight: 900;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-    }
-
-    h1 {
-      margin: 0;
-      font-size: clamp(34px, 4vw, 54px);
-      line-height: 1;
-      letter-spacing: -0.055em;
-    }
-
-    .descricao {
-      max-width: 720px;
-      margin: 13px 0 0;
-      color: var(--texto-secundario);
-      font-size: 14px;
-      font-weight: 600;
-      line-height: 1.6;
-    }
-
-    .acoes {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 10px;
-    }
-
-    .botao {
-      min-height: 44px;
-      padding: 0 16px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 9px;
-      border: 1px solid var(--borda);
-      border-radius: 13px;
-      background: var(--branco);
-      color: var(--texto);
-      font-weight: 800;
-      transition:
-        transform 160ms ease,
-        box-shadow 160ms ease,
-        border-color 160ms ease;
-    }
-
-    .botao:hover:not(:disabled) {
-      transform: translateY(-2px);
-      border-color: #b9c8dd;
-      box-shadow: var(--sombra-suave);
-    }
-
-    .botao:disabled {
-      cursor: wait;
-      opacity: 0.7;
-    }
-
-    .botao svg {
-      width: 18px;
-      height: 18px;
-    }
-
-    .botao-primario {
-      color: white;
-      border-color: var(--azul);
-      background:
-        linear-gradient(135deg, #216fea, #0b4bc3);
-      box-shadow:
-        0 10px 22px rgba(23, 92, 211, 0.22);
-    }
-
-    .botao-carregando svg {
-      animation: girar 900ms linear infinite;
-    }
-
-    @keyframes girar {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-
-    .kpis {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
-      margin-bottom: 14px;
-    }
-
-    .kpi {
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    .app { min-height: 100vh; }
+    .header {
+      background: linear-gradient(135deg, var(--navy), #0b4668 58%, #087f8c);
+      color: #fff;
+      padding: 22px 28px 76px;
       position: relative;
       overflow: hidden;
-      min-height: 132px;
-      padding: 20px;
-      border: 1px solid var(--borda);
-      border-radius: var(--raio);
-      background: var(--branco);
-      box-shadow: var(--sombra-suave);
     }
-
-    .kpi::after {
+    .header::after {
       content: "";
       position: absolute;
-      right: -34px;
-      bottom: -42px;
-      width: 110px;
-      height: 110px;
+      width: 420px;
+      height: 420px;
       border-radius: 50%;
-      background:
-        radial-gradient(
-          circle,
-          rgba(23, 92, 211, 0.10),
-          transparent 68%
-        );
+      right: -140px;
+      top: -240px;
+      background: rgba(255,255,255,.07);
     }
-
-    .kpi-topo {
+    .header-inner {
+      max-width: 1480px;
+      margin: auto;
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      align-items: center;
+      gap: 18px;
+      position: relative;
+      z-index: 1;
     }
-
-    .kpi-titulo {
-      color: var(--texto-secundario);
-      font-size: 12px;
-      font-weight: 800;
-    }
-
-    .kpi-icone {
-      width: 34px;
-      height: 34px;
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .brand-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.25);
       display: grid;
       place-items: center;
-      border-radius: 11px;
-      color: var(--azul);
-      background: var(--azul-claro);
     }
-
-    .kpi-icone svg {
-      width: 17px;
-      height: 17px;
-    }
-
-    .kpi-valor {
-      margin-top: 13px;
-      font-size: 32px;
-      font-weight: 900;
-      letter-spacing: -0.045em;
-    }
-
-    .kpi-legenda {
-      margin-top: 4px;
-      color: #98a2b3;
+    .brand-icon svg { width: 25px; height: 25px; }
+    .brand h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -.02em; }
+    .brand p { font-size: 12px; margin: 0; color: rgba(255,255,255,.7); }
+    .header-actions { display: flex; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
+    .btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 10px;
+      padding: 9px 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 600;
+      transition: .16s ease;
     }
-
-    .resumo {
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(16,42,67,.12); }
+    .btn svg { width: 16px; height: 16px; }
+    .btn-header {
+      background: rgba(255,255,255,.12);
+      border-color: rgba(255,255,255,.28);
+      color: #fff;
+    }
+    .btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .btn-soft { background: var(--soft); border-color: #d7e8ff; color: #0b63ce; }
+    #fileInput { display: none; }
+    .content {
+      max-width: 1480px;
+      margin: -52px auto 0;
+      padding: 0 24px 36px;
+      position: relative;
+      z-index: 2;
+    }
+    .kpis {
       display: grid;
-      grid-template-columns: minmax(0, 2.3fr) minmax(280px, 0.9fr);
+      grid-template-columns: repeat(5, minmax(155px, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid rgba(223,231,239,.9);
+      border-radius: 15px;
+      padding: 16px;
+      min-height: 112px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--accent);
+    }
+    .kpi-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+    .kpi-icon {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 11%, white);
+    }
+    .kpi-icon svg { width: 17px; height: 17px; }
+    .kpi-value { margin-top: 11px; font-size: 28px; line-height: 1; font-weight: 700; letter-spacing: -.04em; color: var(--navy); }
+    .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 7px; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      box-shadow: 0 4px 16px rgba(16,42,67,.045);
+    }
+    .toolbar { padding: 14px; margin-bottom: 14px; position: relative; z-index: 20; }
+    .toolbar-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.7fr) repeat(4, minmax(145px, 1fr)) auto;
+      gap: 10px;
+      align-items: end;
+    }
+    .field-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin: 0 0 5px 2px;
+    }
+    .search-wrap { position: relative; }
+    .search-wrap svg {
+      position: absolute;
+      width: 16px;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #8ba0b5;
+      pointer-events: none;
+    }
+    .control {
+      width: 100%;
+      border: 1px solid #d5e0ea;
+      border-radius: 10px;
+      background: #fff;
+      min-height: 38px;
+      padding: 8px 10px;
+      color: var(--ink);
+      outline: none;
+      font-size: 12px;
+    }
+    .search-wrap .control { padding-left: 34px; }
+    .control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(22,119,255,.11); }
+    .multi { position: relative; }
+    .multi-trigger {
+      width: 100%;
+      border: 1px solid #d5e0ea;
+      border-radius: 10px;
+      background: #fff;
+      min-height: 38px;
+      padding: 8px 30px 8px 10px;
+      cursor: pointer;
+      text-align: left;
+      font-size: 12px;
+      position: relative;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .multi-trigger::after {
+      content: "⌄";
+      position: absolute;
+      right: 10px;
+      top: 7px;
+      color: #8297aa;
+      font-size: 16px;
+    }
+    .multi.open .multi-trigger { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(22,119,255,.1); }
+    .multi-menu {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(100% + 5px);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 6px;
+      box-shadow: 0 12px 30px rgba(16,42,67,.16);
+      max-height: 225px;
+      overflow: auto;
+      z-index: 100;
+    }
+    .multi.open .multi-menu { display: block; }
+    .multi-option {
+      padding: 7px 8px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .multi-option:hover { background: #f1f6fc; }
+    .multi-option input { accent-color: var(--blue); }
+    .toolbar-actions { display: flex; gap: 7px; }
+    .active-note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1.35fr .9fr .9fr;
       gap: 14px;
       margin-bottom: 14px;
     }
-
-    .arquivo-card,
-    .cobertura-card {
-      min-height: 130px;
-      border-radius: var(--raio);
-      box-shadow: var(--sombra-suave);
-    }
-
-    .arquivo-card {
+    .chart-panel { padding: 16px; min-height: 320px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+    .panel-title { margin: 0; font-size: 14px; color: var(--navy); }
+    .panel-desc { margin: 4px 0 0; font-size: 10px; color: var(--muted); }
+    .chart-box { height: 245px; position: relative; }
+    .critical-list { display: grid; gap: 8px; max-height: 245px; overflow: auto; padding-right: 3px; }
+    .critical-item {
+      border: 1px solid var(--line);
+      background: #fbfdff;
+      border-radius: 11px;
+      padding: 10px;
       display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 16px;
-      padding: 22px;
-      border: 1px solid var(--borda);
-      background: var(--branco);
+      gap: 10px;
     }
-
-    .arquivo-icone {
-      flex: 0 0 auto;
-      width: 48px;
-      height: 48px;
+    .critical-item strong { display: block; font-size: 11px; color: var(--navy); margin-bottom: 3px; }
+    .critical-item span { font-size: 10px; color: var(--muted); }
+    .stock-numbers { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+    .stock-number {
+      min-width: 35px;
+      border-radius: 9px;
+      padding: 5px 7px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 11px !important;
+    }
+    .stock-current { color: #b42318 !important; background: #fee4e2; }
+    .stock-minimum { color: #475467 !important; background: #eaecf0; }
+    .empty {
+      min-height: 160px;
       display: grid;
       place-items: center;
-      border-radius: 15px;
-      color: var(--azul);
-      background: var(--azul-claro);
-    }
-
-    .arquivo-icone svg {
-      width: 22px;
-      height: 22px;
-    }
-
-    .arquivo-nome {
-      font-size: 16px;
-      font-weight: 900;
-    }
-
-    .arquivo-data {
-      margin-top: 5px;
-      color: var(--texto-secundario);
+      text-align: center;
+      color: var(--muted);
       font-size: 12px;
+      padding: 20px;
+    }
+    .table-panel { overflow: hidden; }
+    .table-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .result-count {
+      background: #eaf3ff;
+      color: #0b63ce;
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 10px;
       font-weight: 700;
     }
-
-    .cobertura-card {
-      padding: 22px;
-      color: white;
-      background:
-        linear-gradient(135deg, #0b1739, #10265c);
-    }
-
-    .cobertura-titulo {
-      color: #77b3ff;
-      font-size: 11px;
-      font-weight: 900;
-      letter-spacing: 0.14em;
+    .table-scroll { overflow: auto; max-height: 420px; }
+    table { border-collapse: collapse; width: 100%; font-size: 11px; }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 10px 12px;
+      text-align: left;
+      color: #60778c;
+      background: #f5f8fb;
+      border-bottom: 1px solid var(--line);
       text-transform: uppercase;
+      letter-spacing: .05em;
+      font-size: 9px;
+      white-space: nowrap;
     }
-
-    .cobertura-valor {
-      margin-top: 10px;
-      font-size: 36px;
-      font-weight: 900;
-      letter-spacing: -0.04em;
-    }
-
-    .barra {
-      height: 8px;
-      margin-top: 15px;
-      overflow: hidden;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.14);
-    }
-
-    .barra-preenchimento {
-      width: 0;
-      height: 100%;
-      border-radius: inherit;
-      background:
-        linear-gradient(90deg, #56a5ff, #8bc8ff);
-      transition: width 600ms ease;
-    }
-
-    .painel {
-      overflow: hidden;
-      border: 1px solid var(--borda);
-      border-radius: var(--raio);
-      background: var(--branco);
-      box-shadow: var(--sombra);
-    }
-
-    .painel-topo {
-      padding: 19px 20px;
-      display: flex;
+    td { padding: 10px 12px; border-bottom: 1px solid #edf1f5; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+    tbody tr { cursor: pointer; transition: .12s; }
+    tbody tr:hover { background: #f3f8ff; }
+    .code { font-weight: 700; color: #0b63ce; }
+    .badge { display: inline-flex; padding: 4px 8px; border-radius: 999px; font-size: 9px; font-weight: 700; }
+    .badge-green { color: #027a48; background: #dcfae6; }
+    .badge-red { color: #b42318; background: #fee4e2; }
+    .badge-amber { color: #b54708; background: #fef0c7; }
+    .badge-gray { color: #475467; background: #eaecf0; }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 25, 44, .65);
+      backdrop-filter: blur(3px);
+      z-index: 1000;
+      display: none;
       align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-      border-bottom: 1px solid var(--borda);
+      justify-content: center;
+      padding: 18px;
     }
-
-    .painel-titulo {
-      margin: 0;
-      font-size: 17px;
-      font-weight: 900;
-      letter-spacing: -0.02em;
+    .modal.show { display: flex; }
+    .modal-card {
+      width: min(620px, 100%);
+      max-height: 90vh;
+      background: #fff;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 30px 80px rgba(0,0,0,.3);
     }
-
-    .painel-subtitulo {
-      margin-top: 4px;
-      color: var(--texto-secundario);
-      font-size: 12px;
-      font-weight: 600;
+    .modal-head {
+      background: linear-gradient(135deg, var(--navy), #0c6674);
+      color: #fff;
+      padding: 20px;
+      position: relative;
     }
-
-    .filtros {
-      display: flex;
+    .modal-eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: rgba(255,255,255,.65); }
+    .modal-title { font-size: 20px; font-weight: 700; margin: 5px 0 8px; }
+    .modal-close {
+      position: absolute;
+      right: 14px;
+      top: 14px;
+      width: 32px;
+      height: 32px;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 9px;
+      background: rgba(255,255,255,.12);
+      color: #fff;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .details {
+      padding: 18px;
+      overflow: auto;
+      max-height: 65vh;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
       gap: 9px;
     }
-
-    .campo,
-    .seletor {
-      height: 42px;
-      border: 1px solid var(--borda);
-      border-radius: 12px;
-      outline: none;
-      background: #fbfcfe;
-      color: var(--texto);
-      font-weight: 700;
-      transition:
-        border-color 160ms ease,
-        box-shadow 160ms ease;
-    }
-
-    .campo {
-      width: 280px;
-      padding: 0 14px;
-    }
-
-    .seletor {
-      padding: 0 38px 0 13px;
-    }
-
-    .campo:focus,
-    .seletor:focus,
-    .minimo-input:focus {
-      border-color: #77aaf5;
-      box-shadow:
-        0 0 0 4px rgba(23, 92, 211, 0.10);
-    }
-
-    .tabela-container {
-      overflow-x: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    th {
-      padding: 14px 16px;
-      background: #f8fafc;
-      color: var(--texto-secundario);
-      font-size: 11px;
-      font-weight: 900;
-      text-align: left;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      white-space: nowrap;
-    }
-
-    td {
-      padding: 15px 16px;
-      border-top: 1px solid #eef1f5;
-      font-size: 13px;
-      vertical-align: middle;
-    }
-
-    tbody tr {
-      transition: background 150ms ease;
-    }
-
-    tbody tr:hover {
-      background: #fafcff;
-    }
-
-    .categoria {
-      font-weight: 900;
-    }
-
-    .numero {
-      font-weight: 900;
-    }
-
-    .minimo-input {
-      width: 72px;
-      height: 38px;
-      border: 1px solid var(--borda);
+    .detail {
+      background: #f6f9fc;
+      border: 1px solid #e7edf3;
       border-radius: 10px;
-      outline: none;
-      background: #f8fafc;
-      color: var(--texto);
-      font-weight: 900;
-      text-align: center;
+      padding: 10px;
+      min-width: 0;
     }
-
-    .solicitar {
-      min-width: 44px;
-      display: inline-flex;
-      justify-content: center;
-      padding: 7px 11px;
-      border-radius: 10px;
-      background: #edf2f7;
-      color: var(--texto-secundario);
-      font-weight: 900;
-    }
-
-    .solicitar.necessario {
-      color: var(--vermelho);
-      background: var(--vermelho-claro);
-    }
-
-    .status {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 7px 10px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 900;
-      white-space: nowrap;
-    }
-
-    .status::before {
-      content: "";
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-
-    .status-adequado {
-      color: #067657;
-      background: var(--verde-claro);
-    }
-
-    .status-limite {
-      color: var(--amarelo);
-      background: var(--amarelo-claro);
-    }
-
-    .status-repor {
-      color: var(--vermelho);
-      background: var(--vermelho-claro);
-    }
-
-    .modelos {
-      max-width: 520px;
-      color: #52709b;
-      font-size: 12px;
-      font-weight: 700;
-      line-height: 1.55;
-    }
-
-    .vazio {
-      padding: 54px 20px;
-      color: var(--texto-secundario);
-      text-align: center;
-      font-weight: 700;
-    }
-
-    .automacao {
-      position: fixed;
-      right: 22px;
-      bottom: 22px;
-      z-index: 60;
-      width: min(410px, calc(100% - 44px));
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 18px;
-      color: white;
-      background:
-        linear-gradient(145deg, #0b1739, #10275e);
-      box-shadow:
-        0 22px 60px rgba(5, 15, 38, 0.30);
-      transform: translateY(140%);
-      opacity: 0;
-      transition:
-        transform 260ms ease,
-        opacity 260ms ease;
-    }
-
-    .automacao.visivel {
-      transform: translateY(0);
-      opacity: 1;
-    }
-
-    .automacao-topo {
-      padding: 17px 18px 13px;
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .automacao-titulo {
-      font-size: 14px;
-      font-weight: 900;
-    }
-
-    .automacao-mensagem {
-      margin-top: 5px;
-      color: #cbd8f2;
-      font-size: 12px;
-      line-height: 1.45;
-    }
-
-    .automacao-fechar {
-      border: 0;
-      color: white;
-      background: transparent;
-      font-size: 22px;
-      line-height: 1;
-    }
-
-    .automacao-progresso {
-      height: 4px;
-      overflow: hidden;
-      background: rgba(255, 255, 255, 0.12);
-    }
-
-    .automacao-progresso span {
-      display: block;
-      width: 42%;
-      height: 100%;
-      background: #65b2ff;
-      animation: progresso 1.4s ease-in-out infinite;
-    }
-
-    @keyframes progresso {
-      from {
-        transform: translateX(-110%);
-      }
-
-      to {
-        transform: translateX(350%);
-      }
-    }
-
-    .automacao-log {
-      max-height: 150px;
-      margin: 0;
-      padding: 13px 18px 17px;
-      overflow: auto;
-      color: #9eb4dc;
-      font-family: Consolas, monospace;
-      font-size: 11px;
-      line-height: 1.55;
-      white-space: pre-wrap;
-    }
-
+    .detail-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; font-weight: 700; }
+    .detail-value { font-size: 12px; color: var(--navy); overflow-wrap: anywhere; }
     .toast {
       position: fixed;
-      left: 50%;
-      bottom: 24px;
-      z-index: 80;
-      min-width: 280px;
-      max-width: calc(100% - 32px);
-      padding: 14px 18px;
-      border-radius: 13px;
-      color: white;
-      background: var(--marinho);
-      box-shadow: var(--sombra);
-      font-size: 13px;
-      font-weight: 800;
-      text-align: center;
-      transform: translate(-50%, 130%);
+      right: 18px;
+      bottom: 18px;
+      background: var(--navy);
+      color: #fff;
+      padding: 11px 14px;
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      font-size: 11px;
+      z-index: 2000;
       opacity: 0;
-      transition:
-        transform 220ms ease,
-        opacity 220ms ease;
+      transform: translateY(12px);
+      pointer-events: none;
+      transition: .2s;
     }
-
-    .toast.visivel {
-      transform: translate(-50%, 0);
-      opacity: 1;
+    .toast.show { opacity: 1; transform: translateY(0); }
+    @media (max-width: 1120px) {
+      .kpis { grid-template-columns: repeat(3, 1fr); }
+      .toolbar-row { grid-template-columns: repeat(3, 1fr); }
+      .dashboard-grid { grid-template-columns: 1fr 1fr; }
+      .dashboard-grid .chart-panel:first-child { grid-column: 1 / -1; }
     }
-
-    .toast.sucesso {
-      background: #067657;
-    }
-
-    .toast.erro {
-      background: var(--vermelho);
-    }
-
-    @media (max-width: 1050px) {
-      .kpis {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .cabecalho {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-
-      .acoes {
-        justify-content: flex-start;
-      }
-
-      .painel-topo {
-        align-items: flex-start;
-        flex-direction: column;
-      }
-
-      .filtros {
-        width: 100%;
-      }
-
-      .campo {
-        flex: 1;
-        width: auto;
-      }
-    }
-
     @media (max-width: 720px) {
-      .topo {
-        height: 68px;
-      }
-
-      .topo-conteudo,
-      .pagina {
-        width: min(100% - 24px, 1460px);
-      }
-
-      .pagina {
-        padding-top: 24px;
-      }
-
-      .marca-subtitulo {
-        display: none;
-      }
-
-      .conexao {
-        padding: 8px 10px;
-        font-size: 10px;
-      }
-
-      h1 {
-        font-size: 38px;
-      }
-
-      .acoes {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        width: 100%;
-      }
-
-      .botao {
-        width: 100%;
-      }
-
-      .botao-primario {
-        grid-column: 1 / -1;
-      }
-
-      .kpis {
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-      }
-
-      .kpi {
-        min-height: 120px;
-        padding: 16px;
-        border-radius: 17px;
-      }
-
-      .kpi-valor {
-        font-size: 27px;
-      }
-
-      .resumo {
-        grid-template-columns: 1fr;
-      }
-
-      .arquivo-card,
-      .cobertura-card,
-      .painel {
-        border-radius: 17px;
-      }
-
-      .filtros {
-        flex-direction: column;
-      }
-
-      .campo,
-      .seletor {
-        width: 100%;
-      }
-
-      th,
-      td {
-        padding: 13px 12px;
-      }
-
-      .automacao {
-        right: 12px;
-        bottom: 12px;
-        width: calc(100% - 24px);
-      }
+      .header { padding: 18px 16px 70px; }
+      .header-inner { align-items: flex-start; flex-direction: column; }
+      .content { padding: 0 12px 24px; }
+      .kpis { grid-template-columns: 1fr 1fr; }
+      .toolbar-row { grid-template-columns: 1fr 1fr; }
+      .search-field { grid-column: 1 / -1; }
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .dashboard-grid .chart-panel:first-child { grid-column: auto; }
+      .details { grid-template-columns: 1fr; }
     }
-
     @media (max-width: 440px) {
-      .kpis {
-        grid-template-columns: 1fr;
-      }
-
-      .acoes {
-        grid-template-columns: 1fr;
-      }
-
-      .botao-primario {
-        grid-column: auto;
-      }
-
-      .descricao {
-        font-size: 13px;
-      }
+      .kpis, .toolbar-row { grid-template-columns: 1fr; }
+      .search-field { grid-column: auto; }
+      .header-actions { width: 100%; }
+      .header-actions .btn { flex: 1; }
     }
   </style>
 </head>
-
 <body>
-  <header class="topo">
-    <div class="topo-conteudo">
-      <div class="marca">
-        <div class="marca-icone">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <rect x="4" y="3" width="16" height="18" rx="2"></rect>
-            <path d="M8 7h8M8 11h8M8 15h3M14 15h2"></path>
+<div class="app">
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M4 7.5 12 3l8 4.5-8 4.5-8-4.5Z"/>
+            <path d="M4 12.5 12 17l8-4.5M4 17l8 4 8-4"/>
           </svg>
         </div>
-
         <div>
-          <p class="marca-titulo">Controle de Estoque</p>
-          <div class="marca-subtitulo">Operações de TI</div>
+          <h1>Controle de Estoque de Ativos</h1>
+          <p id="sourceName">Conectando ao relatório NXT4Insight...</p>
         </div>
       </div>
-
-      <div class="conexao" id="conexao">
-        <span class="conexao-ponto"></span>
-        <span id="conexaoTexto">Conectando...</span>
+      <div class="header-actions">
+        <a class="btn btn-header" href="/colaboradores.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Colaboradores
+        </a>
+        <button class="btn btn-header" id="nxtUpdateButton">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9a7 7 0 0 0-12-2L4 11"/><path d="M5.5 15a7 7 0 0 0 12 2L20 13"/></svg>
+          <span id="nxtUpdateText">Atualizar NXT</span>
+        </button>
+        <button class="btn btn-header" id="uploadButton">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg>
+          Importar arquivo
+        </button>
+        <button class="btn btn-header" id="exportButton">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12m0 0 4-4m-4 4-4-4"/><path d="M4 19h16"/></svg>
+          Exportar filtrados
+        </button>
+        <input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.txt">
       </div>
     </div>
   </header>
 
-  <main class="pagina">
-    <section class="cabecalho">
-      <div>
-        <p class="rotulo">Visão executiva</p>
-        <h1>Ativos em estoque</h1>
-
-        <p class="descricao">
-          Dados sincronizados com o relatório mais recente do
-          NXT4Insight. Defina os estoques mínimos e acompanhe
-          automaticamente as necessidades de reposição.
-        </p>
-      </div>
-
-      <div class="acoes">
-        <button
-          class="botao"
-          type="button"
-          onclick="baixarHTML()"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M12 3v12"></path>
-            <path d="m7 10 5 5 5-5"></path>
-            <path d="M5 21h14"></path>
-          </svg>
-          Baixar HTML
-        </button>
-
-        <button
-          class="botao"
-          type="button"
-          onclick="exportarCSV()"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M4 4h16v16H4z"></path>
-            <path d="M8 9h8M8 13h8M8 17h5"></path>
-          </svg>
-          Exportar CSV
-        </button>
-
-        <button
-          class="botao botao-primario"
-          id="botaoAtualizar"
-          type="button"
-          onclick="iniciarAtualizacao()"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M20 6v5h-5"></path>
-            <path d="M4 18v-5h5"></path>
-            <path d="M18.5 9a7 7 0 0 0-12-2L4 11"></path>
-            <path d="M5.5 15a7 7 0 0 0 12 2L20 13"></path>
-          </svg>
-          <span id="textoAtualizar">Atualizar dados</span>
-        </button>
-      </div>
-    </section>
-
+  <main class="content">
     <section class="kpis">
-      <article class="kpi">
-        <div class="kpi-topo">
-          <span class="kpi-titulo">Total de ativos</span>
-          <span class="kpi-icone">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M4 7h16v13H4z"></path>
-              <path d="M8 7V4h8v3"></path>
-            </svg>
-          </span>
-        </div>
-
-        <div class="kpi-valor" id="totalAtivos">—</div>
-        <div class="kpi-legenda">Registros disponíveis</div>
+      <article class="kpi" style="--accent: var(--blue)">
+        <div class="kpi-top"><div class="kpi-label">Total no estoque</div><div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/></svg></div></div>
+        <div class="kpi-value" id="kpiTotal">0</div>
+        <div class="kpi-sub" id="kpiTotalSub">registros carregados</div>
       </article>
-
-      <article class="kpi">
-        <div class="kpi-topo">
-          <span class="kpi-titulo">Categorias</span>
-          <span class="kpi-icone">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <rect x="3" y="3" width="7" height="7"></rect>
-              <rect x="14" y="3" width="7" height="7"></rect>
-              <rect x="3" y="14" width="7" height="7"></rect>
-              <rect x="14" y="14" width="7" height="7"></rect>
-            </svg>
-          </span>
-        </div>
-
-        <div class="kpi-valor" id="totalCategorias">—</div>
-        <div class="kpi-legenda">Tipos de ativos encontrados</div>
+      <article class="kpi" style="--accent: var(--cyan)">
+        <div class="kpi-top"><div class="kpi-label">Tipos de ativo</div><div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div></div>
+        <div class="kpi-value" id="kpiTypes">0</div>
+        <div class="kpi-sub">categorias distintas</div>
       </article>
-
-      <article class="kpi">
-        <div class="kpi-topo">
-          <span class="kpi-titulo">Abaixo do mínimo</span>
-          <span class="kpi-icone">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M12 3 2 21h20L12 3z"></path>
-              <path d="M12 9v5M12 18h.01"></path>
-            </svg>
-          </span>
-        </div>
-
-        <div class="kpi-valor" id="abaixoMinimo">—</div>
-        <div class="kpi-legenda">Necessitam de reposição</div>
+      <article class="kpi" style="--accent: var(--green)">
+        <div class="kpi-top"><div class="kpi-label">Ativos disponíveis</div><div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/><circle cx="12" cy="12" r="9"/></svg></div></div>
+        <div class="kpi-value" id="kpiActive">0</div>
+        <div class="kpi-sub" id="kpiActiveSub">status ativo/disponível</div>
       </article>
-
-      <article class="kpi">
-        <div class="kpi-topo">
-          <span class="kpi-titulo">Total a solicitar</span>
-          <span class="kpi-icone">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M6 6h15l-2 8H8L6 3H3"></path>
-              <circle cx="9" cy="20" r="1"></circle>
-              <circle cx="18" cy="20" r="1"></circle>
-            </svg>
-          </span>
-        </div>
-
-        <div class="kpi-valor" id="totalSolicitar">—</div>
-        <div class="kpi-legenda">Unidades para atingir o mínimo</div>
+      <article class="kpi" style="--accent: var(--violet)">
+        <div class="kpi-top"><div class="kpi-label">Modelos</div><div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 3h10v4H7zM5 7h14v14H5z"/><path d="M9 12h6M9 16h4"/></svg></div></div>
+        <div class="kpi-value" id="kpiModels">0</div>
+        <div class="kpi-sub">modelos cadastrados</div>
+      </article>
+      <article class="kpi" style="--accent: var(--amber)">
+        <div class="kpi-top"><div class="kpi-label">Garantia válida</div><div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg></div></div>
+        <div class="kpi-value" id="kpiWarranty">0</div>
+        <div class="kpi-sub" id="kpiWarrantySub">com data futura</div>
       </article>
     </section>
 
-    <section class="resumo">
-      <article class="arquivo-card">
-        <div class="arquivo-icone">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M6 2h9l5 5v15H6z"></path>
-            <path d="M14 2v6h6"></path>
-            <path d="M9 13h6M9 17h6"></path>
-          </svg>
-        </div>
-
-        <div>
-          <div class="arquivo-nome" id="arquivoNome">
-            Carregando planilha...
-          </div>
-
-          <div class="arquivo-data" id="arquivoData">
-            Aguarde enquanto os dados são processados.
+    <section class="panel toolbar">
+      <div class="toolbar-row">
+        <div class="search-field">
+          <label class="field-label">Pesquisar</label>
+          <div class="search-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <input class="control" id="searchInput" placeholder="Código, modelo, hostname, marca...">
           </div>
         </div>
-      </article>
-
-      <article class="cobertura-card">
-        <div class="cobertura-titulo">
-          Cobertura do estoque
-        </div>
-
-        <div class="cobertura-valor" id="coberturaValor">
-          0%
-        </div>
-
-        <div class="barra">
-          <div
-            class="barra-preenchimento"
-            id="coberturaBarra"
-          ></div>
-        </div>
-      </article>
-    </section>
-
-    <section class="painel">
-      <div class="painel-topo">
-        <div>
-          <h2 class="painel-titulo">
-            Levantamento detalhado
-          </h2>
-
-          <div class="painel-subtitulo">
-            Altere o estoque mínimo para recalcular as solicitações.
-          </div>
-        </div>
-
-        <div class="filtros">
-          <input
-            class="campo"
-            id="busca"
-            type="search"
-            placeholder="Buscar categoria ou modelo..."
-            oninput="renderizarTabela()"
-          >
-
-          <select
-            class="seletor"
-            id="filtroStatus"
-            onchange="renderizarTabela()"
-          >
-            <option value="todos">Todos os status</option>
-            <option value="repor">Repor estoque</option>
-            <option value="limite">No limite</option>
-            <option value="adequado">Adequado</option>
-          </select>
+        <div id="filterCompany"></div>
+        <div id="filterType"></div>
+        <div id="filterBrand"></div>
+        <div id="filterStatus"></div>
+        <div class="toolbar-actions">
+          <button class="btn btn-soft" id="clearButton" title="Limpar filtros">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v6h6M20 20v-6h-6"/><path d="M20 9a8 8 0 0 0-13.5-3L4 10m16 4-2.5 4A8 8 0 0 1 4 15"/></svg>
+            Limpar
+          </button>
         </div>
       </div>
+      <div class="active-note">
+        <span id="filterNote">Nenhum filtro aplicado</span>
+        <span>Clique em um registro para visualizar todos os detalhes.</span>
+      </div>
+    </section>
 
-      <div class="tabela-container">
+    <section class="dashboard-grid">
+      <article class="panel chart-panel">
+        <div class="panel-head">
+          <div><h2 class="panel-title">Quantidade por tipo de ativo</h2><p class="panel-desc">Distribuição dos itens atualmente visíveis</p></div>
+        </div>
+        <div class="chart-box"><canvas id="typeChart"></canvas></div>
+      </article>
+      <article class="panel chart-panel">
+        <div class="panel-head">
+          <div><h2 class="panel-title">Situação do estoque</h2><p class="panel-desc">Composição por status</p></div>
+        </div>
+        <div class="chart-box"><canvas id="statusChart"></canvas></div>
+      </article>
+      <article class="panel chart-panel">
+        <div class="panel-head">
+          <div><h2 class="panel-title">Atenção ao estoque</h2><p class="panel-desc">Atual abaixo do estoque mínimo definido</p></div>
+        </div>
+        <div class="critical-list" id="criticalList"></div>
+      </article>
+    </section>
+
+    <section class="panel table-panel">
+      <div class="table-head">
+        <div><h2 class="panel-title">Inventário detalhado</h2><p class="panel-desc">Registros da planilha importada</p></div>
+        <span class="result-count" id="resultCount">0 registros</span>
+      </div>
+      <div class="table-scroll">
         <table>
-          <thead>
-            <tr>
-              <th>Categoria</th>
-              <th>Atual</th>
-              <th>Mínimo</th>
-              <th>Solicitar</th>
-              <th>Status</th>
-              <th>Modelos encontrados</th>
-            </tr>
-          </thead>
-
-          <tbody id="corpoTabela">
-            <tr>
-              <td colspan="6" class="vazio">
-                Carregando os dados da planilha...
-              </td>
-            </tr>
-          </tbody>
+          <thead><tr id="tableHead"></tr></thead>
+          <tbody id="tableBody"></tbody>
         </table>
       </div>
     </section>
   </main>
+</div>
 
-  <aside class="automacao" id="painelAutomacao">
-    <div class="automacao-topo">
-      <div>
-        <div class="automacao-titulo">
-          Atualização NXT4Insight
-        </div>
-
-        <div
-          class="automacao-mensagem"
-          id="automacaoMensagem"
-        >
-          Preparando a automação...
-        </div>
-      </div>
-
-      <button
-        class="automacao-fechar"
-        type="button"
-        aria-label="Fechar"
-        onclick="fecharPainelAutomacao()"
-      >
-        ×
-      </button>
+<div class="modal" id="assetModal">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <button class="modal-close" id="modalClose" aria-label="Fechar">×</button>
+      <div class="modal-eyebrow">Detalhes do ativo</div>
+      <div class="modal-title" id="modalTitle">—</div>
+      <span class="badge badge-gray" id="modalStatus">Sem status</span>
     </div>
-
-    <div
-      class="automacao-progresso"
-      id="automacaoProgresso"
-    >
-      <span></span>
-    </div>
-
-    <pre class="automacao-log" id="automacaoLog"></pre>
-  </aside>
-
-  <div class="toast" id="toast"></div>
-
-  <script>
-    const CHAVE_MINIMOS = "nxt-controle-estoque-minimos-v3";
-
-    const MINIMOS_PADRAO = {
-      "TECLADO": 6,
-      "MOUSE": 15,
-      "SUPORTE": 6,
-      "CABO": 6,
-      "CARREGADOR": 3,
-      "HEADSET": 12
-    };
-
-    let dadosEstoque = null;
-    let temporizadorAtualizacao = null;
-
-    function escaparHTML(valor) {
-      return String(valor ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
-
-    function normalizar(valor) {
-      return String(valor ?? "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toUpperCase()
-        .trim();
-    }
-
-    function carregarMinimos() {
-      try {
-        return JSON.parse(
-          localStorage.getItem(CHAVE_MINIMOS) || "{}"
-        );
-      } catch {
-        return {};
-      }
-    }
-
-    function salvarMinimos(minimos) {
-      localStorage.setItem(
-        CHAVE_MINIMOS,
-        JSON.stringify(minimos)
-      );
-    }
-
-    function obterMinimo(nomeCategoria) {
-      const salvos = carregarMinimos();
-      const chave = normalizar(nomeCategoria);
-
-      if (Number.isFinite(Number(salvos[chave]))) {
-        return Math.max(0, Number(salvos[chave]));
-      }
-
-      for (const [termo, minimo] of Object.entries(
-        MINIMOS_PADRAO
-      )) {
-        if (chave.includes(termo)) {
-          return minimo;
-        }
-      }
-
-      return 0;
-    }
-
-    function alterarMinimo(nomeCategoria, valor) {
-      const salvos = carregarMinimos();
-      const chave = normalizar(nomeCategoria);
-
-      salvos[chave] = Math.max(
-        0,
-        Number.parseInt(valor, 10) || 0
-      );
-
-      salvarMinimos(salvos);
-      atualizarIndicadores();
-      renderizarTabela();
-    }
-
-    function calcularCategoria(categoria) {
-      const atual = Number(
-        categoria.atual ?? categoria.quantidade ?? 0
-      );
-
-      const minimo = obterMinimo(categoria.nome);
-      const solicitar = Math.max(minimo - atual, 0);
-
-      let status = "adequado";
-      let statusTexto = "Adequado";
-
-      if (solicitar > 0) {
-        status = "repor";
-        statusTexto = atual === 0
-          ? "Crítico"
-          : "Repor";
-      } else if (minimo > 0 && atual === minimo) {
-        status = "limite";
-        statusTexto = "No limite";
-      }
-
-      return {
-        ...categoria,
-        atual,
-        minimo,
-        solicitar,
-        status,
-        statusTexto
-      };
-    }
-
-    function categoriasCalculadas() {
-      if (!dadosEstoque?.categorias) {
-        return [];
-      }
-
-      return dadosEstoque.categorias.map(
-        calcularCategoria
-      );
-    }
-
-    function formatarData(data) {
-      if (!data) {
-        return "Data não informada";
-      }
-
-      const objetoData = new Date(data);
-
-      if (Number.isNaN(objetoData.getTime())) {
-        return String(data);
-      }
-
-      return objetoData.toLocaleString("pt-BR");
-    }
-
-    function mostrarToast(mensagem, tipo = "") {
-      const toast = document.getElementById("toast");
-
-      toast.textContent = mensagem;
-      toast.className = `toast visivel ${tipo}`;
-
-      clearTimeout(mostrarToast.tempo);
-
-      mostrarToast.tempo = setTimeout(() => {
-        toast.className = "toast";
-      }, 4500);
-    }
-
-    function definirConexao(conectado, texto) {
-      const conexao = document.getElementById("conexao");
-
-      conexao.classList.toggle("erro", !conectado);
-
-      document.getElementById(
-        "conexaoTexto"
-      ).textContent = texto;
-    }
-
-    function atualizarIndicadores() {
-      if (!dadosEstoque) {
-        return;
-      }
-
-      const categorias = categoriasCalculadas();
-
-      const totalAtivos = Number(
-        dadosEstoque.totalAtivos ??
-        dadosEstoque.total ??
-        0
-      );
-
-      const abaixoMinimo = categorias.filter(
-        (categoria) => categoria.solicitar > 0
-      ).length;
-
-      const totalSolicitar = categorias.reduce(
-        (total, categoria) =>
-          total + categoria.solicitar,
-        0
-      );
-
-      const totalNecessario = categorias.reduce(
-        (total, categoria) =>
-          total + Math.max(
-            categoria.atual,
-            categoria.minimo
-          ),
-        0
-      );
-
-      const cobertura = totalNecessario > 0
-        ? Math.min(
-            100,
-            Math.round(
-              (totalAtivos / totalNecessario) * 100
-            )
-          )
-        : 100;
-
-      document.getElementById(
-        "totalAtivos"
-      ).textContent = totalAtivos;
-
-      document.getElementById(
-        "totalCategorias"
-      ).textContent = categorias.length;
-
-      document.getElementById(
-        "abaixoMinimo"
-      ).textContent = abaixoMinimo;
-
-      document.getElementById(
-        "totalSolicitar"
-      ).textContent = totalSolicitar;
-
-      document.getElementById(
-        "coberturaValor"
-      ).textContent = `${cobertura}%`;
-
-      document.getElementById(
-        "coberturaBarra"
-      ).style.width = `${cobertura}%`;
-    }
-
-    function renderizarTabela() {
-      const corpo = document.getElementById(
-        "corpoTabela"
-      );
-
-      if (!dadosEstoque) {
-        return;
-      }
-
-      const busca = normalizar(
-        document.getElementById("busca").value
-      );
-
-      const filtroStatus = document.getElementById(
-        "filtroStatus"
-      ).value;
-
-      const categorias = categoriasCalculadas().filter(
-        (categoria) => {
-          const modelosTexto = (categoria.modelos || [])
-            .map((modelo) => modelo.nome)
-            .join(" ");
-
-          const correspondeBusca =
-            !busca ||
-            normalizar(categoria.nome).includes(busca) ||
-            normalizar(modelosTexto).includes(busca);
-
-          const correspondeStatus =
-            filtroStatus === "todos" ||
-            categoria.status === filtroStatus;
-
-          return correspondeBusca && correspondeStatus;
-        }
-      );
-
-      if (!categorias.length) {
-        corpo.innerHTML = `
-          <tr>
-            <td colspan="6" class="vazio">
-              Nenhuma categoria encontrada para os filtros informados.
-            </td>
-          </tr>
-        `;
-
-        return;
-      }
-
-      corpo.innerHTML = categorias
-        .map((categoria) => {
-          const modelos = (categoria.modelos || [])
-            .map(
-              (modelo) =>
-                `${escaparHTML(modelo.nome)} (${modelo.quantidade})`
-            )
-            .join(", ");
-
-          return `
-            <tr>
-              <td class="categoria">
-                ${escaparHTML(categoria.nome)}
-              </td>
-
-              <td class="numero">
-                ${categoria.atual}
-              </td>
-
-              <td>
-                <input
-                  class="minimo-input"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value="${categoria.minimo}"
-                  aria-label="Estoque mínimo de ${escaparHTML(categoria.nome)}"
-                  onchange="alterarMinimo(
-                    '${escaparHTML(categoria.nome).replaceAll("'", "\\'")}',
-                    this.value
-                  )"
-                >
-              </td>
-
-              <td>
-                <span class="solicitar ${
-                  categoria.solicitar > 0
-                    ? "necessario"
-                    : ""
-                }">
-                  ${categoria.solicitar}
-                </span>
-              </td>
-
-              <td>
-                <span class="status status-${categoria.status}">
-                  ${categoria.statusTexto}
-                </span>
-              </td>
-
-              <td class="modelos">
-                ${modelos || "Modelo não informado"}
-              </td>
-            </tr>
-          `;
-        })
-        .join("");
-    }
-
-    async function carregarDados(mostrarMensagem = false) {
-      try {
-        definirConexao(
-          true,
-          "Lendo planilha..."
-        );
-
-        const resposta = await fetch(
-          `/api/estoque?t=${Date.now()}`,
-          {
-            cache: "no-store"
-          }
-        );
-
-        const dados = await resposta.json();
-
-        if (!resposta.ok || dados.sucesso === false) {
-          throw new Error(
-            dados.mensagem ||
-            "Não foi possível carregar a planilha."
-          );
-        }
-
-        dadosEstoque = dados;
-
-        const arquivo = dados.arquivo || {};
-
-        document.getElementById(
-          "arquivoNome"
-        ).textContent =
-          arquivo.nome ||
-          dados.nomeArquivo ||
-          "estoque-atual.xlsx";
-
-        document.getElementById(
-          "arquivoData"
-        ).textContent =
-          `Última atualização: ${
-            formatarData(
-              arquivo.atualizadoEm ||
-              dados.atualizadoEm
-            )
-          }`;
-
-        definirConexao(
-          true,
-          "Planilha conectada"
-        );
-
-        atualizarIndicadores();
-        renderizarTabela();
-
-        if (mostrarMensagem) {
-          mostrarToast(
-            "Dashboard atualizado com sucesso.",
-            "sucesso"
-          );
-        }
-      } catch (erro) {
-        definirConexao(
-          false,
-          "Falha na planilha"
-        );
-
-        document.getElementById(
-          "corpoTabela"
-        ).innerHTML = `
-          <tr>
-            <td colspan="6" class="vazio">
-              ${escaparHTML(erro.message)}
-            </td>
-          </tr>
-        `;
-
-        mostrarToast(erro.message, "erro");
-      }
-    }
-
-    function definirBotaoAtualizacao(executando) {
-      const botao = document.getElementById(
-        "botaoAtualizar"
-      );
-
-      const texto = document.getElementById(
-        "textoAtualizar"
-      );
-
-      botao.disabled = executando;
-      botao.classList.toggle(
-        "botao-carregando",
-        executando
-      );
-
-      texto.textContent = executando
-        ? "Atualizando..."
-        : "Atualizar dados";
-    }
-
-    function abrirPainelAutomacao() {
-      document.getElementById(
-        "painelAutomacao"
-      ).classList.add("visivel");
-    }
-
-    function fecharPainelAutomacao() {
-      document.getElementById(
-        "painelAutomacao"
-      ).classList.remove("visivel");
-    }
-
-    function atualizarPainelAutomacao(estado) {
-      document.getElementById(
-        "automacaoMensagem"
-      ).textContent =
-        estado.mensagem ||
-        "Automação em andamento...";
-
-      document.getElementById(
-        "automacaoLog"
-      ).textContent =
-        (estado.log || []).slice(-12).join("\n");
-
-      document.getElementById(
-        "automacaoProgresso"
-      ).style.display =
-        estado.executando ? "block" : "none";
-
-      definirBotaoAtualizacao(estado.executando);
-    }
-
-    async function consultarAtualizacao() {
-      try {
-        const resposta = await fetch(
-          `/api/atualizacao?t=${Date.now()}`,
-          {
-            cache: "no-store"
-          }
-        );
-
-        const estado = await resposta.json();
-
-        atualizarPainelAutomacao(estado);
-
-        if (estado.executando) {
-          abrirPainelAutomacao();
-          return;
-        }
-
-        clearInterval(temporizadorAtualizacao);
-        temporizadorAtualizacao = null;
-
-        if (estado.sucesso === true) {
-          await carregarDados(true);
-
-          mostrarToast(
-            "Nova planilha baixada e dashboard atualizado.",
-            "sucesso"
-          );
-
-          setTimeout(
-            fecharPainelAutomacao,
-            4500
-          );
-        } else if (estado.sucesso === false) {
-          abrirPainelAutomacao();
-
-          mostrarToast(
-            estado.mensagem ||
-            "A automação encontrou um erro.",
-            "erro"
-          );
-        }
-      } catch (erro) {
-        clearInterval(temporizadorAtualizacao);
-        temporizadorAtualizacao = null;
-
-        definirBotaoAtualizacao(false);
-        mostrarToast(erro.message, "erro");
-      }
-    }
-
-    async function iniciarAtualizacao() {
-      try {
-        definirBotaoAtualizacao(true);
-        abrirPainelAutomacao();
-
-        document.getElementById(
-          "automacaoMensagem"
-        ).textContent =
-          "Iniciando acesso ao NXT4Insight...";
-
-        document.getElementById(
-          "automacaoLog"
-        ).textContent =
-          "Aguardando o navegador da automação.";
-
-        const resposta = await fetch(
-          "/api/atualizar",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            }
-          }
-        );
-
-        const resultado = await resposta.json();
-
-        if (!resposta.ok) {
-          throw new Error(
-            resultado.mensagem ||
-            "Não foi possível iniciar a atualização."
-          );
-        }
-
-        mostrarToast(
-          "Automação iniciada. Aguarde o navegador concluir.",
-          "sucesso"
-        );
-
-        clearInterval(temporizadorAtualizacao);
-
-        temporizadorAtualizacao = setInterval(
-          consultarAtualizacao,
-          2000
-        );
-
-        await consultarAtualizacao();
-      } catch (erro) {
-        definirBotaoAtualizacao(false);
-
-        document.getElementById(
-          "automacaoMensagem"
-        ).textContent = erro.message;
-
-        document.getElementById(
-          "automacaoProgresso"
-        ).style.display = "none";
-
-        mostrarToast(erro.message, "erro");
-      }
-    }
-
-    function exportarCSV() {
-      if (!dadosEstoque) {
-        mostrarToast(
-          "Aguarde o carregamento da planilha.",
-          "erro"
-        );
-
-        return;
-      }
-
-      const linhas = [
-        [
-          "CATEGORIA",
-          "ESTOQUE ATUAL",
-          "ESTOQUE MÍNIMO",
-          "SOLICITAR",
-          "STATUS",
-          "MODELOS"
-        ]
-      ];
-
-      for (const categoria of categoriasCalculadas()) {
-        const modelos = (categoria.modelos || [])
-          .map(
-            (modelo) =>
-              `${modelo.nome} (${modelo.quantidade})`
-          )
-          .join(", ");
-
-        linhas.push([
-          categoria.nome,
-          categoria.atual,
-          categoria.minimo,
-          categoria.solicitar,
-          categoria.statusTexto,
-          modelos
-        ]);
-      }
-
-      const csv = linhas
-        .map((linha) =>
-          linha
-            .map((valor) =>
-              `"${String(valor).replaceAll('"', '""')}"`
-            )
-            .join(";")
-        )
-        .join("\n");
-
-      const arquivo = new Blob(
-        ["\uFEFF" + csv],
-        {
-          type: "text/csv;charset=utf-8"
-        }
-      );
-
-      baixarArquivo(
-        arquivo,
-        `levantamento-estoque-${
-          new Date().toISOString().slice(0, 10)
-        }.csv`
-      );
-    }
-
-    function baixarHTML() {
-      if (!dadosEstoque) {
-        mostrarToast(
-          "Aguarde o carregamento da planilha.",
-          "erro"
-        );
-
-        return;
-      }
-
-      const categorias = categoriasCalculadas();
-
-      const linhas = categorias
-        .map((categoria) => {
-          const modelos = (categoria.modelos || [])
-            .map(
-              (modelo) =>
-                `${escaparHTML(modelo.nome)} (${modelo.quantidade})`
-            )
-            .join(", ");
-
-          return `
-            <tr>
-              <td>${escaparHTML(categoria.nome)}</td>
-              <td>${categoria.atual}</td>
-              <td>${categoria.minimo}</td>
-              <td>${categoria.solicitar}</td>
-              <td>${categoria.statusTexto}</td>
-              <td>${modelos}</td>
-            </tr>
-          `;
-        })
-        .join("");
-
-      const relatorio = `
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Levantamento de Estoque</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 40px;
-      color: #101828;
-      background: #f4f7fb;
-      font-family: "Segoe UI", Arial, sans-serif;
-    }
-
-    .pagina {
-      max-width: 1200px;
-      margin: auto;
-    }
-
-    h1 {
-      margin-bottom: 8px;
-      font-size: 36px;
-    }
-
-    p {
-      color: #667085;
-    }
-
-    .resumo {
-      display: flex;
-      gap: 12px;
-      margin: 28px 0;
-    }
-
-    .card {
-      flex: 1;
-      padding: 20px;
-      border: 1px solid #e4eaf2;
-      border-radius: 16px;
-      background: white;
-    }
-
-    .valor {
-      margin-top: 8px;
-      font-size: 28px;
-      font-weight: 800;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: white;
-    }
-
-    th,
-    td {
-      padding: 13px;
-      border: 1px solid #e4eaf2;
-      text-align: left;
-    }
-
-    th {
-      background: #0b1739;
-      color: white;
-    }
-  </style>
-</head>
-
-<body>
-  <main class="pagina">
-    <h1>Levantamento de estoque</h1>
-
-    <p>
-      Gerado em ${new Date().toLocaleString("pt-BR")}
-    </p>
-
-    <section class="resumo">
-      <div class="card">
-        Total de ativos
-        <div class="valor">
-          ${dadosEstoque.totalAtivos ?? dadosEstoque.total ?? 0}
-        </div>
+    <div class="details" id="modalDetails"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const initialData = [];
+
+const minimumStockRules = [
+  {item:"Teclado",minimum:6,aliases:["teclado","keyboard"]},
+  {item:"Mouse",minimum:15,aliases:["mouse"]},
+  {item:"Suporte para Notebook",minimum:6,aliases:["suporte para notebook","suporte notebook","base para notebook"]},
+  {item:"Mouse Pad",minimum:6,aliases:["mouse pad","mousepad"]},
+  {item:"Cabo Tipo C",minimum:6,aliases:["cabo tipo c","cabo usb c","usb tipo c","usb c"]},
+  {item:"Cabo Lightning",minimum:1,aliases:["cabo lightning","cabo lighiting","lightning"]},
+  {item:"Cabo HDMI",minimum:6,aliases:["cabo hdmi","hdmi"]},
+  {item:"Adaptador HDMI para VGA",minimum:3,aliases:["adaptador hdmi para vga","hdmi para vga","adaptador hdmi vga"]},
+  {item:"Bateria Dell 3583",minimum:0,aliases:["bateria dell 3583","bateria 3583"]},
+  {item:"Carregador Dell",minimum:3,aliases:["carregador dell","fonte dell"]},
+  {item:"SSD 240GB SATA",minimum:0,aliases:["ssd 240gb sata","ssd 240 gb sata","ssd 240gb"]},
+  {item:"Mochila",minimum:0,aliases:["mochila","mochila notebook"]},
+  {item:"Carregador de tomada para celular",minimum:3,aliases:["carregador de tomada para celular","carregador celular","carregador de celular"]},
+  {item:"Headset Tipo USB A",minimum:12,aliases:["headset tipo usb a","headset usb a","headset","fone usb"]},
+  {item:"Capinha A54",minimum:3,aliases:["capinha a54","capa a54"]},
+  {item:"Película A54",minimum:3,aliases:["pelicula a54"]},
+  {item:"Capinha A36",minimum:3,aliases:["capinha a36","capa a36"]},
+  {item:"Película A36",minimum:3,aliases:["pelicula a36"]}
+];
+
+const aliases = {
+  company: ["Empresa","Unidade","Localização","Localizacao","Setor"],
+  type: ["Tipo do ativo","Tipo","Categoria","Equipamento"],
+  code: ["Código","Codigo","Patrimônio","Patrimonio","Service Tag","Serial","Número de série"],
+  hostname: ["HostName","Hostname","Nome do computador"],
+  manufacturer: ["Fabrica","Fabricante"],
+  brand: ["Marca"],
+  model: ["Modelo"],
+  status: ["Status","Situação","Situacao"],
+  inclusion: ["Data inclusão","Data de inclusão","Data inclusao","Data cadastro","Data de entrada"],
+  warrantyEnd: ["Data final garantia","Fim da garantia","Data fim garantia"],
+  owner: ["Proprietário","Proprietario","Responsável","Responsavel","Colaborador"],
+  value: ["Valor","Preço","Preco","Custo"],
+  quantity: ["Quantidade","Qtd"]
+};
+
+const preferredColumns = ["Empresa","Tipo do ativo","Código","HostName","Fabrica","Marca","Modelo","Data inclusão","Status","Data final garantia"];
+const colors = ["#1677ff","#06b6d4","#10b981","#f59e0b","#8b5cf6","#ef4444","#14b8a6","#f97316","#64748b"];
+let rawData = initialData.slice();
+let filteredData = rawData.slice();
+let filters = { company: [], type: [], brand: [], status: [] };
+let typeChart;
+let statusChart;
+
+const $ = id => document.getElementById(id);
+const clean = value => value == null ? "" : String(value).trim();
+const norm = value => clean(value).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+const getField = key => {
+  const keys = rawData[0] ? Object.keys(rawData[0]) : [];
+  const found = aliases[key]?.find(a => keys.some(k => norm(k) === norm(a)));
+  return found ? keys.find(k => norm(k) === norm(found)) : null;
+};
+const val = (row, key) => {
+  const field = getField(key);
+  return field ? row[field] : "";
+};
+const qty = row => {
+  const n = Number(String(val(row,"quantity")).replace(",","."));
+  return Number.isFinite(n) && n > 0 ? n : 1;
+};
+const unique = (arr, key) => [...new Set(arr.map(r => clean(val(r,key))).filter(Boolean))].sort((a,b) => a.localeCompare(b,"pt-BR"));
+const sumQty = arr => arr.reduce((sum,row) => sum + qty(row), 0);
+const countBy = (arr,key) => {
+  const map = new Map();
+  arr.forEach(row => {
+    const name = clean(val(row,key)) || "Não informado";
+    map.set(name, (map.get(name) || 0) + qty(row));
+  });
+  return [...map].map(([name,value]) => ({name,value})).sort((a,b) => b.value-a.value);
+};
+const esc = value => clean(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+
+function excelDate(value) {
+  if (value == null || value === "") return "";
+  if (value instanceof Date && !Number.isNaN(value)) return value.toLocaleDateString("pt-BR");
+  if (typeof value === "number" && value > 20000 && value < 80000) {
+    const d = new Date(Math.round((value - 25569) * 86400 * 1000));
+    return d.toLocaleDateString("pt-BR", {timeZone:"UTC"});
+  }
+  const text = clean(value);
+  const d = new Date(text);
+  return Number.isNaN(d.getTime()) ? text : d.toLocaleDateString("pt-BR");
+}
+
+function isDateColumn(name) {
+  return /data|garantia|entrada|inclus/i.test(norm(name));
+}
+
+function formatCell(value, column) {
+  if (isDateColumn(column) && value !== "") return excelDate(value);
+  return clean(value);
+}
+
+function statusClass(status) {
+  const s = norm(status);
+  if (s.includes("inativo") || s.includes("baixa") || s.includes("descart")) return "badge-red";
+  if (s.includes("ativo") || s.includes("dispon") || s.includes("estoque")) return "badge-green";
+  if (s.includes("manut") || s.includes("reserv") || s.includes("pend")) return "badge-amber";
+  return "badge-gray";
+}
+
+function createMultiFilter(hostId, label, key) {
+  const host = $(hostId);
+  const options = unique(rawData,key);
+  host.innerHTML = `
+    <label class="field-label">${esc(label)}</label>
+    <div class="multi" data-filter="${key}">
+      <button class="multi-trigger" type="button">Todos (${options.length})</button>
+      <div class="multi-menu">
+        ${options.map(option => `<label class="multi-option"><input type="checkbox" value="${esc(option)}"><span title="${esc(option)}">${esc(option)}</span></label>`).join("") || `<div class="multi-option">Sem opções</div>`}
       </div>
+    </div>`;
+  const multi = host.querySelector(".multi");
+  const trigger = host.querySelector(".multi-trigger");
+  host.querySelector(".multi-menu").addEventListener("click", event => event.stopPropagation());
+  trigger.addEventListener("click", event => {
+    event.stopPropagation();
+    document.querySelectorAll(".multi.open").forEach(item => { if (item !== multi) item.classList.remove("open"); });
+    multi.classList.toggle("open");
+  });
+  host.querySelectorAll("input").forEach(input => input.addEventListener("change", () => {
+    filters[key] = [...host.querySelectorAll("input:checked")].map(i => i.value);
+    trigger.textContent = filters[key].length ? `${filters[key].length} selecionado${filters[key].length > 1 ? "s" : ""}` : `Todos (${options.length})`;
+    applyFilters();
+  }));
+}
 
-      <div class="card">
-        Categorias
-        <div class="valor">
-          ${categorias.length}
-        </div>
-      </div>
+function buildFilters() {
+  createMultiFilter("filterCompany","Empresa / local","company");
+  createMultiFilter("filterType","Tipo de ativo","type");
+  createMultiFilter("filterBrand","Marca","brand");
+  createMultiFilter("filterStatus","Status","status");
+}
 
-      <div class="card">
-        Total a solicitar
-        <div class="valor">
-          ${categorias.reduce(
-            (total, item) => total + item.solicitar,
-            0
-          )}
-        </div>
-      </div>
-    </section>
+function applyFilters() {
+  const search = norm($("searchInput").value);
+  filteredData = rawData.filter(row => {
+    const matchesSearch = !search || Object.values(row).some(value => norm(value).includes(search));
+    const matches = Object.entries(filters).every(([key,selected]) => !selected.length || selected.includes(clean(val(row,key))));
+    return matchesSearch && matches;
+  });
+  render();
+}
 
-    <table>
-      <thead>
-        <tr>
-          <th>Categoria</th>
-          <th>Atual</th>
-          <th>Mínimo</th>
-          <th>Solicitar</th>
-          <th>Status</th>
-          <th>Modelos</th>
-        </tr>
-      </thead>
+function renderKPIs() {
+  const total = sumQty(filteredData);
+  const types = unique(filteredData,"type").length;
+  const models = unique(filteredData,"model").length;
+  const active = filteredData.filter(row => {
+    const s = norm(val(row,"status"));
+    return !s.includes("inativo") && (s.includes("ativo") || s.includes("dispon") || s.includes("estoque"));
+  }).reduce((sum,row) => sum + qty(row),0);
+  const warranty = filteredData.filter(row => {
+    const raw = val(row,"warrantyEnd");
+    if (!raw) return false;
+    const date = typeof raw === "number" ? new Date(Math.round((raw-25569)*86400*1000)) : new Date(raw);
+    return !Number.isNaN(date.getTime()) && date >= new Date();
+  }).reduce((sum,row) => sum + qty(row),0);
+  $("kpiTotal").textContent = total.toLocaleString("pt-BR");
+  $("kpiTotalSub").textContent = `${filteredData.length.toLocaleString("pt-BR")} registro${filteredData.length === 1 ? "" : "s"} visível${filteredData.length === 1 ? "" : "eis"}`;
+  $("kpiTypes").textContent = types.toLocaleString("pt-BR");
+  $("kpiActive").textContent = active.toLocaleString("pt-BR");
+  $("kpiActiveSub").textContent = total ? `${Math.round(active/total*100)}% do estoque filtrado` : "sem registros";
+  $("kpiModels").textContent = models.toLocaleString("pt-BR");
+  $("kpiWarranty").textContent = warranty.toLocaleString("pt-BR");
+  $("kpiWarrantySub").textContent = getField("warrantyEnd") ? "com garantia ainda válida" : "coluna não encontrada";
+}
 
-      <tbody>
-        ${linhas}
-      </tbody>
-    </table>
-  </main>
-</body>
-</html>
-      `;
-
-      const arquivo = new Blob(
-        [relatorio],
-        {
-          type: "text/html;charset=utf-8"
-        }
-      );
-
-      baixarArquivo(
-        arquivo,
-        `dashboard-estoque-${
-          new Date().toISOString().slice(0, 10)
-        }.html`
-      );
+function chartOptions(horizontal = false) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: horizontal ? "y" : "x",
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: "#102a43",
+        padding: 10,
+        cornerRadius: 8,
+        titleFont: {family:"Inter",size:11},
+        bodyFont: {family:"Inter",size:11}
+      }
+    },
+    scales: {
+      x: { grid: {display:false}, ticks: {color:"#6b7c93",font:{family:"Inter",size:10}} },
+      y: { beginAtZero:true, grid:{color:"rgba(107,124,147,.12)"}, ticks:{precision:0,color:"#6b7c93",font:{family:"Inter",size:10}} }
     }
+  };
+}
 
-    function baixarArquivo(arquivo, nome) {
-      const endereco = URL.createObjectURL(arquivo);
-      const link = document.createElement("a");
-
-      link.href = endereco;
-      link.download = nome;
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      URL.revokeObjectURL(endereco);
-    }
-
-    async function verificarAutomacaoExistente() {
-      try {
-        const resposta = await fetch(
-          `/api/atualizacao?t=${Date.now()}`,
-          {
-            cache: "no-store"
-          }
-        );
-
-        const estado = await resposta.json();
-
-        if (estado.executando) {
-          atualizarPainelAutomacao(estado);
-          abrirPainelAutomacao();
-
-          temporizadorAtualizacao = setInterval(
-            consultarAtualizacao,
-            2000
-          );
-        }
-      } catch {
-        /*
-         * O carregamento principal mostrará qualquer erro
-         * de comunicação com o servidor.
-         */
+function renderCharts() {
+  const typeData = countBy(filteredData,"type").slice(0,10);
+  const statusData = countBy(filteredData,"status");
+  if (typeChart) typeChart.destroy();
+  if (statusChart) statusChart.destroy();
+  typeChart = new Chart($("typeChart"), {
+    type: "bar",
+    data: {
+      labels: typeData.map(x => x.name),
+      datasets: [{data:typeData.map(x => x.value),backgroundColor:typeData.map((_,i)=>colors[i%colors.length]),borderRadius:7,borderSkipped:false,maxBarThickness:42}]
+    },
+    options: chartOptions(typeData.length > 5)
+  });
+  statusChart = new Chart($("statusChart"), {
+    type: "doughnut",
+    data: {
+      labels: statusData.map(x => x.name),
+      datasets: [{data:statusData.map(x => x.value),backgroundColor:statusData.map((_,i)=>colors[i%colors.length]),borderColor:"#fff",borderWidth:3,hoverOffset:5}]
+    },
+    options: {
+      responsive:true,
+      maintainAspectRatio:false,
+      cutout:"65%",
+      plugins:{
+        legend:{position:"bottom",labels:{usePointStyle:true,pointStyle:"circle",boxWidth:8,padding:14,color:"#6b7c93",font:{family:"Inter",size:10}}},
+        tooltip:{backgroundColor:"#102a43",padding:10,cornerRadius:8}
       }
     }
+  });
+}
 
-    carregarDados();
-    verificarAutomacaoExistente();
+function renderCritical() {
+  const inventoryByType = countBy(rawData,"type");
+  const items = minimumStockRules.map(rule => {
+    const current = inventoryByType
+      .filter(stock => rule.aliases.some(alias => {
+        const stockName = norm(stock.name);
+        const aliasName = norm(alias);
+        return stockName === aliasName || stockName.includes(aliasName) || aliasName.includes(stockName);
+      }))
+      .reduce((sum,stock) => sum + stock.value,0);
+    return {...rule,current,shortage:Math.max(0,rule.minimum-current)};
+  }).filter(item => item.minimum > 0 && item.current < item.minimum)
+    .sort((a,b) => b.shortage-a.shortage || a.item.localeCompare(b.item,"pt-BR"));
+  $("criticalList").innerHTML = items.length
+    ? items.map(item => `<div class="critical-item"><div><strong>${esc(item.item)}</strong><span>Faltam ${item.shortage} para atingir o mínimo</span></div><div class="stock-numbers" title="Atual / mínimo"><span class="stock-number stock-current">${item.current}</span><span>de</span><span class="stock-number stock-minimum">${item.minimum}</span></div></div>`).join("")
+    : `<div class="empty">Nenhum tipo de ativo está abaixo do limite definido.</div>`;
+}
 
-    setInterval(
-      () => {
-        if (!temporizadorAtualizacao) {
-          carregarDados(false);
-        }
-      },
-      60000
-    );
-  </script>
+function visibleColumns() {
+  if (!rawData.length) return [];
+  const keys = Object.keys(rawData[0]);
+  const ordered = preferredColumns.filter(c => keys.includes(c));
+  const extra = keys.filter(c => !ordered.includes(c));
+  return [...ordered,...extra].filter(c => filteredData.some(row => clean(row[c])) || preferredColumns.includes(c)).slice(0,12);
+}
+
+function renderTable() {
+  const columns = visibleColumns();
+  $("tableHead").innerHTML = columns.map(column => `<th>${esc(column)}</th>`).join("");
+  $("tableBody").innerHTML = filteredData.slice(0,500).map((row,index) => `
+    <tr data-index="${index}">
+      ${columns.map(column => {
+        const content = formatCell(row[column],column) || "—";
+        if (column === getField("status")) return `<td><span class="badge ${statusClass(content)}">${esc(content)}</span></td>`;
+        return `<td class="${column === getField("code") ? "code" : ""}" title="${esc(content)}">${esc(content)}</td>`;
+      }).join("")}
+    </tr>`).join("");
+  $("tableBody").querySelectorAll("tr").forEach(tr => tr.addEventListener("click", () => openModal(filteredData[Number(tr.dataset.index)])));
+  $("resultCount").textContent = `${filteredData.length.toLocaleString("pt-BR")} registro${filteredData.length === 1 ? "" : "s"}`;
+}
+
+function renderFilterNote() {
+  const count = Object.values(filters).filter(x => x.length).length + ($("searchInput").value ? 1 : 0);
+  $("filterNote").textContent = count ? `${count} filtro${count > 1 ? "s" : ""} aplicado${count > 1 ? "s" : ""} • ${filteredData.length} resultado${filteredData.length === 1 ? "" : "s"}` : "Nenhum filtro aplicado";
+}
+
+function openModal(row) {
+  if (!row) return;
+  $("modalTitle").textContent = clean(val(row,"code")) || clean(val(row,"model")) || "Ativo";
+  const status = clean(val(row,"status")) || "Sem status";
+  $("modalStatus").textContent = status;
+  $("modalStatus").className = `badge ${statusClass(status)}`;
+  $("modalDetails").innerHTML = Object.entries(row).map(([key,value]) => `
+    <div class="detail"><div class="detail-label">${esc(key)}</div><div class="detail-value">${esc(formatCell(value,key) || "—")}</div></div>`).join("");
+  $("assetModal").classList.add("show");
+  document.body.style.overflow = "hidden";
+}
+
+function closeModal() {
+  $("assetModal").classList.remove("show");
+  document.body.style.overflow = "";
+}
+
+function render() {
+  renderKPIs();
+  renderCharts();
+  renderCritical();
+  renderTable();
+  renderFilterNote();
+}
+
+function resetFilters() {
+  filters = {company:[],type:[],brand:[],status:[]};
+  $("searchInput").value = "";
+  buildFilters();
+  applyFilters();
+}
+
+function normalizeRows(rows) {
+  return rows
+    .map(row => Object.fromEntries(Object.entries(row).map(([key,value]) => [clean(key), value ?? ""])))
+    .filter(row => Object.values(row).some(value => clean(value)));
+}
+
+async function importFile(file) {
+  if (!file) return;
+  try {
+    const buffer = await file.arrayBuffer();
+    if (typeof XLSX === "undefined") throw new Error("o leitor de Excel não foi carregado. Verifique a conexão com a internet e abra novamente.");
+    const workbook = /\.csv$|\.txt$/i.test(file.name)
+      ? XLSX.read(new TextDecoder("utf-8").decode(buffer),{type:"string"})
+      : XLSX.read(buffer,{type:"array",cellDates:false});
+    let rows = extractBestSheet(workbook);
+    rows = normalizeRows(rows);
+    if (!rows.length) throw new Error("Nenhum registro foi encontrado.");
+    rawData = rows;
+    $("sourceName").textContent = `Arquivo atual: ${file.name}`;
+    resetFilters();
+    toast(`${rows.length} registros importados com sucesso.`);
+  } catch (error) {
+    toast(`Não foi possível importar: ${error.message}`);
+  } finally {
+    $("fileInput").value = "";
+  }
+}
+
+function extractBestSheet(workbook) {
+  const knownHeaders = Object.values(aliases).flat().map(norm);
+  const candidates = workbook.SheetNames.map(sheetName => {
+    const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName],{
+      header:1, defval:"", raw:true, blankrows:false
+    });
+    let bestHeaderIndex = -1;
+    let bestScore = -1;
+    matrix.slice(0,25).forEach((row,index) => {
+      const cells = row.map(norm).filter(Boolean);
+      const recognized = cells.filter(cell => knownHeaders.includes(cell)).length;
+      const score = recognized * 10 + cells.length;
+      if (recognized >= 2 && score > bestScore) {
+        bestScore = score;
+        bestHeaderIndex = index;
+      }
+    });
+    if (bestHeaderIndex < 0) {
+      bestHeaderIndex = matrix.findIndex(row => row.filter(cell => clean(cell)).length >= 2);
+    }
+    if (bestHeaderIndex < 0) return {sheetName,rows:[],score:0};
+    const headers = matrix[bestHeaderIndex].map((cell,index) => clean(cell) || `Coluna ${index+1}`);
+    const rows = matrix.slice(bestHeaderIndex+1)
+      .filter(row => row.some(cell => clean(cell)))
+      .map(row => Object.fromEntries(headers.map((header,index) => [header,row[index] ?? ""])));
+    return {sheetName,rows,score:bestScore + rows.length};
+  });
+  candidates.sort((a,b) => b.score-a.score);
+  return candidates[0]?.rows || [];
+}
+
+function exportCSV() {
+  if (!filteredData.length) return toast("Não há registros para exportar.");
+  const columns = Object.keys(rawData[0]);
+  const quote = value => `"${clean(value).replace(/"/g,'""')}"`;
+  const csv = [columns.map(quote).join(";"), ...filteredData.map(row => columns.map(c => quote(formatCell(row[c],c))).join(";"))].join("\r\n");
+  const blob = new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "estoque_ativos_filtrado.csv";
+  link.click();
+  URL.revokeObjectURL(link.href);
+  toast("Arquivo filtrado exportado.");
+}
+
+let toastTimer;
+function toast(message) {
+  $("toast").textContent = message;
+  $("toast").classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.remove("show"), 2800);
+}
+
+document.addEventListener("click", () => document.querySelectorAll(".multi.open").forEach(item => item.classList.remove("open")));
+document.querySelectorAll(".multi-menu").forEach(menu => menu.addEventListener("click",event => event.stopPropagation()));
+$("uploadButton").addEventListener("click", () => $("fileInput").click());
+$("fileInput").addEventListener("change", event => importFile(event.target.files[0]));
+$("exportButton").addEventListener("click", exportCSV);
+$("clearButton").addEventListener("click", resetFilters);
+$("searchInput").addEventListener("input", applyFilters);
+$("modalClose").addEventListener("click", closeModal);
+$("assetModal").addEventListener("click", event => { if (event.target === $("assetModal")) closeModal(); });
+document.addEventListener("keydown", event => { if (event.key === "Escape") closeModal(); });
+
+buildFilters();
+render();
+</script>
+<script src="/nxt-integration.js"></script>
 </body>
 </html>
