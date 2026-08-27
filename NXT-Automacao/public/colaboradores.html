@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Acessos · Desligamentos & Transferências</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg: #f4f7fb;
+    --bg-soft: #eef5ff;
+    --panel: #ffffff;
+    --panel-2: #f5f8fb;
+    --line: #dfe7ef;
+    --text: #172b4d;
+    --text-dim: #6b7c93;
+    --text-faint: #8297aa;
+    --accent: #1677ff;
+    --accent-dim: #eaf3ff;
+    --danger: #b42318;
+    --danger-dim: #fee4e2;
+    --ok: #027a48;
+    --ok-dim: #dcfae6;
+    --warn: #b54708;
+    --mono: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(900px 430px at 88% -12%, #d8f3f7 0%, transparent 62%),
+      var(--bg);
+    color:var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height:100vh;
+    padding: 28px 24px 60px;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  .wrap{max-width:1280px; margin:0 auto;}
+
+  /* header */
+  header{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    margin-bottom:26px; gap:20px; flex-wrap:wrap;
+  }
+  .brand{display:flex; align-items:center; gap:14px;}
+  .brand-mark{
+    width:42px;height:42px;border-radius:10px;
+    background: linear-gradient(135deg, #102a43, #087f8c);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:800; color:white; font-size:18px; flex-shrink:0;
+    box-shadow: 0 8px 22px -8px rgba(16,42,67,.45);
+  }
+  .brand h1{font-size:18px; font-weight:700; margin:0; letter-spacing:-0.01em;}
+  .brand p{margin:2px 0 0; font-size:12.5px; color:var(--text-dim);}
+  .status-pill{
+    display:flex; align-items:center; gap:8px;
+    background:var(--panel); border:1px solid var(--line);
+    padding:8px 14px; border-radius:100px; font-size:12.5px; color:var(--text-dim);
+  }
+  .status-dot{width:7px;height:7px;border-radius:50%; background:var(--text-faint);}
+  .status-pill.live .status-dot{background:var(--ok); box-shadow:0 0 0 4px var(--ok-dim);}
+  .header-right{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+  .back-link{
+    min-height:37px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;
+    display:inline-flex;align-items:center;gap:7px;background:var(--panel);color:var(--text);
+    font-size:12px;font-weight:700;text-decoration:none;box-shadow:0 4px 14px rgba(16,42,67,.05);
+  }
+  .back-link:hover{border-color:#b9cbe0;color:var(--accent);}
+
+  /* dropzone */
+  #dropzone{
+    border:1.5px dashed var(--line);
+    border-radius:16px;
+    background: var(--panel);
+    padding:38px 24px;
+    text-align:center;
+    transition: all .18s ease;
+    cursor:pointer;
+    position:relative;
+  }
+  #dropzone.drag{
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  #dropzone .icon{
+    width:52px;height:52px; margin:0 auto 14px; border-radius:14px;
+    background:var(--panel-2); display:flex; align-items:center; justify-content:center;
+    font-size:22px;
+  }
+  #dropzone h2{font-size:16px; margin:0 0 6px; font-weight:600;}
+  #dropzone p{margin:0; color:var(--text-dim); font-size:13px;}
+  #dropzone .browse{color:var(--accent); font-weight:600; text-decoration:underline; text-underline-offset:2px;}
+  #fileInput{display:none;}
+  #fileMeta{
+    margin-top:14px; font-size:12px; color:var(--text-faint); font-family:var(--mono);
+  }
+
+  .hidden{display:none !important;}
+
+  /* summary cards */
+  .cards{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:24px 0 22px;
+  }
+  @media (max-width:820px){.cards{grid-template-columns:repeat(2,1fr);}}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:16px 18px; position:relative; overflow:hidden;
+  }
+  .card .label{font-size:11.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.06em; font-weight:600;}
+  .card .value{font-size:28px; font-weight:800; margin-top:6px; font-family:var(--mono); letter-spacing:-0.02em;}
+  .card.urgent{border-color:#fecdca; background:linear-gradient(180deg, #fff4f3, var(--panel) 70%);}
+  .card.urgent .value{color:var(--danger);}
+  .card.ok .value{color:var(--ok);}
+  .card.accent .value{color:var(--accent);}
+
+  /* tabs */
+  .tabs{display:flex; gap:6px; border-bottom:1px solid var(--line); margin-bottom:18px;}
+  .tab{
+    padding:10px 4px; margin-right:22px; font-size:14px; font-weight:600; color:var(--text-faint);
+    border-bottom:2px solid transparent; cursor:pointer; background:none; border-top:none;border-left:none;border-right:none;
+    display:flex; align-items:center; gap:8px;
+  }
+  .tab.active{color:var(--text); border-bottom-color:var(--accent);}
+  .tab .count{
+    background:var(--panel-2); color:var(--text-dim); font-size:11px; font-family:var(--mono);
+    padding:1px 7px; border-radius:100px; font-weight:600;
+  }
+  .tab.active .count{background:var(--accent-dim); color:var(--accent);}
+
+  /* toolbar */
+  .toolbar{
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px;
+  }
+  .search-box{
+    flex:1; min-width:220px; position:relative;
+  }
+  .search-box input{
+    width:100%; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:10px 14px 10px 36px; color:var(--text); font-size:13.5px; outline:none;
+  }
+  .search-box input:focus{border-color:var(--accent);}
+  .search-box::before{
+    content:'⌕'; position:absolute; left:12px; top:50%; transform:translateY(-50%);
+    color:var(--text-faint); font-size:16px;
+  }
+  .field{
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .field label{font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.05em; font-weight:600;}
+  .field input[type=date], .field select{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:8px 10px; color:var(--text); font-size:13px; outline:none; font-family:inherit;
+  }
+  .field input[type=date]:focus, .field select:focus{border-color:var(--accent);}
+  .btn-clear{
+    background:none; border:1px solid var(--line); color:var(--text-dim); border-radius:10px;
+    padding:9px 14px; font-size:12.5px; cursor:pointer; align-self:flex-end; font-weight:600;
+  }
+  .btn-clear:hover{color:var(--text); border-color:var(--text-faint);}
+
+  .quick-chips{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  .chip{
+    background:var(--panel); border:1px solid var(--line); color:var(--text-dim);
+    padding:6px 13px; border-radius:100px; font-size:12px; cursor:pointer; font-weight:600;
+  }
+  .chip.active{background:var(--accent-dim); border-color:var(--accent); color:var(--accent);}
+
+  /* table */
+  .table-wrap{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden;
+  }
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{
+    text-align:left; padding:12px 16px; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--text-faint); font-weight:700; border-bottom:1px solid var(--line); white-space:nowrap;
+    background:var(--panel-2);
+  }
+  tbody td{
+    padding:12px 16px; border-bottom:1px solid var(--line); color:var(--text); vertical-align:middle;
+  }
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:var(--panel-2);}
+  .name-cell{font-weight:600;}
+  .sub-cell{color:var(--text-faint); font-size:11.5px; font-family:var(--mono);}
+  .badge{
+    display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:100px;
+    font-size:11px; font-weight:700; font-family:var(--mono);
+  }
+  .badge.urgent{background:var(--danger-dim); color:var(--danger);}
+  .badge.normal{background:var(--panel-2); color:var(--text-dim);}
+  .badge.ativo{background:var(--ok-dim); color:var(--ok);}
+  .badge.ferias{background:#fef0c7; color:var(--warn);}
+  .badge.afastado{background:var(--panel-2); color:var(--text-dim);}
+  .mono{font-family:var(--mono); color:var(--text-dim); font-size:12.5px;}
+  .arrow{color:var(--text-faint); margin:0 6px;}
+  .dept{color:var(--text);}
+  .empty-state{
+    padding:60px 20px; text-align:center; color:var(--text-faint);
+  }
+  .empty-state .big{font-size:28px; margin-bottom:10px;}
+
+  footer{margin-top:24px; text-align:center; color:var(--text-faint); font-size:11.5px;}
+  footer a{color:var(--text-faint);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">TI</div>
+      <div>
+        <h1>Painel de Colaboradores</h1>
+        <p>Desligamentos e transferências — controle de revogação de acesso</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <a class="back-link" href="/">← Estoque NXT</a>
+      <div class="status-pill" id="statusPill">
+        <span class="status-dot"></span>
+        <span id="statusText">Nenhuma planilha carregada</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="dropzone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <div class="icon">📄</div>
+    <h2>Arraste a planilha de colaboradores aqui</h2>
+    <p>ou <span class="browse">clique para selecionar o arquivo</span> — formato .xlsx exportado do sistema do RH</p>
+    <div id="fileMeta"></div>
+  </div>
+
+  <div id="app" class="hidden">
+
+    <div class="cards" id="cards"></div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="demitidos">Desligados <span class="count" id="countDemitidos">0</span></button>
+      <button class="tab" data-tab="transferencias">Transferências <span class="count" id="countTransferencias">0</span></button>
+      <button class="tab" data-tab="situacao">Ativos / Férias / Afastados <span class="count" id="countSituacao">0</span></button>
+    </div>
+
+    <!-- DEMITIDOS PANEL -->
+    <div id="panel-demitidos">
+      <div class="quick-chips">
+        <button class="chip active" data-range="7">Últimos 7 dias</button>
+        <button class="chip" data-range="30">Últimos 30 dias</button>
+        <button class="chip" data-range="all">Todos</button>
+      </div>
+      <div class="toolbar">
+        <div class="search-box"><input type="text" id="searchDemitidos" placeholder="Buscar colaborador por nome ou matrícula..."></div>
+        <div class="field"><label>De</label><input type="date" id="dateFromDemitidos"></div>
+        <div class="field"><label>Até</label><input type="date" id="dateToDemitidos"></div>
+        <button class="btn-clear" id="clearDemitidos">Limpar filtros</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Colaborador</th>
+              <th>Departamento</th>
+              <th>Data de desligamento</th>
+              <th>Dias desde o desligamento</th>
+              <th>Urgência</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyDemitidos"></tbody>
+        </table>
+        <div class="empty-state hidden" id="emptyDemitidos"><div class="big">🔍</div>Nenhum desligamento encontrado para este filtro.</div>
+      </div>
+    </div>
+
+    <!-- TRANSFERENCIAS PANEL -->
+    <div id="panel-transferencias" class="hidden">
+      <div class="toolbar">
+        <div class="search-box"><input type="text" id="searchTransf" placeholder="Buscar colaborador por nome ou matrícula..."></div>
+        <div class="field"><label>De</label><input type="date" id="dateFromTransf"></div>
+        <div class="field"><label>Até</label><input type="date" id="dateToTransf"></div>
+        <button class="btn-clear" id="clearTransf">Limpar filtros</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Colaborador</th>
+              <th>Data da transferência</th>
+              <th>Departamento origem</th>
+              <th></th>
+              <th>Departamento destino</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyTransf"></tbody>
+        </table>
+        <div class="empty-state hidden" id="emptyTransf"><div class="big">🔍</div>Nenhuma transferência encontrada para este filtro.</div>
+      </div>
+    </div>
+
+    <!-- SITUACAO PANEL -->
+    <div id="panel-situacao" class="hidden">
+      <div class="quick-chips">
+        <button class="chip active" data-situacao="todos">Todos</button>
+        <button class="chip" data-situacao="ativo">Ativos</button>
+        <button class="chip" data-situacao="ferias">Férias</button>
+        <button class="chip" data-situacao="afastado">Afastados</button>
+      </div>
+      <div class="toolbar">
+        <div class="search-box"><input type="text" id="searchSituacao" placeholder="Buscar colaborador por nome ou matrícula..."></div>
+        <button class="btn-clear" id="clearSituacao">Limpar filtros</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Colaborador</th>
+              <th>Departamento</th>
+              <th>Situação</th>
+            </tr>
+          </thead>
+          <tbody id="tbodySituacao"></tbody>
+        </table>
+        <div class="empty-state hidden" id="emptySituacao"><div class="big">🔍</div>Nenhum colaborador encontrado para este filtro.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>Os dados são processados inteiramente no seu navegador — nenhuma informação é enviada a servidores externos.</footer>
+</div>
+
+<script>
+(function(){
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const fileMeta = document.getElementById('fileMeta');
+  const statusPill = document.getElementById('statusPill');
+  const statusText = document.getElementById('statusText');
+  const appEl = document.getElementById('app');
+
+  let demitidos = [];
+  let transferencias = [];
+  let situacoes = [];
+
+  // ---------- drag & drop ----------
+  dropzone.addEventListener('click', () => fileInput.click());
+  ['dragenter','dragover'].forEach(evt => dropzone.addEventListener(evt, e => {
+    e.preventDefault(); dropzone.classList.add('drag');
+  }));
+  ['dragleave','drop'].forEach(evt => dropzone.addEventListener(evt, e => {
+    e.preventDefault(); dropzone.classList.remove('drag');
+  }));
+  dropzone.addEventListener('drop', e => {
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  fileInput.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) handleFile(f);
+  });
+
+  function handleFile(file){
+    fileMeta.textContent = 'Lendo ' + file.name + ' ...';
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array', cellDates:false});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+        processRows(rows, file.name);
+      }catch(err){
+        fileMeta.textContent = 'Não foi possível ler o arquivo: ' + err.message;
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  // ---------- parsing ----------
+  function normalize(s){
+    return String(s||'').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  }
+
+  function findHeaderRow(rows){
+    for(let i=0;i<Math.min(rows.length, 20);i++){
+      const rowNorm = rows[i].map(normalize);
+      if(rowNorm.includes('nome funcionario') || rowNorm.includes('mat funcionario')){
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function excelSerialToDate(serial){
+    // Excel epoch 1899-12-30
+    const utc_days = Math.floor(serial - 25569);
+    const utc_value = utc_days * 86400;
+    const d = new Date(utc_value * 1000);
+    return d;
+  }
+
+  function parseDate(val){
+    if(val === '' || val === null || val === undefined) return null;
+    if(typeof val === 'number'){
+      const d = excelSerialToDate(val);
+      if(isNaN(d.getTime())) return null;
+      return d;
+    }
+    const str = String(val).trim();
+    if(!str) return null;
+    // dd/mm/yyyy
+    const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if(m){
+      let [_, dd, mm, yyyy] = m;
+      if(yyyy.length === 2) yyyy = '20'+yyyy;
+      const d = new Date(parseInt(yyyy), parseInt(mm)-1, parseInt(dd));
+      if(isNaN(d.getTime())) return null;
+      return d;
+    }
+    const d2 = new Date(str);
+    if(!isNaN(d2.getTime())) return d2;
+    return null;
+  }
+
+  function fmtDate(d){
+    if(!d) return '—';
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  function toInputDate(d){
+    if(!d) return '';
+    const dd = String(d.getDate()).padStart(2,'0');
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  }
+
+  function processRows(rows, filename){
+    const headerIdx = findHeaderRow(rows);
+    if(headerIdx === -1){
+      fileMeta.textContent = 'Não foram encontradas as colunas esperadas (ex: "Nome Funcionário") no arquivo ' + filename + '.';
+      return;
+    }
+    const header = rows[headerIdx].map(h => normalize(h));
+    const col = (name) => header.indexOf(normalize(name));
+
+    const idx = {
+      filial: col('filial'),
+      mat: col('mat funcionario'),
+      nome: col('nome funcionario'),
+      situacao: col('situacao'),
+      dtDemissao: col('dt demissao'),
+      dtTransf: col('dt transferencia'),
+      deptOrigemDesc: col('desc dpto origem'),
+      deptDestinoDesc: col('desc dpto destino'),
+      deptFolhaDesc: col('desc dpto folha'),
+    };
+
+    const dataRows = rows.slice(headerIdx+1).filter(r => r && r[idx.nome] && String(r[idx.nome]).trim() !== '');
+
+    // dedupe helpers: keyed by matrícula (fallback to nome se matrícula vazia),
+    // mantendo sempre o registro mais recente para cada pessoa.
+    const demitidosMap = new Map();
+    const transferenciasMap = new Map();
+    const situacoesMap = new Map();
+
+    dataRows.forEach(r => {
+      const nome = String(r[idx.nome]||'').trim();
+      const mat = idx.mat>-1 ? String(r[idx.mat]||'').trim() : '';
+      const key = mat || normalize(nome);
+      const situacao = idx.situacao>-1 ? String(r[idx.situacao]||'').trim() : '';
+      const dept = idx.deptFolhaDesc>-1 ? String(r[idx.deptFolhaDesc]||'').trim() : '';
+
+      // Situação geral (ativo / férias / afastado / demitido)
+      situacoesMap.set(key, { nome, mat, dept, situacao });
+
+      // Desligamentos
+      const dtDemRaw = idx.dtDemissao>-1 ? r[idx.dtDemissao] : '';
+      const dtDem = parseDate(dtDemRaw);
+      if(dtDem){
+        const existing = demitidosMap.get(key);
+        if(!existing || dtDem > existing.data){
+          demitidosMap.set(key, { nome, mat, dept, data: dtDem });
+        }
+      }
+
+      // Transferencias
+      const dtTransfRaw = idx.dtTransf>-1 ? r[idx.dtTransf] : '';
+      const dtTransf = parseDate(dtTransfRaw);
+      if(dtTransf){
+        const existing = transferenciasMap.get(key);
+        const entry = {
+          nome, mat,
+          data: dtTransf,
+          origem: idx.deptOrigemDesc>-1 ? String(r[idx.deptOrigemDesc]||'').trim() : '',
+          destino: idx.deptDestinoDesc>-1 ? String(r[idx.deptDestinoDesc]||'').trim() : ''
+        };
+        if(!existing || dtTransf > existing.data){
+          transferenciasMap.set(key, entry);
+        }
+      }
+    });
+
+    demitidos = Array.from(demitidosMap.values()).sort((a,b) => b.data - a.data);
+    transferencias = Array.from(transferenciasMap.values()).sort((a,b) => b.data - a.data);
+    situacoes = Array.from(situacoesMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
+
+    fileMeta.textContent = '';
+    statusPill.classList.add('live');
+    statusText.textContent = filename + ' · ' + dataRows.length + ' colaboradores carregados';
+    appEl.classList.remove('hidden');
+
+    renderCards();
+    applyDemitidosFilters();
+    applyTransfFilters();
+    applySituacaoFilters();
+  }
+
+  // ---------- cards ----------
+  function renderCards(){
+    const now = new Date();
+    const sevenDaysAgo = new Date(now); sevenDaysAgo.setDate(now.getDate()-7);
+    const thirtyDaysAgo = new Date(now); thirtyDaysAgo.setDate(now.getDate()-30);
+
+    const urgentes = demitidos.filter(d => d.data >= sevenDaysAgo && d.data <= now).length;
+    const transfMes = transferencias.filter(t => t.data >= thirtyDaysAgo && t.data <= now).length;
+    const ativos = situacoes.filter(s => normalize(s.situacao) === 'ativo').length;
+    const emFeriasOuAfastados = situacoes.filter(s => {
+      const n = normalize(s.situacao);
+      return n === 'ferias' || n === 'afastado';
+    }).length;
+
+    document.getElementById('cards').innerHTML = `
+      <div class="card urgent">
+        <div class="label">Desligados — últimos 7 dias</div>
+        <div class="value">${urgentes}</div>
+      </div>
+      <div class="card accent">
+        <div class="label">Transferências — últimos 30 dias</div>
+        <div class="value">${transfMes}</div>
+      </div>
+      <div class="card ok">
+        <div class="label">Colaboradores ativos</div>
+        <div class="value">${ativos}</div>
+      </div>
+      <div class="card">
+        <div class="label">Férias / Afastados</div>
+        <div class="value">${emFeriasOuAfastados}</div>
+      </div>
+    `;
+  }
+
+  // ---------- tabs ----------
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.dataset.tab;
+      document.getElementById('panel-demitidos').classList.toggle('hidden', target !== 'demitidos');
+      document.getElementById('panel-transferencias').classList.toggle('hidden', target !== 'transferencias');
+      document.getElementById('panel-situacao').classList.toggle('hidden', target !== 'situacao');
+    });
+  });
+
+  // ---------- demitidos filters ----------
+  let activeRange = '7';
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeRange = chip.dataset.range;
+      // clear explicit date fields when using quick chips
+      document.getElementById('dateFromDemitidos').value = '';
+      document.getElementById('dateToDemitidos').value = '';
+      applyDemitidosFilters();
+    });
+  });
+
+  ['searchDemitidos','dateFromDemitidos','dateToDemitidos'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+      if(id !== 'searchDemitidos'){
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        activeRange = 'custom';
+      }
+      applyDemitidosFilters();
+    });
+  });
+
+  document.getElementById('clearDemitidos').addEventListener('click', () => {
+    document.getElementById('searchDemitidos').value = '';
+    document.getElementById('dateFromDemitidos').value = '';
+    document.getElementById('dateToDemitidos').value = '';
+    document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    document.querySelector('.chip[data-range="7"]').classList.add('active');
+    activeRange = '7';
+    applyDemitidosFilters();
+  });
+
+  function applyDemitidosFilters(){
+    const search = normalize(document.getElementById('searchDemitidos').value);
+    const dateFrom = document.getElementById('dateFromDemitidos').value;
+    const dateTo = document.getElementById('dateToDemitidos').value;
+    const now = new Date();
+
+    let filtered = demitidos.filter(d => {
+      if(search){
+        const hay = normalize(d.nome + ' ' + d.mat);
+        if(!hay.includes(search)) return false;
+      }
+      if(dateFrom){
+        const from = new Date(dateFrom+'T00:00:00');
+        if(d.data < from) return false;
+      }
+      if(dateTo){
+        const to = new Date(dateTo+'T23:59:59');
+        if(d.data > to) return false;
+      }
+      if(!dateFrom && !dateTo){
+        if(activeRange === '7'){
+          const cutoff = new Date(now); cutoff.setDate(now.getDate()-7);
+          if(d.data < cutoff) return false;
+        } else if(activeRange === '30'){
+          const cutoff = new Date(now); cutoff.setDate(now.getDate()-30);
+          if(d.data < cutoff) return false;
+        }
+      }
+      return true;
+    });
+
+    document.getElementById('countDemitidos').textContent = demitidos.length;
+    renderDemitidos(filtered);
+  }
+
+  function renderDemitidos(list){
+    const tbody = document.getElementById('tbodyDemitidos');
+    const empty = document.getElementById('emptyDemitidos');
+    if(list.length === 0){
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    const now = new Date();
+    tbody.innerHTML = list.map(d => {
+      const diffDays = Math.floor((now - d.data) / (1000*60*60*24));
+      const urgent = diffDays <= 7 && diffDays >= 0;
+      return `
+        <tr>
+          <td>
+            <div class="name-cell">${escapeHtml(d.nome)}</div>
+            <div class="sub-cell">${escapeHtml(d.mat)}</div>
+          </td>
+          <td class="dept">${escapeHtml(d.dept) || '—'}</td>
+          <td class="mono">${fmtDate(d.data)}</td>
+          <td class="mono">${diffDays >= 0 ? diffDays + ' dias' : '—'}</td>
+          <td><span class="badge ${urgent ? 'urgent' : 'normal'}">${urgent ? '⚠ revogar acesso' : 'fora da janela'}</span></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // ---------- transferencias filters ----------
+  ['searchTransf','dateFromTransf','dateToTransf'].forEach(id => {
+    document.getElementById(id).addEventListener('input', applyTransfFilters);
+  });
+  document.getElementById('clearTransf').addEventListener('click', () => {
+    document.getElementById('searchTransf').value = '';
+    document.getElementById('dateFromTransf').value = '';
+    document.getElementById('dateToTransf').value = '';
+    applyTransfFilters();
+  });
+
+  function applyTransfFilters(){
+    const search = normalize(document.getElementById('searchTransf').value);
+    const dateFrom = document.getElementById('dateFromTransf').value;
+    const dateTo = document.getElementById('dateToTransf').value;
+
+    let filtered = transferencias.filter(t => {
+      if(search){
+        const hay = normalize(t.nome + ' ' + t.mat);
+        if(!hay.includes(search)) return false;
+      }
+      if(dateFrom){
+        const from = new Date(dateFrom+'T00:00:00');
+        if(t.data < from) return false;
+      }
+      if(dateTo){
+        const to = new Date(dateTo+'T23:59:59');
+        if(t.data > to) return false;
+      }
+      return true;
+    });
+
+    document.getElementById('countTransferencias').textContent = transferencias.length;
+    renderTransf(filtered);
+  }
+
+  function renderTransf(list){
+    const tbody = document.getElementById('tbodyTransf');
+    const empty = document.getElementById('emptyTransf');
+    if(list.length === 0){
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    tbody.innerHTML = list.map(t => `
+      <tr>
+        <td>
+          <div class="name-cell">${escapeHtml(t.nome)}</div>
+          <div class="sub-cell">${escapeHtml(t.mat)}</div>
+        </td>
+        <td class="mono">${fmtDate(t.data)}</td>
+        <td class="dept">${escapeHtml(t.origem) || '—'}</td>
+        <td class="arrow">→</td>
+        <td class="dept">${escapeHtml(t.destino) || '—'}</td>
+      </tr>
+    `).join('');
+  }
+
+  // ---------- situação filters ----------
+  let activeSituacao = 'todos';
+  document.querySelectorAll('#panel-situacao .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#panel-situacao .chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeSituacao = chip.dataset.situacao;
+      applySituacaoFilters();
+    });
+  });
+  document.getElementById('searchSituacao').addEventListener('input', applySituacaoFilters);
+  document.getElementById('clearSituacao').addEventListener('click', () => {
+    document.getElementById('searchSituacao').value = '';
+    document.querySelectorAll('#panel-situacao .chip').forEach(c => c.classList.remove('active'));
+    document.querySelector('#panel-situacao .chip[data-situacao="todos"]').classList.add('active');
+    activeSituacao = 'todos';
+    applySituacaoFilters();
+  });
+
+  const situacaoKeyMap = { ativo:'ativo', ferias:'ferias', afastado:'afastado' };
+
+  function applySituacaoFilters(){
+    const search = normalize(document.getElementById('searchSituacao').value);
+    let filtered = situacoes.filter(s => {
+      if(activeSituacao !== 'todos'){
+        if(normalize(s.situacao) !== situacaoKeyMap[activeSituacao]) return false;
+      }
+      if(search){
+        const hay = normalize(s.nome + ' ' + s.mat);
+        if(!hay.includes(search)) return false;
+      }
+      return true;
+    });
+    document.getElementById('countSituacao').textContent = situacoes.length;
+    renderSituacao(filtered);
+  }
+
+  function situacaoBadgeClass(situacao){
+    const n = normalize(situacao);
+    if(n === 'ativo') return 'ativo';
+    if(n === 'ferias') return 'ferias';
+    if(n === 'afastado') return 'afastado';
+    return 'normal';
+  }
+
+  function renderSituacao(list){
+    const tbody = document.getElementById('tbodySituacao');
+    const empty = document.getElementById('emptySituacao');
+    if(list.length === 0){
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+    tbody.innerHTML = list.map(s => `
+      <tr>
+        <td>
+          <div class="name-cell">${escapeHtml(s.nome)}</div>
+          <div class="sub-cell">${escapeHtml(s.mat)}</div>
+        </td>
+        <td class="dept">${escapeHtml(s.dept) || '—'}</td>
+        <td><span class="badge ${situacaoBadgeClass(s.situacao)}">${escapeHtml(s.situacao) || '—'}</span></td>
+      </tr>
+    `).join('');
+  }
+
+  function escapeHtml(str){
+    return String(str||'').replace(/[&<>"']/g, m => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[m]));
+  }
+
+})();
+</script>
+</body>
+</html>
