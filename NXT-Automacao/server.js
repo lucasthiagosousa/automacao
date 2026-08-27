@@ -3,6 +3,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 
+require("dotenv").config({ path: path.join(__dirname, ".env") });
+
 const app = express();
 const PORTA = 3000;
 
