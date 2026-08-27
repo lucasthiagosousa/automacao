@@ -45,24 +45,169 @@
   }
 
   function stockRuleMetrics() {
-    const inventory = countBy(rawData, "type");
-    const rules = minimumStockRules
-      .filter(function (rule) { return Number(rule.minimum) > 0; })
-      .map(function (rule) {
-        const current = countRule(rule, inventory);
-        return {
-          current: current,
-          minimum: Number(rule.minimum),
-          shortage: Math.max(0, Number(rule.minimum) - current)
-        };
-      });
-    const shortage = rules.reduce(function (sum, rule) { return sum + rule.shortage; }, 0);
-    const below = rules.filter(function (rule) { return rule.shortage > 0; }).length;
+    const summaries = inventorySummaries(rawData).filter(function (item) {
+      return item.minimum > 0;
+    });
+    const shortage = summaries.reduce(function (sum, item) {
+      return sum + item.request;
+    }, 0);
+    const below = summaries.filter(function (item) {
+      return item.request > 0;
+    }).length;
     const total = sumQty(filteredData);
     const coverage = total + shortage > 0
       ? Math.min(100, Math.round(total / (total + shortage) * 100))
       : 100;
     return { below: below, shortage: shortage, coverage: coverage };
+  }
+
+  function ruleForType(type, createIfMissing) {
+    const typeName = norm(type);
+    let bestRule = null;
+    let bestScore = -1;
+    minimumStockRules.forEach(function (rule) {
+      rule.aliases.forEach(function (alias) {
+        const aliasName = norm(alias);
+        let score = -1;
+        if (typeName === aliasName) score = 1000 + aliasName.length;
+        else if (typeName.includes(aliasName)) score = 100 + aliasName.length;
+        else if (aliasName.includes(typeName)) score = 10 + typeName.length;
+        if (score > bestScore) {
+          bestScore = score;
+          bestRule = rule;
+        }
+      });
+    });
+    if (!bestRule && createIfMissing) {
+      bestRule = { item: type || "Sem categoria", minimum: 0, aliases: [type || "Sem categoria"] };
+      minimumStockRules.push(bestRule);
+    }
+    return bestRule;
+  }
+
+  function inventorySummaries(source) {
+    const typeField = getField("type");
+    const modelField = getField("model");
+    if (!typeField) return [];
+    const grouped = new Map();
+    source.forEach(function (row) {
+      const type = clean(row[typeField]) || "Não informado";
+      const key = norm(type);
+      if (!grouped.has(key)) {
+        grouped.set(key, { type: type, rows: [] });
+      }
+      grouped.get(key).rows.push(row);
+    });
+    return Array.from(grouped.values()).map(function (group) {
+      const current = sumQty(group.rows);
+      const rule = ruleForType(group.type, true);
+      const minimum = Math.max(0, Number(rule.minimum) || 0);
+      const request = Math.max(0, minimum - current);
+      let status = "Adequado";
+      let badge = "badge-green";
+      if (request > 0) {
+        status = current === 0 ? "Crítico" : "Repor";
+        badge = "badge-red";
+      } else if (minimum > 0 && current === minimum) {
+        status = "No limite";
+        badge = "badge-amber";
+      }
+      const models = new Map();
+      group.rows.forEach(function (row) {
+        const model = modelField ? clean(row[modelField]) || "Não informado" : "Não informado";
+        models.set(model, (models.get(model) || 0) + qty(row));
+      });
+      return {
+        type: group.type,
+        current: current,
+        minimum: minimum,
+        request: request,
+        status: status,
+        badge: badge,
+        rule: rule,
+        models: Array.from(models.entries()).map(function (entry) {
+          return { name: entry[0], quantity: entry[1] };
+        }).sort(function (a, b) { return b.quantity - a.quantity; })
+      };
+    }).sort(function (a, b) {
+      return b.request - a.request || a.type.localeCompare(b.type, "pt-BR");
+    });
+  }
+
+  function installInventoryTable() {
+    const panel = document.querySelector(".table-panel");
+    const charts = document.querySelector(".dashboard-grid");
+    if (panel && charts) {
+      charts.parentNode.insertBefore(panel, charts);
+      panel.style.marginBottom = "14px";
+      panel.querySelector(".panel-title").textContent = "Visão rápida do estoque";
+      panel.querySelector(".panel-desc").textContent =
+        "Veja o estoque atual, o mínimo necessário e o que deve ser solicitado";
+    }
+
+    const style = document.createElement("style");
+    style.textContent =
+      ".stock-minimum-input{width:70px;min-height:34px;border:1px solid #d5e0ea;"
+      + "border-radius:9px;background:#f8fafc;color:#102a43;font-weight:800;text-align:center;outline:none}"
+      + ".stock-minimum-input:focus{border-color:#1677ff;box-shadow:0 0 0 3px rgba(22,119,255,.1)}"
+      + ".stock-request{min-width:38px;display:inline-flex;justify-content:center;padding:5px 8px;"
+      + "border-radius:8px;background:#eaecf0;color:#475467;font-weight:800}"
+      + ".stock-request.needed{background:#fee4e2;color:#b42318}"
+      + ".stock-models{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#526b82}";
+    document.head.appendChild(style);
+
+    renderTable = function () {
+      const summaries = inventorySummaries(filteredData);
+      $("tableHead").innerHTML =
+        "<th>Categoria</th><th>Atual</th><th>Mínimo</th><th>Solicitar</th><th>Status</th><th>Modelos encontrados</th>";
+      $("tableBody").innerHTML = summaries.length
+        ? summaries.map(function (item, index) {
+          const models = item.models.map(function (model) {
+            return esc(model.name) + " (" + model.quantity + ")";
+          }).join(", ");
+          return "<tr>"
+            + "<td class=\"code\">" + esc(item.type) + "</td>"
+            + "<td><strong>" + item.current + "</strong></td>"
+            + "<td><input class=\"stock-minimum-input\" type=\"number\" min=\"0\" step=\"1\""
+            + " value=\"" + item.minimum + "\" data-stock-index=\"" + index + "\""
+            + " aria-label=\"Estoque mínimo de " + esc(item.type) + "\"></td>"
+            + "<td><span class=\"stock-request " + (item.request > 0 ? "needed" : "") + "\">"
+            + item.request + "</span></td>"
+            + "<td><span class=\"badge " + item.badge + "\">" + item.status + "</span></td>"
+            + "<td class=\"stock-models\" title=\"" + models + "\">" + (models || "Modelo não informado") + "</td>"
+            + "</tr>";
+        }).join("")
+        : "<tr><td colspan=\"6\"><div class=\"empty\">Nenhuma categoria encontrada para os filtros informados.</div></td></tr>";
+      $("resultCount").textContent = summaries.length + " categoria"
+        + (summaries.length === 1 ? "" : "s");
+      document.querySelectorAll("[data-stock-index]").forEach(function (input) {
+        input.addEventListener("change", function () {
+          const currentSummaries = inventorySummaries(filteredData);
+          const item = currentSummaries[Number(input.dataset.stockIndex)];
+          if (!item) return;
+          item.rule.minimum = Math.max(0, Number.parseInt(input.value, 10) || 0);
+          saveMinimums();
+          render();
+          toast("Estoque mínimo de " + item.type + " atualizado.");
+        });
+      });
+    };
+
+    renderCritical = function () {
+      const items = inventorySummaries(rawData).filter(function (item) {
+        return item.minimum > 0 && item.request > 0;
+      });
+      $("criticalList").innerHTML = items.length
+        ? items.map(function (item) {
+          return "<div class=\"critical-item\"><div><strong>" + esc(item.type)
+            + "</strong><span>Faltam " + item.request
+            + " para atingir o mínimo</span></div><div class=\"stock-numbers\">"
+            + "<span class=\"stock-number stock-current\">" + item.current
+            + "</span><span>de</span><span class=\"stock-number stock-minimum\">"
+            + item.minimum + "</span></div></div>";
+        }).join("")
+        : "<div class=\"empty\">Nenhum tipo de ativo está abaixo do limite definido.</div>";
+    };
   }
 
   function updateKpiLabels() {
@@ -267,6 +412,7 @@
 
   updateKpiLabels();
   applySavedMinimums();
+  installInventoryTable();
   createMinimumSettings();
   $("nxtUpdateButton").addEventListener("click", startUpdate);
   loadServerData(false);
