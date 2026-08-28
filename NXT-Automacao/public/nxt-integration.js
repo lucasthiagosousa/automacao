@@ -11,8 +11,9 @@
   function applyMinimumValues(saved) {
     minimumStockRules.forEach(function (rule) {
       const key = norm(rule.item);
-      if (Number.isFinite(Number(saved[key]))) {
-        rule.minimum = Math.max(0, Number(saved[key]));
+      if (saved[key] && Number.isFinite(Number(saved[key].minimum))) {
+        rule.minimum = Math.max(0, Number(saved[key].minimum));
+        rule.productUrl = saved[key].productUrl || "";
       }
     });
   }
@@ -24,11 +25,15 @@
     const values = {};
     (result.itens || []).forEach(function (item) {
       const key = norm(item.categoryKey || item.categoryName);
-      values[key] = Math.max(0, Number(item.minimum) || 0);
+      values[key] = {
+        minimum: Math.max(0, Number(item.minimum) || 0),
+        productUrl: item.productUrl || ""
+      };
       if (!minimumStockRules.some(function (rule) { return norm(rule.item) === key; })) {
         minimumStockRules.push({
           item: item.categoryName || item.categoryKey,
-          minimum: values[key],
+          minimum: values[key].minimum,
+          productUrl: values[key].productUrl,
           aliases: [item.categoryName || item.categoryKey]
         });
       }
@@ -49,7 +54,8 @@
           return {
             categoryKey: norm(rule.item),
             categoryName: rule.item,
-            minimum: Math.max(0, Number(rule.minimum) || 0)
+            minimum: Math.max(0, Number(rule.minimum) || 0),
+            productUrl: rule.productUrl || ""
           };
         })
       })
@@ -108,7 +114,7 @@
       });
     });
     if (!bestRule && createIfMissing) {
-      bestRule = { item: type || "Sem categoria", minimum: 0, aliases: [type || "Sem categoria"] };
+      bestRule = { item: type || "Sem categoria", minimum: 0, productUrl: "", aliases: [type || "Sem categoria"] };
       minimumStockRules.push(bestRule);
     }
     return bestRule;
@@ -574,7 +580,7 @@
           + item.request + '" data-restock-quantity="' + index + '" data-category="' + esc(item.type) + '" data-current="'
           + item.current + '" data-minimum="' + item.minimum + '" aria-label="Quantidade de ' + esc(item.type) + '">'
           + '<input class="restock-product-url" type="url" data-restock-product="' + index
-          + '" placeholder="Cole o link exato do produto"></label>';
+          + '" value="' + esc(item.rule.productUrl || "") + '" placeholder="Link não cadastrado — cole aqui"></label>';
       }).join("");
       $("restockNote").value = "";
       modal.classList.add("show");
@@ -602,6 +608,13 @@
       button.disabled = true;
       button.textContent = "Salvando...";
       try {
+        if (currentUser.canEditMinimum) {
+          items.forEach(function (item) {
+            const rule = ruleForType(item.categoryName, true);
+            if (item.productUrl) rule.productUrl = item.productUrl;
+          });
+          await saveMinimums();
+        }
         const response = await fetch("/api/solicitacoes", { method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ itens: items, observacao: $("restockNote").value }) });
@@ -764,7 +777,7 @@
     const button = document.createElement("button");
     button.className = "btn btn-soft";
     button.type = "button";
-    button.textContent = "Configurar mínimos";
+    button.textContent = "Configurar mínimos e produtos";
     heading.appendChild(button);
 
     const modal = document.createElement("div");
@@ -775,7 +788,7 @@
       + '<div class="modal-eyebrow">Parâmetros de reposição</div>'
       + '<div class="modal-title" id="minimumSettingsTitle">Estoques mínimos</div></div>'
       + '<p id="minimumSettingsDescription" style="margin:16px 18px 0;color:#6b7c93;font-size:12px;line-height:1.55">'
-      + 'Defina a quantidade mínima necessária para cada categoria do inventário.</p>'
+      + 'Defina a quantidade mínima e o link permanente do produto para cada categoria.</p>'
       + '<div class="details" id="minimumSettingsList"></div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;padding:0 18px 18px">'
       + '<button class="btn" type="button" data-cancel-minimum>Cancelar</button>'
@@ -792,8 +805,8 @@
         ? "Defina as regras do estoque"
         : "Estoques mínimos";
       modal.querySelector("#minimumSettingsDescription").textContent = required
-        ? "Antes de abrir o painel, informe quanto deve existir no estoque para cada categoria. O sistema calculará automaticamente quanto solicitar e o status atual."
-        : "Altere a quantidade mínima necessária para cada categoria do inventário.";
+        ? "Antes de abrir o painel, informe quanto deve existir no estoque e, quando disponível, o link exato de cada produto."
+        : "Altere a quantidade mínima e cadastre o link que será usado automaticamente nas solicitações.";
       modal.querySelector("[data-save-minimum]").textContent = required
         ? "Salvar e abrir o painel"
         : "Salvar alterações";
@@ -808,7 +821,7 @@
       visibleRules.forEach(function (rule) {
         const index = minimumStockRules.indexOf(rule);
         const summary = summaries.find(function (item) { return item.rule === rule; });
-        const field = document.createElement("label");
+        const field = document.createElement("div");
         field.className = "detail";
         const label = document.createElement("span");
         label.className = "detail-label";
@@ -819,9 +832,23 @@
         input.min = "0";
         input.step = "1";
         input.value = rule.minimum;
-        input.dataset.ruleIndex = String(index);
+        input.dataset.minimumRuleIndex = String(index);
+        input.setAttribute("aria-label", "Estoque mínimo de " + rule.item);
+        const linkLabel = document.createElement("span");
+        linkLabel.className = "detail-label";
+        linkLabel.style.marginTop = "10px";
+        linkLabel.textContent = "Link permanente do produto";
+        const linkInput = document.createElement("input");
+        linkInput.className = "control";
+        linkInput.type = "url";
+        linkInput.placeholder = "https://...";
+        linkInput.value = rule.productUrl || "";
+        linkInput.dataset.linkRuleIndex = String(index);
+        linkInput.setAttribute("aria-label", "Link do produto " + rule.item);
         field.appendChild(label);
         field.appendChild(input);
+        field.appendChild(linkLabel);
+        field.appendChild(linkInput);
         list.appendChild(field);
       });
       modal.classList.add("show");
@@ -840,9 +867,13 @@
     modal.querySelector("[data-save-minimum]").addEventListener("click", async function () {
       const saveButton = modal.querySelector("[data-save-minimum]");
       const previousValues = minimumStockRules.map(function (rule) { return rule.minimum; });
-      modal.querySelectorAll("[data-rule-index]").forEach(function (input) {
-        minimumStockRules[Number(input.dataset.ruleIndex)].minimum =
+      const previousLinks = minimumStockRules.map(function (rule) { return rule.productUrl || ""; });
+      modal.querySelectorAll("[data-minimum-rule-index]").forEach(function (input) {
+        minimumStockRules[Number(input.dataset.minimumRuleIndex)].minimum =
           Math.max(0, Number.parseInt(input.value, 10) || 0);
+      });
+      modal.querySelectorAll("[data-link-rule-index]").forEach(function (input) {
+        minimumStockRules[Number(input.dataset.linkRuleIndex)].productUrl = input.value.trim();
       });
       saveButton.disabled = true;
       saveButton.textContent = "Salvando...";
@@ -855,6 +886,7 @@
       } catch (error) {
         minimumStockRules.forEach(function (rule, index) {
           rule.minimum = previousValues[index];
+          rule.productUrl = previousLinks[index];
         });
         toast(error.message);
       } finally {
