@@ -2,7 +2,7 @@
   "use strict";
 
   const ROLE_LABELS = { master: "Master Admin", operator: "Operador", viewer: "Visualizador" };
-  const WORKSPACE_PAGES = ["/", "/index.html", "/toner.html", "/colaboradores.html"];
+  const WORKSPACE_PAGES = ["/", "/index.html", "/home.html", "/toner.html", "/colaboradores.html"];
 
   async function requestUser() {
     const response = await fetch("/api/auth/me", { cache: "no-store" });
@@ -68,6 +68,7 @@
   }
 
   function workspaceIcon(type) {
+    if (type === "home") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></svg>';
     if (type === "stock") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-9 5 9 5 9-5-9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg>';
     if (type === "toner") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg>';
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>';
@@ -89,6 +90,7 @@
     nav.className = "workspace-tabs";
     nav.setAttribute("aria-label", "Módulos do sistema");
     [
+      { href: "/home.html", type: "home", title: "Visão geral", subtitle: "Início do sistema", paths: ["/home.html"] },
       { href: "/", type: "stock", title: "Estoque", subtitle: "Ativos e solicitações", paths: ["/", "/index.html"] },
       { href: "/toner.html", type: "toner", title: "Toners", subtitle: "Impressoras e suprimentos", paths: ["/toner.html"] },
       { href: "/colaboradores.html", type: "people", title: "Colaboradores", subtitle: "Acessos e movimentações", paths: ["/colaboradores.html"] }
