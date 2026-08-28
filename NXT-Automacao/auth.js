@@ -590,6 +590,13 @@ function createAuth(options) {
     return getRestockRequests().find(function (request) { return request.id === id; });
   }
 
+  function deleteRestockRequest(id) {
+    const result = database.prepare(
+      "DELETE FROM restock_requests WHERE id=?"
+    ).run(id);
+    return Number(result.changes) > 0;
+  }
+
   return {
     router: router,
     requireAuth: requireAuth,
@@ -600,6 +607,7 @@ function createAuth(options) {
     getRestockRequests: getRestockRequests,
     createRestockRequest: createRestockRequest,
     updateRestockRequest: updateRestockRequest,
+    deleteRestockRequest: deleteRestockRequest,
     setupRequired: setupRequired
   };
 }
