@@ -40,6 +40,7 @@ function createAuth(options) {
     + "category_key TEXT PRIMARY KEY,"
     + "category_name TEXT NOT NULL,"
     + "minimum INTEGER NOT NULL CHECK(minimum >= 0),"
+    + "product_url TEXT NOT NULL DEFAULT '',"
     + "updated_by INTEGER,"
     + "updated_at TEXT NOT NULL,"
     + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
@@ -84,6 +85,14 @@ function createAuth(options) {
   if (!requestItemColumns.includes("product_url")) {
     database.exec(
       "ALTER TABLE restock_request_items ADD COLUMN product_url TEXT NOT NULL DEFAULT ''"
+    );
+  }
+  const minimumColumns = database.prepare(
+    "PRAGMA table_info(minimum_stock)"
+  ).all().map(function (column) { return column.name; });
+  if (!minimumColumns.includes("product_url")) {
+    database.exec(
+      "ALTER TABLE minimum_stock ADD COLUMN product_url TEXT NOT NULL DEFAULT ''"
     );
   }
 
@@ -449,13 +458,14 @@ function createAuth(options) {
 
   function getMinimums() {
     return database.prepare(
-      "SELECT category_key AS categoryKey,category_name AS categoryName,minimum,updated_at AS updatedAt "
+      "SELECT category_key AS categoryKey,category_name AS categoryName,minimum,product_url AS productUrl,updated_at AS updatedAt "
       + "FROM minimum_stock ORDER BY category_name"
     ).all().map(function (row) {
       return {
         categoryKey: row.categoryKey,
         categoryName: row.categoryName,
         minimum: Number(row.minimum),
+        productUrl: row.productUrl || "",
         updatedAt: row.updatedAt
       };
     });
@@ -463,9 +473,10 @@ function createAuth(options) {
 
   function saveMinimums(items, userId) {
     const upsert = database.prepare(
-      "INSERT INTO minimum_stock (category_key,category_name,minimum,updated_by,updated_at) "
-      + "VALUES (?,?,?,?,?) ON CONFLICT(category_key) DO UPDATE SET "
+      "INSERT INTO minimum_stock (category_key,category_name,minimum,product_url,updated_by,updated_at) "
+      + "VALUES (?,?,?,?,?,?) ON CONFLICT(category_key) DO UPDATE SET "
       + "category_name=excluded.category_name,minimum=excluded.minimum,"
+      + "product_url=excluded.product_url,"
       + "updated_by=excluded.updated_by,updated_at=excluded.updated_at"
     );
     database.exec("BEGIN");
@@ -474,7 +485,8 @@ function createAuth(options) {
         const name = String(item.categoryName || "").trim();
         const key = normalizeCategory(item.categoryKey || name);
         const minimum = Math.max(0, Number.parseInt(item.minimum, 10) || 0);
-        if (name && key) upsert.run(key, name, minimum, userId, nowIso());
+        const productUrl = normalizeProductUrl(item.productUrl);
+        if (name && key) upsert.run(key, name, minimum, productUrl, userId, nowIso());
       });
       database.exec("COMMIT");
     } catch (error) {
