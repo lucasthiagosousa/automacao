@@ -129,8 +129,6 @@
   }
 
   function decorate(user) {
-    addStyles();
-    installWorkspaceNavigation();
     const actions = document.querySelector(".header-actions, .header-right");
     if (actions) {
       if (user.canManageUsers) actions.appendChild(link("Usuários", "/admin.html"));
@@ -148,6 +146,13 @@
     const uploadButton = document.getElementById("uploadButton");
     if (uploadButton && user.role === "viewer") uploadButton.hidden = true;
   }
+
+  /*
+   * O shell visual precisa existir antes da consulta ao usuário para evitar
+   * que o navegador mostre por um instante o layout antigo de cada módulo.
+   */
+  addStyles();
+  installWorkspaceNavigation();
 
   window.NXT_AUTH_PROMISE = requestUser().then(function (user) {
     window.NXT_CURRENT_USER = user;
