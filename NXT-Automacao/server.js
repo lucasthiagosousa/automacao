@@ -2,6 +2,7 @@ const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { createAuth } = require("./auth");
 
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
@@ -19,8 +20,36 @@ const arquivoAutomacao = path.join(
   pastaProjeto,
   "automacao.js"
 );
+const arquivoBanco = path.join(
+  pastaProjeto,
+  "dados",
+  "controle-estoque.db"
+);
 
 app.use(express.json());
+
+const auth = createAuth({
+  databasePath: arquivoBanco,
+});
+
+app.get(["/login", "/login.html"], (req, res) => {
+  res.sendFile(path.join(pastaPublica, "login.html"));
+});
+
+app.get(["/setup", "/setup.html"], (req, res) => {
+  res.sendFile(path.join(pastaPublica, "setup.html"));
+});
+
+app.use("/api/auth", auth.router);
+
+app.get(["/admin", "/admin.html"], auth.requireAuth, (req, res) => {
+  if (req.user.role !== "master") {
+    return res.redirect("/");
+  }
+  return res.sendFile(path.join(pastaPublica, "admin.html"));
+});
+
+app.use(auth.requireAuth);
 app.use(express.static(pastaPublica));
 
 let estadoAtualizacao = {
@@ -366,6 +395,38 @@ async function lerPlanilha() {
 }
 
 /*
+ * Regras de estoque mínimo persistidas no banco local.
+ */
+app.get("/api/minimos", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    sucesso: true,
+    itens: auth.getMinimums(),
+    podeEditar: req.user.role === "master",
+  });
+});
+
+app.put(
+  "/api/minimos",
+  auth.requireMaster,
+  (req, res) => {
+    const itens = Array.isArray(req.body.itens)
+      ? req.body.itens.slice(0, 500)
+      : [];
+
+    const salvos = auth.saveMinimums(
+      itens,
+      Number(req.user.id)
+    );
+
+    res.json({
+      sucesso: true,
+      itens: salvos,
+    });
+  }
+);
+
+/*
  * Retorna os dados da planilha para o dashboard.
  */
 app.get("/api/estoque", async (req, res) => {
@@ -401,7 +462,10 @@ app.get("/api/atualizacao", (req, res) => {
  * O dashboard recebe a resposta imediatamente e acompanha
  * o andamento pela rota /api/atualizacao.
  */
-app.post("/api/atualizar", (req, res) => {
+app.post(
+  "/api/atualizar",
+  auth.requireUpdatePermission,
+  (req, res) => {
   if (estadoAtualizacao.executando) {
     return res.status(409).json({
       sucesso: false,
@@ -538,7 +602,8 @@ app.post("/api/atualizar", (req, res) => {
     sucesso: true,
     mensagem: "Atualização iniciada.",
   });
-});
+  }
+);
 
 /*
  * Se a pessoa digitar uma rota inexistente,
