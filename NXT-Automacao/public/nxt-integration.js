@@ -6,6 +6,7 @@
   let minimumSettingsController = null;
   let currentUser = null;
   let minimumsConfigured = false;
+  let restockRequests = [];
 
   function applyMinimumValues(saved) {
     minimumStockRules.forEach(function (rule) {
@@ -360,6 +361,231 @@
     };
   }
 
+  function installRestockModule() {
+    const inventoryPanel = document.querySelector(".table-panel");
+    if (!inventoryPanel) return;
+    const tableHead = inventoryPanel.querySelector(".table-head");
+    const count = $("resultCount");
+    const headActions = document.createElement("div");
+    headActions.className = "restock-head-actions";
+    count.parentNode.removeChild(count);
+    headActions.appendChild(count);
+    if (currentUser.canUpdateNxt) {
+      const createButton = document.createElement("button");
+      createButton.className = "btn btn-primary";
+      createButton.id = "restockCreateButton";
+      createButton.type = "button";
+      createButton.textContent = "Gerar solicitação";
+      headActions.appendChild(createButton);
+    }
+    tableHead.appendChild(headActions);
+
+    const panel = document.createElement("section");
+    panel.className = "panel restock-panel";
+    panel.innerHTML = '<div class="table-head"><div><h2 class="panel-title">Solicitações de reposição</h2>'
+      + '<p class="panel-desc">Acompanhe os pedidos desde a identificação até o recebimento</p></div>'
+      + '<span class="result-count" id="restockCount">0 solicitações</span></div>'
+      + '<div class="restock-list" id="restockList"></div>';
+    const detailPanel = $("stockDetailPanel");
+    (detailPanel || inventoryPanel).insertAdjacentElement("afterend", panel);
+
+    const modal = document.createElement("div");
+    modal.className = "modal";
+    modal.id = "restockModal";
+    modal.innerHTML = '<div class="modal-card restock-dialog" role="dialog" aria-modal="true">'
+      + '<div class="modal-head"><button class="modal-close" type="button" aria-label="Fechar">×</button>'
+      + '<div class="modal-eyebrow">Reposição automática</div><div class="modal-title">Gerar solicitação</div>'
+      + '<span class="badge badge-red" id="restockModalCount"></span></div>'
+      + '<div class="restock-form-body"><p>Confira as quantidades calculadas. Você pode ajustar quanto será solicitado.</p>'
+      + '<div class="restock-form-items" id="restockFormItems"></div>'
+      + '<label class="restock-note-label">Observação<textarea class="control restock-note" id="restockNote" maxlength="2000" placeholder="Ex.: prioridade, centro de custo ou fornecedor..."></textarea></label>'
+      + '<div class="restock-form-actions"><button class="btn" type="button" data-restock-cancel>Cancelar</button>'
+      + '<button class="btn btn-primary" type="button" data-restock-save>Salvar solicitação</button></div></div></div>';
+    document.body.appendChild(modal);
+
+    const style = document.createElement("style");
+    style.textContent =
+      ".restock-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}"
+      + ".restock-panel{margin-bottom:14px;overflow:hidden}.restock-list{display:grid;gap:10px;padding:14px}"
+      + ".restock-card{border:1px solid #e3e9f1;border-radius:13px;background:#fff;overflow:hidden}"
+      + ".restock-summary{padding:12px 13px;display:grid;grid-template-columns:110px 1fr auto auto;align-items:center;gap:12px;cursor:pointer;list-style:none}"
+      + ".restock-summary::-webkit-details-marker{display:none}.restock-code{color:#0b63ce;font-size:11px;font-weight:800}"
+      + ".restock-meta{color:#748197;font-size:9px;line-height:1.45}.restock-total{color:#344054;font-size:10px;font-weight:800}"
+      + ".restock-body{padding:0 13px 13px;border-top:1px solid #edf1f5}.restock-items{display:grid;gap:7px;margin:11px 0}"
+      + ".restock-item{display:grid;grid-template-columns:1fr repeat(3,80px);gap:8px;padding:8px 10px;border-radius:9px;background:#f7f9fc;font-size:9px;align-items:center}"
+      + ".restock-item strong{color:#263b55}.restock-item span{text-align:center;color:#66768c}"
+      + ".restock-edit{display:grid;grid-template-columns:170px 1fr auto;gap:8px;align-items:end;margin-top:10px}.restock-edit label{color:#66768c;font-size:9px;font-weight:700}"
+      + ".restock-edit select,.restock-edit textarea{width:100%;min-height:38px;margin-top:5px;border:1px solid #d8e1eb;border-radius:9px;background:#fff;padding:8px;color:#263b55;font:inherit;outline:none}.restock-edit textarea{height:55px;resize:vertical}"
+      + ".restock-history{margin-top:10px;color:#8290a4;font-size:8px;line-height:1.6}.restock-empty{padding:36px 18px;color:#748197;font-size:10px;text-align:center}"
+      + ".restock-form-body{padding:18px}.restock-form-body>p{margin:0 0 13px;color:#748197;font-size:10px}.restock-form-items{display:grid;gap:8px;max-height:310px;overflow:auto}"
+      + ".restock-form-row{display:grid;grid-template-columns:1fr 68px 68px 82px;gap:8px;align-items:center;padding:9px;border:1px solid #e5eaf1;border-radius:10px;background:#fafbfd;font-size:9px}"
+      + ".restock-form-row strong{color:#263b55}.restock-form-row span{text-align:center;color:#748197}.restock-form-row input{width:100%;height:34px;border:1px solid #cfdae6;border-radius:8px;text-align:center;font-weight:700}"
+      + ".restock-note-label{display:block;margin-top:13px;color:#66768c;font-size:9px;font-weight:700}.restock-note{width:100%;height:65px;margin-top:6px;padding:9px;resize:vertical}"
+      + ".restock-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:13px}"
+      + ".restock-status-pending{background:#eaecf0;color:#475467}.restock-status-requested{background:#eaf3ff;color:#0b63ce}.restock-status-purchasing{background:#fef0c7;color:#b54708}.restock-status-received{background:#dcfae6;color:#027a48}"
+      + "@media(max-width:760px){.restock-summary{grid-template-columns:1fr auto}.restock-summary .restock-meta{grid-column:1/-1}.restock-item{grid-template-columns:1fr repeat(3,55px)}.restock-edit{grid-template-columns:1fr}.restock-form-row{grid-template-columns:1fr 55px 55px 70px}}";
+    document.head.appendChild(style);
+
+    function statusLabel(status) {
+      return ({ pending: "Pendente", requested: "Solicitado", purchasing: "Em compra", received: "Recebido" })[status] || status;
+    }
+
+    function requestCode(id) {
+      return "SOL-" + String(id).padStart(4, "0");
+    }
+
+    function formatDate(value) {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? String(value || "") : date.toLocaleString("pt-BR");
+    }
+
+    function exportRequest(request) {
+      const rows = [["SOLICITAÇÃO", "STATUS", "CATEGORIA", "ATUAL", "MÍNIMO", "QUANTIDADE", "CRIADO POR", "DATA", "OBSERVAÇÃO"]];
+      request.items.forEach(function (item) {
+        rows.push([requestCode(request.id), statusLabel(request.status), item.categoryName,
+          item.currentStock, item.minimumStock, item.quantity, request.createdBy,
+          formatDate(request.createdAt), request.notes]);
+      });
+      const csv = rows.map(function (row) {
+        return row.map(function (value) { return '"' + String(value || "").replaceAll('"', '""') + '"'; }).join(";");
+      }).join("\n");
+      const url = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = requestCode(request.id).toLowerCase() + ".csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function renderRequests() {
+      $("restockCount").textContent = restockRequests.length + " solicitaç"
+        + (restockRequests.length === 1 ? "ão" : "ões");
+      const list = $("restockList");
+      if (!restockRequests.length) {
+        list.innerHTML = '<div class="restock-empty">Nenhuma solicitação criada. Quando houver itens abaixo do mínimo, use “Gerar solicitação”.</div>';
+        return;
+      }
+      list.innerHTML = restockRequests.map(function (request) {
+        const total = request.items.reduce(function (sum, item) { return sum + item.quantity; }, 0);
+        const items = request.items.map(function (item) {
+          return '<div class="restock-item"><strong>' + esc(item.categoryName) + '</strong><span>Atual<br><b>'
+            + item.currentStock + '</b></span><span>Mínimo<br><b>' + item.minimumStock
+            + '</b></span><span>Solicitar<br><b>' + item.quantity + '</b></span></div>';
+        }).join("");
+        const history = (request.history || []).slice(0, 4).map(function (event) {
+          return formatDate(event.changedAt) + " · " + esc(event.changedBy) + " · " + statusLabel(event.status);
+        }).join("<br>");
+        const edit = currentUser.canUpdateNxt
+          ? '<div class="restock-edit"><label>Status<select data-restock-status="' + request.id + '">'
+            + ["pending", "requested", "purchasing", "received"].map(function (status) {
+              return '<option value="' + status + '"' + (request.status === status ? " selected" : "") + '>' + statusLabel(status) + '</option>';
+            }).join("") + '</select></label><label>Observação<textarea data-restock-notes="' + request.id + '">' + esc(request.notes) + '</textarea></label>'
+            + '<button class="btn btn-primary" type="button" data-restock-update="' + request.id + '">Salvar</button></div>'
+          : (request.notes ? '<div class="restock-history">Observação: ' + esc(request.notes) + '</div>' : "");
+        return '<details class="restock-card"><summary class="restock-summary"><span class="restock-code">' + requestCode(request.id)
+          + '</span><span class="restock-meta">Criada por ' + esc(request.createdBy) + '<br>' + formatDate(request.createdAt)
+          + '</span><span class="restock-total">' + total + ' unidade' + (total === 1 ? "" : "s") + '</span>'
+          + '<span class="badge restock-status-' + request.status + '">' + statusLabel(request.status) + '</span></summary>'
+          + '<div class="restock-body"><div class="restock-items">' + items + '</div>' + edit
+          + '<div class="restock-history">Últimas movimentações:<br>' + history + '</div>'
+          + '<button class="btn btn-soft" type="button" data-restock-export="' + request.id + '" style="margin-top:10px">Exportar CSV</button></div></details>';
+      }).join("");
+      document.querySelectorAll("[data-restock-export]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          const request = restockRequests.find(function (item) { return item.id === Number(button.dataset.restockExport); });
+          if (request) exportRequest(request);
+        });
+      });
+      document.querySelectorAll("[data-restock-update]").forEach(function (button) {
+        button.addEventListener("click", async function () {
+          const id = Number(button.dataset.restockUpdate);
+          button.disabled = true;
+          try {
+            const response = await fetch("/api/solicitacoes/" + id, {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status: document.querySelector('[data-restock-status="' + id + '"]').value,
+                observacao: document.querySelector('[data-restock-notes="' + id + '"]').value })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.mensagem || "Não foi possível atualizar a solicitação.");
+            await loadRequests();
+            toast("Solicitação " + requestCode(id) + " atualizada.");
+          } catch (error) {
+            toast(error.message);
+            button.disabled = false;
+          }
+        });
+      });
+    }
+
+    async function loadRequests() {
+      const response = await fetch("/api/solicitacoes?t=" + Date.now(), { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.mensagem || "Não foi possível carregar as solicitações.");
+      restockRequests = result.solicitacoes || [];
+      renderRequests();
+    }
+
+    function openCreateRequest() {
+      const critical = inventorySummaries(rawData).filter(function (item) { return item.request > 0; });
+      if (!critical.length) {
+        toast("Nenhuma categoria está abaixo do mínimo.");
+        return;
+      }
+      $("restockModalCount").textContent = critical.length + " item" + (critical.length === 1 ? "" : "s");
+      $("restockFormItems").innerHTML = critical.map(function (item, index) {
+        return '<label class="restock-form-row"><strong>' + esc(item.type) + '</strong><span>Atual<br><b>' + item.current
+          + '</b></span><span>Mínimo<br><b>' + item.minimum + '</b></span><input type="number" min="0" step="1" value="'
+          + item.request + '" data-restock-quantity="' + index + '" data-category="' + esc(item.type) + '" data-current="'
+          + item.current + '" data-minimum="' + item.minimum + '" aria-label="Quantidade de ' + esc(item.type) + '"></label>';
+      }).join("");
+      $("restockNote").value = "";
+      modal.classList.add("show");
+      document.body.style.overflow = "hidden";
+    }
+
+    function closeCreateRequest() {
+      modal.classList.remove("show");
+      document.body.style.overflow = "";
+    }
+
+    const createButton = $("restockCreateButton");
+    if (createButton) createButton.addEventListener("click", openCreateRequest);
+    modal.querySelector(".modal-close").addEventListener("click", closeCreateRequest);
+    modal.querySelector("[data-restock-cancel]").addEventListener("click", closeCreateRequest);
+    modal.addEventListener("click", function (event) { if (event.target === modal) closeCreateRequest(); });
+    modal.querySelector("[data-restock-save]").addEventListener("click", async function () {
+      const button = this;
+      const items = Array.from(document.querySelectorAll("[data-restock-quantity]")).map(function (input) {
+        return { categoryKey: norm(input.dataset.category), categoryName: input.dataset.category,
+          currentStock: Number(input.dataset.current), minimumStock: Number(input.dataset.minimum),
+          quantity: Math.max(0, Number.parseInt(input.value, 10) || 0) };
+      }).filter(function (item) { return item.quantity > 0; });
+      button.disabled = true;
+      button.textContent = "Salvando...";
+      try {
+        const response = await fetch("/api/solicitacoes", { method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itens: items, observacao: $("restockNote").value }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.mensagem || "Não foi possível criar a solicitação.");
+        closeCreateRequest();
+        await loadRequests();
+        toast("Solicitação " + requestCode(result.solicitacao.id) + " criada.");
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (error) {
+        toast(error.message);
+      } finally {
+        button.disabled = false;
+        button.textContent = "Salvar solicitação";
+      }
+    });
+
+    window.loadRestockRequests = loadRequests;
+  }
+
   function updateKpiLabels() {
     const cards = document.querySelectorAll(".kpi");
     if (cards.length < 5) return;
@@ -615,12 +841,14 @@
       await loadMinimums();
       updateKpiLabels();
       installInventoryTable();
+      installRestockModule();
       minimumSettingsController = createMinimumSettings();
       const updateButton = $("nxtUpdateButton");
       if (updateButton && currentUser.canUpdateNxt) {
         updateButton.addEventListener("click", startUpdate);
       }
       await loadServerData(false);
+      await window.loadRestockRequests();
       await checkUpdate();
     } catch (error) {
       toast(error.message || "Não foi possível iniciar o painel.");
