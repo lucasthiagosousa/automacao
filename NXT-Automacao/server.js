@@ -466,15 +466,28 @@ app.patch(
   "/api/solicitacoes/:id",
   auth.requireUpdatePermission,
   (req, res) => {
-    const solicitacao = auth.updateRestockRequest(
-      Number(req.params.id),
-      {
-        status: req.body.status,
-        notes: req.body.observacao,
-        items: req.body.itens,
-      },
-      Number(req.user.id)
-    );
+    let solicitacao;
+
+    try {
+      solicitacao = auth.updateRestockRequest(
+        Number(req.params.id),
+        {
+          status: req.body.status,
+          notes: req.body.observacao,
+          scNumber: req.body.numeroSc,
+          openedAt: req.body.dataAbertura,
+          buyer: req.body.responsavelCompra,
+          expectedAt: req.body.previsaoEntrega,
+          items: req.body.itens,
+        },
+        Number(req.user.id)
+      );
+    } catch (erro) {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: erro.message,
+      });
+    }
 
     if (!solicitacao) {
       return res.status(404).json({
