@@ -489,6 +489,28 @@ app.patch(
   }
 );
 
+app.delete(
+  "/api/solicitacoes/:id",
+  auth.requireMaster,
+  (req, res) => {
+    const removida = auth.deleteRestockRequest(
+      Number(req.params.id)
+    );
+
+    if (!removida) {
+      return res.status(404).json({
+        sucesso: false,
+        mensagem: "Solicitação não encontrada.",
+      });
+    }
+
+    return res.json({
+      sucesso: true,
+      mensagem: "Solicitação excluída.",
+    });
+  }
+);
+
 /*
  * Retorna os dados da planilha para o dashboard.
  */
