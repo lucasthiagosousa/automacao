@@ -3,6 +3,7 @@
 
   const MINIMUM_STORAGE_KEY = "nxt-minimum-stock-rules-v1";
   let updateTimer = null;
+  let activeDetailType = "";
 
   function loadSavedMinimums() {
     try {
@@ -145,6 +146,21 @@
         "Veja o estoque atual, o mínimo necessário e o que deve ser solicitado";
     }
 
+    const detailPanel = document.createElement("section");
+    detailPanel.className = "panel stock-detail-panel";
+    detailPanel.id = "stockDetailPanel";
+    detailPanel.hidden = true;
+    detailPanel.innerHTML =
+      '<div class="table-head"><div><h2 class="panel-title" id="stockDetailTitle">Ativos da categoria</h2>'
+      + '<p class="panel-desc">Dados individuais encontrados na planilha do NXT4Insight</p></div>'
+      + '<div class="stock-detail-actions"><span class="result-count" id="stockDetailCount">0 ativos</span>'
+      + '<button class="btn btn-soft" type="button" id="stockDetailClose">Fechar</button></div></div>'
+      + '<div class="table-scroll"><table><thead><tr>'
+      + '<th>Código</th><th>Modelo</th><th>Marca</th><th>Fabricante</th>'
+      + '<th>Status</th><th>Alocado para</th><th>Proprietário / empresa</th><th>Qtd.</th>'
+      + '</tr></thead><tbody id="stockDetailBody"></tbody></table></div>';
+    if (panel) panel.insertAdjacentElement("afterend", detailPanel);
+
     const style = document.createElement("style");
     style.textContent =
       ".stock-minimum-input{width:70px;min-height:34px;border:1px solid #d5e0ea;"
@@ -153,8 +169,85 @@
       + ".stock-request{min-width:38px;display:inline-flex;justify-content:center;padding:5px 8px;"
       + "border-radius:8px;background:#eaecf0;color:#475467;font-weight:800}"
       + ".stock-request.needed{background:#fee4e2;color:#b42318}"
-      + ".stock-models{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#526b82}";
+      + ".stock-models{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#526b82}"
+      + ".stock-category-button{padding:0;border:0;background:transparent;color:#0b63ce;"
+      + "font-weight:800;cursor:pointer;text-align:left}"
+      + ".stock-category-button:hover{text-decoration:underline;text-underline-offset:3px}"
+      + ".stock-detail-panel{margin-bottom:14px;overflow:hidden}"
+      + ".stock-detail-panel[hidden]{display:none}"
+      + ".stock-detail-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}"
+      + ".stock-detail-panel td{max-width:260px}"
+      + "@media(max-width:720px){.stock-detail-actions{width:100%;justify-content:space-between}}";
     document.head.appendChild(style);
+
+    function fieldByAliases(aliasesList) {
+      const keys = rawData[0] ? Object.keys(rawData[0]) : [];
+      return keys.find(function (key) {
+        return aliasesList.some(function (alias) {
+          return norm(key) === norm(alias);
+        });
+      }) || null;
+    }
+
+    function renderAssetDetails(type, shouldScroll) {
+      if (!type || !rawData.length) {
+        detailPanel.hidden = true;
+        return;
+      }
+      const typeField = getField("type");
+      if (!typeField) {
+        detailPanel.hidden = true;
+        return;
+      }
+      const assets = rawData.filter(function (row) {
+        return norm(row[typeField]) === norm(type);
+      });
+      if (!assets.length) {
+        detailPanel.hidden = true;
+        return;
+      }
+
+      activeDetailType = type;
+      const codeField = getField("code");
+      const modelField = getField("model");
+      const brandField = getField("brand");
+      const manufacturerField = getField("manufacturer");
+      const statusField = getField("status");
+      const ownerField = fieldByAliases(["Proprietário", "Proprietario", "Empresa"]);
+      const allocatedField = fieldByAliases(["Alocado para", "Responsável", "Responsavel", "Colaborador"]);
+
+      $("stockDetailTitle").textContent = "Ativos da categoria: " + type;
+      $("stockDetailCount").textContent = assets.length + " ativo"
+        + (assets.length === 1 ? "" : "s");
+      $("stockDetailBody").innerHTML = assets.map(function (asset) {
+        const code = codeField ? clean(asset[codeField]) : "";
+        const model = modelField ? clean(asset[modelField]) : "";
+        const brand = brandField ? clean(asset[brandField]) : "";
+        const manufacturer = manufacturerField ? clean(asset[manufacturerField]) : "";
+        const status = statusField ? clean(asset[statusField]) : "";
+        const allocated = allocatedField ? clean(asset[allocatedField]) : "";
+        const owner = ownerField ? clean(asset[ownerField]) : "";
+        return "<tr>"
+          + "<td class=\"code\">" + esc(code || "—") + "</td>"
+          + "<td>" + esc(model || "—") + "</td>"
+          + "<td>" + esc(brand || "—") + "</td>"
+          + "<td>" + esc(manufacturer || "—") + "</td>"
+          + "<td><span class=\"badge " + statusClass(status) + "\">" + esc(status || "Sem status") + "</span></td>"
+          + "<td>" + esc(allocated || "—") + "</td>"
+          + "<td>" + esc(owner || "—") + "</td>"
+          + "<td><strong>" + qty(asset) + "</strong></td>"
+          + "</tr>";
+      }).join("");
+      detailPanel.hidden = false;
+      if (shouldScroll) {
+        detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+
+    $("stockDetailClose").addEventListener("click", function () {
+      activeDetailType = "";
+      detailPanel.hidden = true;
+    });
 
     renderTable = function () {
       const summaries = inventorySummaries(filteredData);
@@ -166,7 +259,8 @@
             return esc(model.name) + " (" + model.quantity + ")";
           }).join(", ");
           return "<tr>"
-            + "<td class=\"code\">" + esc(item.type) + "</td>"
+            + "<td><button class=\"stock-category-button\" type=\"button\" data-detail-index=\"" + index + "\">"
+            + esc(item.type) + "</button></td>"
             + "<td><strong>" + item.current + "</strong></td>"
             + "<td><input class=\"stock-minimum-input\" type=\"number\" min=\"0\" step=\"1\""
             + " value=\"" + item.minimum + "\" data-stock-index=\"" + index + "\""
@@ -191,6 +285,25 @@
           toast("Estoque mínimo de " + item.type + " atualizado.");
         });
       });
+      document.querySelectorAll("[data-detail-index]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          const currentSummaries = inventorySummaries(filteredData);
+          const item = currentSummaries[Number(button.dataset.detailIndex)];
+          if (item) renderAssetDetails(item.type, true);
+        });
+      });
+
+      const selectedTypes = filters.type || [];
+      const searchText = clean($("searchInput").value);
+      if (selectedTypes.length === 1) {
+        renderAssetDetails(selectedTypes[0], false);
+      } else if (searchText && summaries.length === 1) {
+        renderAssetDetails(summaries[0].type, false);
+      } else if (activeDetailType) {
+        renderAssetDetails(activeDetailType, false);
+      } else {
+        detailPanel.hidden = true;
+      }
     };
 
     renderCritical = function () {
