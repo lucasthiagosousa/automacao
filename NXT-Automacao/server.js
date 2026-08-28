@@ -427,6 +427,69 @@ app.put(
 );
 
 /*
+ * Solicitações de reposição e acompanhamento de compra.
+ */
+app.get("/api/solicitacoes", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    sucesso: true,
+    solicitacoes: auth.getRestockRequests(),
+    podeEditar: ["master", "operator"].includes(req.user.role),
+  });
+});
+
+app.post(
+  "/api/solicitacoes",
+  auth.requireUpdatePermission,
+  (req, res) => {
+    try {
+      const solicitacao = auth.createRestockRequest(
+        req.body.itens,
+        req.body.observacao,
+        Number(req.user.id)
+      );
+
+      res.status(201).json({
+        sucesso: true,
+        solicitacao,
+      });
+    } catch (erro) {
+      res.status(400).json({
+        sucesso: false,
+        mensagem: erro.message,
+      });
+    }
+  }
+);
+
+app.patch(
+  "/api/solicitacoes/:id",
+  auth.requireUpdatePermission,
+  (req, res) => {
+    const solicitacao = auth.updateRestockRequest(
+      Number(req.params.id),
+      {
+        status: req.body.status,
+        notes: req.body.observacao,
+      },
+      Number(req.user.id)
+    );
+
+    if (!solicitacao) {
+      return res.status(404).json({
+        sucesso: false,
+        mensagem: "Solicitação não encontrada.",
+      });
+    }
+
+    return res.json({
+      sucesso: true,
+      solicitacao,
+    });
+  }
+);
+
+/*
  * Retorna os dados da planilha para o dashboard.
  */
 app.get("/api/estoque", async (req, res) => {
