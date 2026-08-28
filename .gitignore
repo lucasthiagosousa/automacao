@@ -9,6 +9,8 @@ NXT-Automacao/.env.*
 # Dados corporativos e evidências de erro
 NXT-Automacao/dados/*.xlsx
 NXT-Automacao/dados/*.xls
+NXT-Automacao/dados/*.db
+NXT-Automacao/dados/*.db-*
 NXT-Automacao/erros/*.png
 NXT-Automacao/erros/*.jpg
 NXT-Automacao/erros/*.jpeg
