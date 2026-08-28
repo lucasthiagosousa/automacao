@@ -41,6 +41,11 @@ function createAuth(options) {
     + "category_name TEXT NOT NULL,"
     + "minimum INTEGER NOT NULL CHECK(minimum >= 0),"
     + "product_url TEXT NOT NULL DEFAULT '',"
+    + "product_model TEXT NOT NULL DEFAULT '',"
+    + "manufacturer TEXT NOT NULL DEFAULT '',"
+    + "preferred_supplier TEXT NOT NULL DEFAULT '',"
+    + "last_price REAL NOT NULL DEFAULT 0,"
+    + "last_purchase_date TEXT NOT NULL DEFAULT '',"
     + "updated_by INTEGER,"
     + "updated_at TEXT NOT NULL,"
     + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
@@ -49,6 +54,10 @@ function createAuth(options) {
     + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
     + "status TEXT NOT NULL CHECK(status IN ('pending','requested','purchasing','received')),"
     + "notes TEXT NOT NULL DEFAULT '',"
+    + "sc_number TEXT NOT NULL DEFAULT '',"
+    + "opened_at TEXT NOT NULL DEFAULT '',"
+    + "buyer TEXT NOT NULL DEFAULT '',"
+    + "expected_at TEXT NOT NULL DEFAULT '',"
     + "created_by INTEGER NOT NULL,"
     + "created_at TEXT NOT NULL,"
     + "updated_by INTEGER NOT NULL,"
@@ -64,7 +73,13 @@ function createAuth(options) {
     + "current_stock INTEGER NOT NULL CHECK(current_stock >= 0),"
     + "minimum_stock INTEGER NOT NULL CHECK(minimum_stock >= 0),"
     + "quantity INTEGER NOT NULL CHECK(quantity > 0),"
+    + "received_quantity INTEGER NOT NULL DEFAULT 0 CHECK(received_quantity >= 0),"
     + "product_url TEXT NOT NULL DEFAULT '',"
+    + "product_model TEXT NOT NULL DEFAULT '',"
+    + "manufacturer TEXT NOT NULL DEFAULT '',"
+    + "supplier TEXT NOT NULL DEFAULT '',"
+    + "unit_price REAL NOT NULL DEFAULT 0,"
+    + "last_purchase_date TEXT NOT NULL DEFAULT '',"
     + "FOREIGN KEY(request_id) REFERENCES restock_requests(id) ON DELETE CASCADE"
     + ");"
     + "CREATE TABLE IF NOT EXISTS restock_request_events ("
@@ -87,6 +102,18 @@ function createAuth(options) {
       "ALTER TABLE restock_request_items ADD COLUMN product_url TEXT NOT NULL DEFAULT ''"
     );
   }
+  [
+    ["received_quantity", "INTEGER NOT NULL DEFAULT 0"],
+    ["product_model", "TEXT NOT NULL DEFAULT ''"],
+    ["manufacturer", "TEXT NOT NULL DEFAULT ''"],
+    ["supplier", "TEXT NOT NULL DEFAULT ''"],
+    ["unit_price", "REAL NOT NULL DEFAULT 0"],
+    ["last_purchase_date", "TEXT NOT NULL DEFAULT ''"]
+  ].forEach(function (migration) {
+    if (!requestItemColumns.includes(migration[0])) {
+      database.exec("ALTER TABLE restock_request_items ADD COLUMN " + migration[0] + " " + migration[1]);
+    }
+  });
   const minimumColumns = database.prepare(
     "PRAGMA table_info(minimum_stock)"
   ).all().map(function (column) { return column.name; });
@@ -95,6 +122,30 @@ function createAuth(options) {
       "ALTER TABLE minimum_stock ADD COLUMN product_url TEXT NOT NULL DEFAULT ''"
     );
   }
+  [
+    ["product_model", "TEXT NOT NULL DEFAULT ''"],
+    ["manufacturer", "TEXT NOT NULL DEFAULT ''"],
+    ["preferred_supplier", "TEXT NOT NULL DEFAULT ''"],
+    ["last_price", "REAL NOT NULL DEFAULT 0"],
+    ["last_purchase_date", "TEXT NOT NULL DEFAULT ''"]
+  ].forEach(function (migration) {
+    if (!minimumColumns.includes(migration[0])) {
+      database.exec("ALTER TABLE minimum_stock ADD COLUMN " + migration[0] + " " + migration[1]);
+    }
+  });
+  const requestColumns = database.prepare(
+    "PRAGMA table_info(restock_requests)"
+  ).all().map(function (column) { return column.name; });
+  [
+    ["sc_number", "TEXT NOT NULL DEFAULT ''"],
+    ["opened_at", "TEXT NOT NULL DEFAULT ''"],
+    ["buyer", "TEXT NOT NULL DEFAULT ''"],
+    ["expected_at", "TEXT NOT NULL DEFAULT ''"]
+  ].forEach(function (migration) {
+    if (!requestColumns.includes(migration[0])) {
+      database.exec("ALTER TABLE restock_requests ADD COLUMN " + migration[0] + " " + migration[1]);
+    }
+  });
 
   const router = express.Router();
   const loginAttempts = new Map();
@@ -125,6 +176,15 @@ function createAuth(options) {
     } catch {
       throw new Error("Informe um link válido começando com http:// ou https://.");
     }
+  }
+
+  function safeText(value, maxLength) {
+    return String(value || "").trim().slice(0, maxLength);
+  }
+
+  function normalizeDate(value) {
+    const text = safeText(value, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
   }
 
   function validateUsername(username) {
@@ -458,7 +518,9 @@ function createAuth(options) {
 
   function getMinimums() {
     return database.prepare(
-      "SELECT category_key AS categoryKey,category_name AS categoryName,minimum,product_url AS productUrl,updated_at AS updatedAt "
+      "SELECT category_key AS categoryKey,category_name AS categoryName,minimum,product_url AS productUrl,"
+      + "product_model AS productModel,manufacturer,preferred_supplier AS preferredSupplier,"
+      + "last_price AS lastPrice,last_purchase_date AS lastPurchaseDate,updated_at AS updatedAt "
       + "FROM minimum_stock ORDER BY category_name"
     ).all().map(function (row) {
       return {
@@ -466,6 +528,11 @@ function createAuth(options) {
         categoryName: row.categoryName,
         minimum: Number(row.minimum),
         productUrl: row.productUrl || "",
+        productModel: row.productModel || "",
+        manufacturer: row.manufacturer || "",
+        preferredSupplier: row.preferredSupplier || "",
+        lastPrice: Number(row.lastPrice) || 0,
+        lastPurchaseDate: row.lastPurchaseDate || "",
         updatedAt: row.updatedAt
       };
     });
@@ -473,10 +540,13 @@ function createAuth(options) {
 
   function saveMinimums(items, userId) {
     const upsert = database.prepare(
-      "INSERT INTO minimum_stock (category_key,category_name,minimum,product_url,updated_by,updated_at) "
-      + "VALUES (?,?,?,?,?,?) ON CONFLICT(category_key) DO UPDATE SET "
+      "INSERT INTO minimum_stock (category_key,category_name,minimum,product_url,product_model,manufacturer,"
+      + "preferred_supplier,last_price,last_purchase_date,updated_by,updated_at) "
+      + "VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(category_key) DO UPDATE SET "
       + "category_name=excluded.category_name,minimum=excluded.minimum,"
-      + "product_url=excluded.product_url,"
+      + "product_url=excluded.product_url,product_model=excluded.product_model,"
+      + "manufacturer=excluded.manufacturer,preferred_supplier=excluded.preferred_supplier,"
+      + "last_price=excluded.last_price,last_purchase_date=excluded.last_purchase_date,"
       + "updated_by=excluded.updated_by,updated_at=excluded.updated_at"
     );
     database.exec("BEGIN");
@@ -486,7 +556,13 @@ function createAuth(options) {
         const key = normalizeCategory(item.categoryKey || name);
         const minimum = Math.max(0, Number.parseInt(item.minimum, 10) || 0);
         const productUrl = normalizeProductUrl(item.productUrl);
-        if (name && key) upsert.run(key, name, minimum, productUrl, userId, nowIso());
+        const productModel = safeText(item.productModel, 200);
+        const manufacturer = safeText(item.manufacturer, 160);
+        const preferredSupplier = safeText(item.preferredSupplier, 200);
+        const lastPrice = Math.max(0, Number(item.lastPrice) || 0);
+        const lastPurchaseDate = normalizeDate(item.lastPurchaseDate);
+        if (name && key) upsert.run(key, name, minimum, productUrl, productModel,
+          manufacturer, preferredSupplier, lastPrice, lastPurchaseDate, userId, nowIso());
       });
       database.exec("COMMIT");
     } catch (error) {
@@ -498,7 +574,8 @@ function createAuth(options) {
 
   function getRestockRequests() {
     const requests = database.prepare(
-      "SELECT requests.id,requests.status,requests.notes,requests.created_at AS createdAt,"
+      "SELECT requests.id,requests.status,requests.notes,requests.sc_number AS scNumber,"
+      + "requests.opened_at AS openedAt,requests.buyer,requests.expected_at AS expectedAt,requests.created_at AS createdAt,"
       + "requests.updated_at AS updatedAt,creator.username AS createdBy,editor.username AS updatedBy "
       + "FROM restock_requests requests "
       + "JOIN users creator ON creator.id=requests.created_by "
@@ -509,6 +586,10 @@ function createAuth(options) {
         id: Number(row.id),
         status: row.status,
         notes: row.notes,
+        scNumber: row.scNumber || "",
+        openedAt: row.openedAt || "",
+        buyer: row.buyer || "",
+        expectedAt: row.expectedAt || "",
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         createdBy: row.createdBy,
@@ -525,7 +606,9 @@ function createAuth(options) {
     const placeholders = ids.map(function () { return "?"; }).join(",");
     database.prepare(
       "SELECT request_id AS requestId,category_key AS categoryKey,category_name AS categoryName,"
-      + "current_stock AS currentStock,minimum_stock AS minimumStock,quantity,product_url AS productUrl "
+      + "current_stock AS currentStock,minimum_stock AS minimumStock,quantity,"
+      + "received_quantity AS receivedQuantity,product_url AS productUrl,product_model AS productModel,"
+      + "manufacturer,supplier,unit_price AS unitPrice,last_purchase_date AS lastPurchaseDate "
       + "FROM restock_request_items WHERE request_id IN (" + placeholders + ") ORDER BY id"
     ).all(...ids).forEach(function (item) {
       const request = byId.get(Number(item.requestId));
@@ -535,7 +618,13 @@ function createAuth(options) {
         currentStock: Number(item.currentStock),
         minimumStock: Number(item.minimumStock),
         quantity: Number(item.quantity),
-        productUrl: item.productUrl || ""
+        receivedQuantity: Math.min(Number(item.quantity), Math.max(0, Number(item.receivedQuantity) || 0)),
+        productUrl: item.productUrl || "",
+        productModel: item.productModel || "",
+        manufacturer: item.manufacturer || "",
+        supplier: item.supplier || "",
+        unitPrice: Number(item.unitPrice) || 0,
+        lastPurchaseDate: item.lastPurchaseDate || ""
       });
     });
     database.prepare(
@@ -564,7 +653,12 @@ function createAuth(options) {
         currentStock: Math.max(0, Number.parseInt(item.currentStock, 10) || 0),
         minimumStock: Math.max(0, Number.parseInt(item.minimumStock, 10) || 0),
         quantity: Math.max(0, Number.parseInt(item.quantity, 10) || 0),
-        productUrl: normalizeProductUrl(item.productUrl)
+        productUrl: normalizeProductUrl(item.productUrl),
+        productModel: safeText(item.productModel, 200),
+        manufacturer: safeText(item.manufacturer, 160),
+        supplier: safeText(item.supplier, 200),
+        unitPrice: Math.max(0, Number(item.unitPrice) || 0),
+        lastPurchaseDate: normalizeDate(item.lastPurchaseDate)
       };
     }).filter(function (item) {
       return item.categoryKey && item.categoryName && item.quantity > 0;
@@ -581,12 +675,14 @@ function createAuth(options) {
       const requestId = Number(result.lastInsertRowid);
       const insertItem = database.prepare(
         "INSERT INTO restock_request_items "
-        + "(request_id,category_key,category_name,current_stock,minimum_stock,quantity,product_url) "
-        + "VALUES (?,?,?,?,?,?,?)"
+        + "(request_id,category_key,category_name,current_stock,minimum_stock,quantity,received_quantity,"
+        + "product_url,product_model,manufacturer,supplier,unit_price,last_purchase_date) "
+        + "VALUES (?,?,?,?,?,?,0,?,?,?,?,?,?)"
       );
       validItems.forEach(function (item) {
         insertItem.run(requestId, item.categoryKey, item.categoryName,
-          item.currentStock, item.minimumStock, item.quantity, item.productUrl);
+          item.currentStock, item.minimumStock, item.quantity, item.productUrl,
+          item.productModel, item.manufacturer, item.supplier, item.unitPrice, item.lastPurchaseDate);
       });
       database.prepare(
         "INSERT INTO restock_request_events (request_id,status,notes,changed_by,changed_at) "
@@ -608,23 +704,30 @@ function createAuth(options) {
     const notes = typeof values.notes === "string"
       ? values.notes.trim().slice(0, 2000)
       : existing.notes;
-    const productLinks = (Array.isArray(values.items) ? values.items : []).slice(0, 200).map(function (item) {
+    const scNumber = values.scNumber === undefined ? existing.sc_number : safeText(values.scNumber, 80);
+    const openedAt = values.openedAt === undefined ? existing.opened_at : normalizeDate(values.openedAt);
+    const buyer = values.buyer === undefined ? existing.buyer : safeText(values.buyer, 160);
+    const expectedAt = values.expectedAt === undefined ? existing.expected_at : normalizeDate(values.expectedAt);
+    const itemUpdates = (Array.isArray(values.items) ? values.items : []).slice(0, 200).map(function (item) {
       return {
         categoryKey: normalizeCategory(item.categoryKey || item.categoryName),
-        productUrl: normalizeProductUrl(item.productUrl)
+        productUrl: normalizeProductUrl(item.productUrl),
+        receivedQuantity: Math.max(0, Number.parseInt(item.receivedQuantity, 10) || 0)
       };
     }).filter(function (item) { return item.categoryKey; });
     const timestamp = nowIso();
     database.exec("BEGIN");
     try {
       database.prepare(
-        "UPDATE restock_requests SET status=?,notes=?,updated_by=?,updated_at=? WHERE id=?"
-      ).run(status, notes, userId, timestamp, id);
+        "UPDATE restock_requests SET status=?,notes=?,sc_number=?,opened_at=?,buyer=?,expected_at=?,"
+        + "updated_by=?,updated_at=? WHERE id=?"
+      ).run(status, notes, scNumber, openedAt, buyer, expectedAt, userId, timestamp, id);
       const updateProduct = database.prepare(
-        "UPDATE restock_request_items SET product_url=? WHERE request_id=? AND category_key=?"
+        "UPDATE restock_request_items SET product_url=?,received_quantity=MIN(quantity,?) "
+        + "WHERE request_id=? AND category_key=?"
       );
-      productLinks.forEach(function (item) {
-        updateProduct.run(item.productUrl, id, item.categoryKey);
+      itemUpdates.forEach(function (item) {
+        updateProduct.run(item.productUrl, item.receivedQuantity, id, item.categoryKey);
       });
       database.prepare(
         "INSERT INTO restock_request_events (request_id,status,notes,changed_by,changed_at) "
