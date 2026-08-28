@@ -2,8 +2,10 @@
   "use strict";
 
   const MINIMUM_STORAGE_KEY = "nxt-minimum-stock-rules-v1";
+  const MINIMUM_SETUP_KEY = "nxt-minimum-setup-complete-v1";
   let updateTimer = null;
   let activeDetailType = "";
+  let minimumSettingsController = null;
 
   function loadSavedMinimums() {
     try {
@@ -391,6 +393,11 @@
       $("sourceName").textContent = (file.nome || data.nomeArquivo || "estoque-atual.xlsx")
         + " · atualizado em " + updatedText;
       resetFilters();
+      if (!localStorage.getItem(MINIMUM_SETUP_KEY) && minimumSettingsController) {
+        setTimeout(function () {
+          minimumSettingsController.open(true);
+        }, 80);
+      }
       if (showSuccess) toast("Dashboard atualizado com os dados mais recentes.");
     } catch (error) {
       $("sourceName").textContent = "Falha ao carregar a planilha";
@@ -468,7 +475,9 @@
       '<div class="modal-card" role="dialog" aria-modal="true">'
       + '<div class="modal-head"><button class="modal-close" type="button" aria-label="Fechar">×</button>'
       + '<div class="modal-eyebrow">Parâmetros de reposição</div>'
-      + '<div class="modal-title">Estoques mínimos</div></div>'
+      + '<div class="modal-title" id="minimumSettingsTitle">Estoques mínimos</div></div>'
+      + '<p id="minimumSettingsDescription" style="margin:16px 18px 0;color:#6b7c93;font-size:12px;line-height:1.55">'
+      + 'Defina a quantidade mínima necessária para cada categoria do inventário.</p>'
       + '<div class="details" id="minimumSettingsList"></div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;padding:0 18px 18px">'
       + '<button class="btn" type="button" data-cancel-minimum>Cancelar</button>'
@@ -476,15 +485,36 @@
       + '</div></div>';
     document.body.appendChild(modal);
 
-    function openSettings() {
+    function openSettings(requiredSetup) {
+      const required = Boolean(requiredSetup);
+      modal.dataset.required = required ? "true" : "false";
+      modal.querySelector(".modal-close").style.display = required ? "none" : "";
+      modal.querySelector("[data-cancel-minimum]").style.display = required ? "none" : "";
+      modal.querySelector("#minimumSettingsTitle").textContent = required
+        ? "Defina as regras do estoque"
+        : "Estoques mínimos";
+      modal.querySelector("#minimumSettingsDescription").textContent = required
+        ? "Antes de abrir o painel, informe quanto deve existir no estoque para cada categoria. O sistema calculará automaticamente quanto solicitar e o status atual."
+        : "Altere a quantidade mínima necessária para cada categoria do inventário.";
+      modal.querySelector("[data-save-minimum]").textContent = required
+        ? "Salvar e abrir o painel"
+        : "Salvar alterações";
+
+      const summaries = inventorySummaries(rawData);
       const list = modal.querySelector("#minimumSettingsList");
       list.innerHTML = "";
-      minimumStockRules.forEach(function (rule, index) {
+      const visibleRules = minimumStockRules.filter(function (rule) {
+        return summaries.some(function (item) { return item.rule === rule; })
+          || Number(rule.minimum) > 0;
+      });
+      visibleRules.forEach(function (rule) {
+        const index = minimumStockRules.indexOf(rule);
+        const summary = summaries.find(function (item) { return item.rule === rule; });
         const field = document.createElement("label");
         field.className = "detail";
         const label = document.createElement("span");
         label.className = "detail-label";
-        label.textContent = rule.item;
+        label.textContent = rule.item + " · atual: " + (summary ? summary.current : 0);
         const input = document.createElement("input");
         input.className = "control";
         input.type = "number";
@@ -501,11 +531,12 @@
     }
 
     function closeSettings() {
+      if (modal.dataset.required === "true") return;
       modal.classList.remove("show");
       document.body.style.overflow = "";
     }
 
-    button.addEventListener("click", openSettings);
+    button.addEventListener("click", function () { openSettings(false); });
     modal.querySelector(".modal-close").addEventListener("click", closeSettings);
     modal.querySelector("[data-cancel-minimum]").addEventListener("click", closeSettings);
     modal.querySelector("[data-save-minimum]").addEventListener("click", function () {
@@ -514,19 +545,25 @@
           Math.max(0, Number.parseInt(input.value, 10) || 0);
       });
       saveMinimums();
+      localStorage.setItem(MINIMUM_SETUP_KEY, "true");
+      modal.dataset.required = "false";
       render();
       closeSettings();
-      toast("Estoques mínimos atualizados.");
+      toast("Regras de estoque mínimo salvas.");
     });
     modal.addEventListener("click", function (event) {
       if (event.target === modal) closeSettings();
     });
+
+    return {
+      open: openSettings
+    };
   }
 
   updateKpiLabels();
   applySavedMinimums();
   installInventoryTable();
-  createMinimumSettings();
+  minimumSettingsController = createMinimumSettings();
   $("nxtUpdateButton").addEventListener("click", startUpdate);
   loadServerData(false);
   checkUpdate();
