@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#102a43">
+  <title>Entrar · Controle de Estoque</title>
+  <style>
+    :root{--navy:#102a43;--blue:#1677ff;--ink:#172b4d;--muted:#6b7c93;--line:#dfe7ef;--canvas:#f4f7fb;--red:#b42318}
+    *{box-sizing:border-box}html,body{min-height:100%;margin:0}
+    body{display:grid;place-items:center;padding:24px;background:radial-gradient(800px 480px at 85% 0,#d9f3f7,transparent 62%),var(--canvas);color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif}
+    .shell{width:min(920px,100%);display:grid;grid-template-columns:1.05fr .95fr;overflow:hidden;border:1px solid var(--line);border-radius:24px;background:white;box-shadow:0 24px 70px rgba(16,42,67,.16)}
+    .intro{position:relative;overflow:hidden;min-height:550px;padding:48px;display:flex;flex-direction:column;justify-content:space-between;color:white;background:linear-gradient(145deg,var(--navy),#0b4668 62%,#087f8c)}
+    .intro:after{content:"";position:absolute;width:380px;height:380px;right:-190px;top:-180px;border-radius:50%;background:rgba(255,255,255,.08)}
+    .brand{position:relative;z-index:1;display:flex;align-items:center;gap:12px}.brand-mark{width:46px;height:46px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.25);border-radius:14px;background:rgba(255,255,255,.14);font-weight:900}
+    .brand strong{display:block;font-size:15px}.brand span{display:block;margin-top:3px;color:rgba(255,255,255,.68);font-size:11px}
+    .intro-copy{position:relative;z-index:1}.intro h1{max-width:420px;margin:0;font-size:42px;line-height:1.04;letter-spacing:-.045em}.intro p{max-width:410px;margin:18px 0 0;color:rgba(255,255,255,.72);font-size:14px;line-height:1.65}
+    .security{position:relative;z-index:1;color:rgba(255,255,255,.62);font-size:11px}
+    .form-side{padding:48px;display:flex;flex-direction:column;justify-content:center}
+    .eyebrow{color:var(--blue);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}.form-side h2{margin:8px 0 6px;color:var(--navy);font-size:28px;letter-spacing:-.035em}.subtitle{margin:0 0 28px;color:var(--muted);font-size:13px;line-height:1.55}
+    label{display:block;margin:0 0 15px;color:#405c74;font-size:11px;font-weight:800}input{width:100%;min-height:46px;margin-top:6px;padding:10px 13px;border:1px solid #d5e0ea;border-radius:11px;outline:none;background:#fbfdff;color:var(--ink);font:inherit}input:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(22,119,255,.1)}
+    button{width:100%;min-height:46px;margin-top:5px;border:0;border-radius:11px;background:linear-gradient(135deg,#216fea,#0b4bc3);color:white;cursor:pointer;font-weight:800;box-shadow:0 10px 24px rgba(22,119,255,.22)}button:disabled{cursor:wait;opacity:.7}
+    .message{min-height:20px;margin-top:14px;color:var(--red);font-size:11px;font-weight:700;text-align:center}
+    @media(max-width:760px){body{padding:12px}.shell{grid-template-columns:1fr}.intro{min-height:auto;padding:28px}.intro-copy,.security{display:none}.form-side{padding:32px 24px}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="intro">
+      <div class="brand"><div class="brand-mark">TI</div><div><strong>Controle de Estoque</strong><span>Operações de TI</span></div></div>
+      <div class="intro-copy"><h1>Inventário claro. Decisões rápidas.</h1><p>Acompanhe ativos, regras de reposição e atualizações do NXT4Insight em um ambiente protegido.</p></div>
+      <div class="security">Acesso local protegido por sessão e senha criptografada.</div>
+    </section>
+    <section class="form-side">
+      <div class="eyebrow">Área protegida</div>
+      <h2>Entrar no painel</h2>
+      <p class="subtitle">Use o usuário e a senha definidos pelo Master Admin.</p>
+      <form id="loginForm">
+        <label>Usuário<input id="username" name="username" autocomplete="username" required autofocus></label>
+        <label>Senha<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+        <button id="submitButton" type="submit">Entrar</button>
+        <div class="message" id="message" role="alert"></div>
+      </form>
+    </section>
+  </main>
+  <script>
+    const form = document.getElementById("loginForm");
+    const message = document.getElementById("message");
+    const submitButton = document.getElementById("submitButton");
+
+    async function checkStatus() {
+      try {
+        const response = await fetch("/api/auth/status", { cache: "no-store" });
+        const data = await response.json();
+        if (data.setupRequired) location.replace("/setup.html");
+        else if (data.authenticated) location.replace("/");
+      } catch {
+        message.textContent = "Não foi possível acessar o servidor.";
+      }
+    }
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      message.textContent = "";
+      submitButton.disabled = true;
+      submitButton.textContent = "Entrando...";
+      try {
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: document.getElementById("username").value,
+            password: document.getElementById("password").value
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.mensagem || "Não foi possível entrar.");
+        location.replace("/");
+      } catch (error) {
+        message.textContent = error.message;
+        submitButton.disabled = false;
+        submitButton.textContent = "Entrar";
+      }
+    });
+
+    checkStatus();
+  </script>
+</body>
+</html>
