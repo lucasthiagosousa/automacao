@@ -77,7 +77,15 @@ function lerTonerAtual() {
       updatedAt: null,
       threshold: 20,
       summary: { total: tonerMonitor.printers.length, online: 0, offline: 0, critical: 0, warning: 0 },
-      printers: []
+      printers: tonerMonitor.printers.map(([ip, model]) => ({
+        ip,
+        model,
+        hostname: "",
+        online: null,
+        supplies: [],
+        status: "unknown",
+        cartridge: "Aguardando consulta SNMP",
+      }))
     };
   }
 }
