@@ -67,7 +67,7 @@
         const response = await fetch("/api/auth/status", { cache: "no-store" });
         const data = await response.json();
         if (data.setupRequired) location.replace("/setup.html");
-        else if (data.authenticated) location.replace("/");
+        else if (data.authenticated) location.replace("/home.html");
       } catch {
         message.textContent = "Não foi possível acessar o servidor.";
       }
@@ -86,7 +86,7 @@
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.mensagem || "Não foi possível entrar.");
-        location.replace("/");
+        location.replace("/home.html");
       } catch (error) {
         message.textContent = error.message;
         submitButton.disabled = false;
