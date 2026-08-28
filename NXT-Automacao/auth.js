@@ -44,6 +44,37 @@ function createAuth(options) {
     + "updated_at TEXT NOT NULL,"
     + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
     + ");"
+    + "CREATE TABLE IF NOT EXISTS restock_requests ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    + "status TEXT NOT NULL CHECK(status IN ('pending','requested','purchasing','received')),"
+    + "notes TEXT NOT NULL DEFAULT '',"
+    + "created_by INTEGER NOT NULL,"
+    + "created_at TEXT NOT NULL,"
+    + "updated_by INTEGER NOT NULL,"
+    + "updated_at TEXT NOT NULL,"
+    + "FOREIGN KEY(created_by) REFERENCES users(id),"
+    + "FOREIGN KEY(updated_by) REFERENCES users(id)"
+    + ");"
+    + "CREATE TABLE IF NOT EXISTS restock_request_items ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    + "request_id INTEGER NOT NULL,"
+    + "category_key TEXT NOT NULL,"
+    + "category_name TEXT NOT NULL,"
+    + "current_stock INTEGER NOT NULL CHECK(current_stock >= 0),"
+    + "minimum_stock INTEGER NOT NULL CHECK(minimum_stock >= 0),"
+    + "quantity INTEGER NOT NULL CHECK(quantity > 0),"
+    + "FOREIGN KEY(request_id) REFERENCES restock_requests(id) ON DELETE CASCADE"
+    + ");"
+    + "CREATE TABLE IF NOT EXISTS restock_request_events ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    + "request_id INTEGER NOT NULL,"
+    + "status TEXT NOT NULL,"
+    + "notes TEXT NOT NULL DEFAULT '',"
+    + "changed_by INTEGER NOT NULL,"
+    + "changed_at TEXT NOT NULL,"
+    + "FOREIGN KEY(request_id) REFERENCES restock_requests(id) ON DELETE CASCADE,"
+    + "FOREIGN KEY(changed_by) REFERENCES users(id)"
+    + ");"
   );
 
   const router = express.Router();
@@ -431,6 +462,134 @@ function createAuth(options) {
     return getMinimums();
   }
 
+  function getRestockRequests() {
+    const requests = database.prepare(
+      "SELECT requests.id,requests.status,requests.notes,requests.created_at AS createdAt,"
+      + "requests.updated_at AS updatedAt,creator.username AS createdBy,editor.username AS updatedBy "
+      + "FROM restock_requests requests "
+      + "JOIN users creator ON creator.id=requests.created_by "
+      + "JOIN users editor ON editor.id=requests.updated_by "
+      + "ORDER BY requests.id DESC LIMIT 100"
+    ).all().map(function (row) {
+      return {
+        id: Number(row.id),
+        status: row.status,
+        notes: row.notes,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        createdBy: row.createdBy,
+        updatedBy: row.updatedBy,
+        items: [],
+        history: []
+      };
+    });
+    const byId = new Map(requests.map(function (request) {
+      return [request.id, request];
+    }));
+    if (!requests.length) return requests;
+    const ids = requests.map(function (request) { return request.id; });
+    const placeholders = ids.map(function () { return "?"; }).join(",");
+    database.prepare(
+      "SELECT request_id AS requestId,category_key AS categoryKey,category_name AS categoryName,"
+      + "current_stock AS currentStock,minimum_stock AS minimumStock,quantity "
+      + "FROM restock_request_items WHERE request_id IN (" + placeholders + ") ORDER BY id"
+    ).all(...ids).forEach(function (item) {
+      const request = byId.get(Number(item.requestId));
+      if (request) request.items.push({
+        categoryKey: item.categoryKey,
+        categoryName: item.categoryName,
+        currentStock: Number(item.currentStock),
+        minimumStock: Number(item.minimumStock),
+        quantity: Number(item.quantity)
+      });
+    });
+    database.prepare(
+      "SELECT events.request_id AS requestId,events.status,events.notes,"
+      + "events.changed_at AS changedAt,users.username AS changedBy "
+      + "FROM restock_request_events events JOIN users ON users.id=events.changed_by "
+      + "WHERE events.request_id IN (" + placeholders + ") ORDER BY events.id DESC"
+    ).all(...ids).forEach(function (event) {
+      const request = byId.get(Number(event.requestId));
+      if (request) request.history.push({
+        status: event.status,
+        notes: event.notes,
+        changedAt: event.changedAt,
+        changedBy: event.changedBy
+      });
+    });
+    return requests;
+  }
+
+  function createRestockRequest(items, notes, userId) {
+    const validItems = (Array.isArray(items) ? items : []).slice(0, 200).map(function (item) {
+      const categoryName = String(item.categoryName || "").trim().slice(0, 160);
+      return {
+        categoryKey: normalizeCategory(item.categoryKey || categoryName),
+        categoryName: categoryName,
+        currentStock: Math.max(0, Number.parseInt(item.currentStock, 10) || 0),
+        minimumStock: Math.max(0, Number.parseInt(item.minimumStock, 10) || 0),
+        quantity: Math.max(0, Number.parseInt(item.quantity, 10) || 0)
+      };
+    }).filter(function (item) {
+      return item.categoryKey && item.categoryName && item.quantity > 0;
+    });
+    if (!validItems.length) throw new Error("Inclua ao menos um item com quantidade maior que zero.");
+    const safeNotes = String(notes || "").trim().slice(0, 2000);
+    const timestamp = nowIso();
+    database.exec("BEGIN");
+    try {
+      const result = database.prepare(
+        "INSERT INTO restock_requests (status,notes,created_by,created_at,updated_by,updated_at) "
+        + "VALUES ('pending',?,?,?,?,?)"
+      ).run(safeNotes, userId, timestamp, userId, timestamp);
+      const requestId = Number(result.lastInsertRowid);
+      const insertItem = database.prepare(
+        "INSERT INTO restock_request_items "
+        + "(request_id,category_key,category_name,current_stock,minimum_stock,quantity) "
+        + "VALUES (?,?,?,?,?,?)"
+      );
+      validItems.forEach(function (item) {
+        insertItem.run(requestId, item.categoryKey, item.categoryName,
+          item.currentStock, item.minimumStock, item.quantity);
+      });
+      database.prepare(
+        "INSERT INTO restock_request_events (request_id,status,notes,changed_by,changed_at) "
+        + "VALUES (?,'pending',?,?,?)"
+      ).run(requestId, "Solicitação criada.", userId, timestamp);
+      database.exec("COMMIT");
+      return getRestockRequests().find(function (request) { return request.id === requestId; });
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  function updateRestockRequest(id, values, userId) {
+    const existing = database.prepare("SELECT * FROM restock_requests WHERE id=?").get(id);
+    if (!existing) return null;
+    const allowedStatus = ["pending", "requested", "purchasing", "received"];
+    const status = allowedStatus.includes(values.status) ? values.status : existing.status;
+    const notes = typeof values.notes === "string"
+      ? values.notes.trim().slice(0, 2000)
+      : existing.notes;
+    const timestamp = nowIso();
+    database.exec("BEGIN");
+    try {
+      database.prepare(
+        "UPDATE restock_requests SET status=?,notes=?,updated_by=?,updated_at=? WHERE id=?"
+      ).run(status, notes, userId, timestamp, id);
+      database.prepare(
+        "INSERT INTO restock_request_events (request_id,status,notes,changed_by,changed_at) "
+        + "VALUES (?,?,?,?,?)"
+      ).run(id, status, notes, userId, timestamp);
+      database.exec("COMMIT");
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
+    return getRestockRequests().find(function (request) { return request.id === id; });
+  }
+
   return {
     router: router,
     requireAuth: requireAuth,
@@ -438,6 +597,9 @@ function createAuth(options) {
     requireUpdatePermission: requireUpdatePermission,
     getMinimums: getMinimums,
     saveMinimums: saveMinimums,
+    getRestockRequests: getRestockRequests,
+    createRestockRequest: createRestockRequest,
+    updateRestockRequest: updateRestockRequest,
     setupRequired: setupRequired
   };
 }
