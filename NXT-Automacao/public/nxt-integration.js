@@ -1,22 +1,13 @@
 (function () {
   "use strict";
 
-  const MINIMUM_STORAGE_KEY = "nxt-minimum-stock-rules-v1";
-  const MINIMUM_SETUP_KEY = "nxt-minimum-setup-complete-v1";
   let updateTimer = null;
   let activeDetailType = "";
   let minimumSettingsController = null;
+  let currentUser = null;
+  let minimumsConfigured = false;
 
-  function loadSavedMinimums() {
-    try {
-      return JSON.parse(localStorage.getItem(MINIMUM_STORAGE_KEY) || "{}");
-    } catch {
-      return {};
-    }
-  }
-
-  function applySavedMinimums() {
-    const saved = loadSavedMinimums();
+  function applyMinimumValues(saved) {
     minimumStockRules.forEach(function (rule) {
       const key = norm(rule.item);
       if (Number.isFinite(Number(saved[key]))) {
@@ -25,12 +16,46 @@
     });
   }
 
-  function saveMinimums() {
+  async function loadMinimums() {
+    const response = await fetch("/api/minimos?t=" + Date.now(), { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.mensagem || "Não foi possível carregar os estoques mínimos.");
     const values = {};
-    minimumStockRules.forEach(function (rule) {
-      values[norm(rule.item)] = Math.max(0, Number(rule.minimum) || 0);
+    (result.itens || []).forEach(function (item) {
+      const key = norm(item.categoryKey || item.categoryName);
+      values[key] = Math.max(0, Number(item.minimum) || 0);
+      if (!minimumStockRules.some(function (rule) { return norm(rule.item) === key; })) {
+        minimumStockRules.push({
+          item: item.categoryName || item.categoryKey,
+          minimum: values[key],
+          aliases: [item.categoryName || item.categoryKey]
+        });
+      }
     });
-    localStorage.setItem(MINIMUM_STORAGE_KEY, JSON.stringify(values));
+    minimumsConfigured = Boolean((result.itens || []).length);
+    applyMinimumValues(values);
+  }
+
+  async function saveMinimums() {
+    if (!currentUser || !currentUser.canEditMinimum) {
+      throw new Error("Apenas o Master Admin pode alterar o estoque mínimo.");
+    }
+    const response = await fetch("/api/minimos", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itens: minimumStockRules.map(function (rule) {
+          return {
+            categoryKey: norm(rule.item),
+            categoryName: rule.item,
+            minimum: Math.max(0, Number(rule.minimum) || 0)
+          };
+        })
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.mensagem || "Não foi possível salvar os estoques mínimos.");
+    minimumsConfigured = true;
   }
 
   function countRule(rule, inventory) {
@@ -168,6 +193,7 @@
       ".stock-minimum-input{width:70px;min-height:34px;border:1px solid #d5e0ea;"
       + "border-radius:9px;background:#f8fafc;color:#102a43;font-weight:800;text-align:center;outline:none}"
       + ".stock-minimum-input:focus{border-color:#1677ff;box-shadow:0 0 0 3px rgba(22,119,255,.1)}"
+      + ".stock-minimum-input:disabled{border-color:transparent;background:transparent;color:#344054;cursor:not-allowed}"
       + ".stock-request{min-width:38px;display:inline-flex;justify-content:center;padding:5px 8px;"
       + "border-radius:8px;background:#eaecf0;color:#475467;font-weight:800}"
       + ".stock-request.needed{background:#fee4e2;color:#b42318}"
@@ -266,6 +292,7 @@
             + "<td><strong>" + item.current + "</strong></td>"
             + "<td><input class=\"stock-minimum-input\" type=\"number\" min=\"0\" step=\"1\""
             + " value=\"" + item.minimum + "\" data-stock-index=\"" + index + "\""
+            + (currentUser && currentUser.canEditMinimum ? "" : " disabled")
             + " aria-label=\"Estoque mínimo de " + esc(item.type) + "\"></td>"
             + "<td><span class=\"stock-request " + (item.request > 0 ? "needed" : "") + "\">"
             + item.request + "</span></td>"
@@ -277,14 +304,22 @@
       $("resultCount").textContent = summaries.length + " categoria"
         + (summaries.length === 1 ? "" : "s");
       document.querySelectorAll("[data-stock-index]").forEach(function (input) {
-        input.addEventListener("change", function () {
+        input.addEventListener("change", async function () {
           const currentSummaries = inventorySummaries(filteredData);
           const item = currentSummaries[Number(input.dataset.stockIndex)];
           if (!item) return;
+          const previous = item.rule.minimum;
           item.rule.minimum = Math.max(0, Number.parseInt(input.value, 10) || 0);
-          saveMinimums();
-          render();
-          toast("Estoque mínimo de " + item.type + " atualizado.");
+          input.disabled = true;
+          try {
+            await saveMinimums();
+            render();
+            toast("Estoque mínimo de " + item.type + " atualizado.");
+          } catch (error) {
+            item.rule.minimum = previous;
+            render();
+            toast(error.message);
+          }
         });
       });
       document.querySelectorAll("[data-detail-index]").forEach(function (button) {
@@ -393,7 +428,7 @@
       $("sourceName").textContent = (file.nome || data.nomeArquivo || "estoque-atual.xlsx")
         + " · atualizado em " + updatedText;
       resetFilters();
-      if (!localStorage.getItem(MINIMUM_SETUP_KEY) && minimumSettingsController) {
+      if (!minimumsConfigured && currentUser && currentUser.canEditMinimum && minimumSettingsController) {
         setTimeout(function () {
           minimumSettingsController.open(true);
         }, 80);
@@ -461,6 +496,7 @@
   }
 
   function createMinimumSettings() {
+    if (!currentUser || !currentUser.canEditMinimum) return null;
     const panel = $("criticalList").closest(".chart-panel");
     const heading = panel.querySelector(".panel-head");
     const button = document.createElement("button");
@@ -539,17 +575,30 @@
     button.addEventListener("click", function () { openSettings(false); });
     modal.querySelector(".modal-close").addEventListener("click", closeSettings);
     modal.querySelector("[data-cancel-minimum]").addEventListener("click", closeSettings);
-    modal.querySelector("[data-save-minimum]").addEventListener("click", function () {
+    modal.querySelector("[data-save-minimum]").addEventListener("click", async function () {
+      const saveButton = modal.querySelector("[data-save-minimum]");
+      const previousValues = minimumStockRules.map(function (rule) { return rule.minimum; });
       modal.querySelectorAll("[data-rule-index]").forEach(function (input) {
         minimumStockRules[Number(input.dataset.ruleIndex)].minimum =
           Math.max(0, Number.parseInt(input.value, 10) || 0);
       });
-      saveMinimums();
-      localStorage.setItem(MINIMUM_SETUP_KEY, "true");
-      modal.dataset.required = "false";
-      render();
-      closeSettings();
-      toast("Regras de estoque mínimo salvas.");
+      saveButton.disabled = true;
+      saveButton.textContent = "Salvando...";
+      try {
+        await saveMinimums();
+        modal.dataset.required = "false";
+        render();
+        closeSettings();
+        toast("Regras de estoque mínimo salvas.");
+      } catch (error) {
+        minimumStockRules.forEach(function (rule, index) {
+          rule.minimum = previousValues[index];
+        });
+        toast(error.message);
+      } finally {
+        saveButton.disabled = false;
+        saveButton.textContent = "Salvar alterações";
+      }
     });
     modal.addEventListener("click", function (event) {
       if (event.target === modal) closeSettings();
@@ -560,11 +609,23 @@
     };
   }
 
-  updateKpiLabels();
-  applySavedMinimums();
-  installInventoryTable();
-  minimumSettingsController = createMinimumSettings();
-  $("nxtUpdateButton").addEventListener("click", startUpdate);
-  loadServerData(false);
-  checkUpdate();
+  async function initialize() {
+    try {
+      currentUser = await window.NXT_AUTH_PROMISE;
+      await loadMinimums();
+      updateKpiLabels();
+      installInventoryTable();
+      minimumSettingsController = createMinimumSettings();
+      const updateButton = $("nxtUpdateButton");
+      if (updateButton && currentUser.canUpdateNxt) {
+        updateButton.addEventListener("click", startUpdate);
+      }
+      await loadServerData(false);
+      await checkUpdate();
+    } catch (error) {
+      toast(error.message || "Não foi possível iniciar o painel.");
+    }
+  }
+
+  initialize();
 })();
