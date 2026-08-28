@@ -4,6 +4,10 @@
   const ROLE_LABELS = { master: "Master Admin", operator: "Operador", viewer: "Visualizador" };
   const WORKSPACE_PAGES = ["/", "/index.html", "/toner.html", "/colaboradores.html"];
 
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted) window.location.reload();
+  });
+
   async function requestUser() {
     const response = await fetch("/api/auth/me", { cache: "no-store" });
     if (response.status === 401) {
@@ -98,7 +102,7 @@
     nav.setAttribute("aria-label", "Módulos do sistema");
     [
       { href: "/", type: "stock", title: "Estoque", subtitle: "Ativos e solicitações", paths: ["/", "/index.html"] },
-      { href: "/toner.html", type: "toner", title: "Toners", subtitle: "Impressoras e suprimentos", paths: ["/toner.html"] },
+      { href: "/toner.html?v=20260828-9", type: "toner", title: "Toners", subtitle: "Impressoras e suprimentos", paths: ["/toner.html"] },
       { href: "/colaboradores.html", type: "people", title: "Colaboradores", subtitle: "Acessos e movimentações", paths: ["/colaboradores.html"] }
     ].forEach(function (item) {
       const anchor = document.createElement("a");
