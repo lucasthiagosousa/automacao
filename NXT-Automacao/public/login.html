@@ -12,27 +12,18 @@
     .page{position:relative;isolation:isolate;width:100%;min-height:100vh;display:grid;place-items:center;padding:34px;background:#fff}
     .page:before{content:"";position:absolute;z-index:-2;inset:0;background:radial-gradient(circle at 10% 4%,rgba(36,107,253,.055),transparent 31%),radial-gradient(circle at 92% 96%,rgba(31,166,137,.04),transparent 30%)}
     .page:after{content:"";position:absolute;z-index:-1;inset:0;opacity:.34;pointer-events:none;background-image:linear-gradient(rgba(22,48,83,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(22,48,83,.018) 1px,transparent 1px);background-size:40px 40px;mask-image:linear-gradient(to bottom,transparent,black 28%,black 72%,transparent)}
-    .topbar{position:absolute;top:28px;left:34px;right:34px;display:flex;align-items:center;gap:20px}.brand{display:flex;align-items:center;gap:11px}.brand-mark{width:36px;height:36px;display:grid;place-items:center;border:1px solid var(--line);border-radius:11px;background:#f7f9fc;color:var(--blue)}.brand-mark svg{width:18px;height:18px}.brand-copy strong{display:block;color:#344158;font-size:12px;font-weight:500;letter-spacing:-.01em}.brand-copy span{display:block;margin-top:2px;color:#929dad;font-size:8px;font-weight:500;letter-spacing:.1em}
     .login{width:min(350px,100%);animation:arrive .65s cubic-bezier(.2,.8,.2,1) both}
     .login-form{padding:22px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 20px 55px rgba(33,54,86,.09)}
     .field{display:block;margin-bottom:14px;color:#546176;font-size:9px;font-weight:500;letter-spacing:.02em}.input-wrap{position:relative;display:block;margin-top:7px}.input-wrap>svg{position:absolute;left:13px;top:50%;width:15px;height:15px;color:#8e9aab;transform:translateY(-50%);pointer-events:none}.input-wrap input{width:100%;height:43px;padding:0 42px;border:1px solid #dfe5ed;border-radius:10px;outline:none;background:#fafbfd;color:#25354d;font-size:10px;font-weight:400;transition:border-color .18s,box-shadow .18s,background .18s}.input-wrap input::placeholder{color:#a4adba;font-weight:400}.input-wrap input:hover{border-color:#cbd5e1}.input-wrap input:focus{border-color:#7da7f7;background:#fff;box-shadow:0 0 0 3px rgba(36,107,253,.09)}
     .password-toggle{position:absolute;right:6px;top:50%;width:31px;height:31px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:#8e9aab;cursor:pointer;transform:translateY(-50%)}.password-toggle:hover{color:#53647d;background:#f0f3f7}.password-toggle svg{width:15px;height:15px}
     .submit{width:100%;height:43px;margin-top:5px;display:flex;align-items:center;justify-content:center;gap:8px;border:1px solid #2768db;border-radius:10px;background:linear-gradient(135deg,#4d88f3,#2464d4);color:#fff;cursor:pointer;font-size:9px;font-weight:600;letter-spacing:.015em;box-shadow:0 10px 22px rgba(36,107,253,.2);transition:transform .18s,filter .18s,box-shadow .18s}.submit:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.04);box-shadow:0 13px 25px rgba(36,107,253,.25)}.submit:disabled{cursor:wait;opacity:.66}.submit svg{width:14px;height:14px}.message{min-height:15px;margin-top:10px;color:var(--red);font-size:9px;font-weight:500;text-align:center}
-    .footer{position:absolute;left:30px;right:30px;bottom:23px;display:flex;align-items:center;justify-content:center;color:#a0a9b6;font-size:8px;font-weight:400;letter-spacing:.025em}
     @keyframes arrive{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
-    @media(max-width:600px){body{overflow:auto}.page{min-height:100svh;padding:100px 22px 70px}.topbar{top:22px;left:22px;right:22px}.brand-copy span{display:none}.login{width:min(370px,100%)}.login-form{padding:20px}.footer{bottom:17px}}
-    @media(max-height:650px) and (min-width:601px){.page{padding:82px 30px 55px}.topbar{top:20px}.login-form{padding:18px}.footer{bottom:14px}}
+    @media(max-width:600px){body{overflow:auto}.page{min-height:100svh;padding:40px 22px}.login{width:min(370px,100%)}.login-form{padding:20px}}
+    @media(max-height:650px) and (min-width:601px){.page{padding:40px 30px}.login-form{padding:18px}}
   </style>
 </head>
 <body>
   <main class="page">
-    <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7.5 12 3l8 4.5-8 4.5-8-4.5Z"/><path d="M4 12.5 12 17l8-4.5M4 17l8 4 8-4"/></svg></div>
-        <div class="brand-copy"><strong>Controle de Estoque</strong><span>OPERAÇÕES DE TI</span></div>
-      </div>
-    </header>
-
     <section class="login" aria-label="Acesso ao sistema">
       <form class="login-form" id="loginForm">
         <label class="field">Usuário
@@ -55,7 +46,6 @@
       </form>
     </section>
 
-    <footer class="footer">Controle de Estoque · Tecnologia da Informação</footer>
   </main>
 
   <script>
