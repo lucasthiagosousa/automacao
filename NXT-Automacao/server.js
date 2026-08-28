@@ -56,6 +56,17 @@ app.get(["/admin", "/admin.html"], auth.requireAuth, (req, res) => {
 });
 
 app.use(auth.requireAuth);
+app.use((req, res, next) => {
+  if (/\.(?:html|js|css)$/i.test(req.path)) {
+    res.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate"
+    );
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+  }
+  next();
+});
 app.use(express.static(pastaPublica));
 
 let estadoAtualizacao = {
