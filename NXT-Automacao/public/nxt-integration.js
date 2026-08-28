@@ -413,7 +413,8 @@
       + ".restock-meta{color:#748197;font-size:9px;line-height:1.45}.restock-total{color:#344054;font-size:10px;font-weight:800}"
       + ".restock-body{padding:0 13px 13px;border-top:1px solid #edf1f5}.restock-items{display:grid;gap:7px;margin:11px 0}"
       + ".restock-item{display:grid;grid-template-columns:1fr repeat(3,80px);gap:8px;padding:8px 10px;border-radius:9px;background:#f7f9fc;font-size:9px;align-items:center}"
-      + ".restock-item strong{color:#263b55}.restock-item span{text-align:center;color:#66768c}"
+      + ".restock-item strong{display:block;color:#263b55}.restock-item span{text-align:center;color:#66768c}.restock-product-link{display:inline-flex;margin-top:5px;color:#0b63ce;text-decoration:none;font-weight:700}.restock-product-link:hover{text-decoration:underline}"
+      + ".restock-link-input{width:100%;height:34px;margin-top:6px;padding:7px 9px;border:1px solid #cfdae6;border-radius:8px;background:#fff;color:#344054;font:inherit;outline:none}.restock-link-input:focus{border-color:#77a6f5;box-shadow:0 0 0 3px rgba(36,107,253,.08)}"
       + ".restock-edit{display:grid;grid-template-columns:170px 1fr auto;gap:8px;align-items:end;margin-top:10px}.restock-edit label{color:#66768c;font-size:9px;font-weight:700}"
       + ".restock-edit select,.restock-edit textarea{width:100%;min-height:38px;margin-top:5px;border:1px solid #d8e1eb;border-radius:9px;background:#fff;padding:8px;color:#263b55;font:inherit;outline:none}.restock-edit textarea{height:55px;resize:vertical}"
       + ".restock-history{margin-top:10px;color:#8290a4;font-size:8px;line-height:1.6}.restock-empty{padding:36px 18px;color:#748197;font-size:10px;text-align:center}"
@@ -421,6 +422,7 @@
       + ".restock-form-body{padding:18px}.restock-form-body>p{margin:0 0 13px;color:#748197;font-size:10px}.restock-form-items{display:grid;gap:8px;max-height:310px;overflow:auto}"
       + ".restock-form-row{display:grid;grid-template-columns:1fr 68px 68px 82px;gap:8px;align-items:center;padding:9px;border:1px solid #e5eaf1;border-radius:10px;background:#fafbfd;font-size:9px}"
       + ".restock-form-row strong{color:#263b55}.restock-form-row span{text-align:center;color:#748197}.restock-form-row input{width:100%;height:34px;border:1px solid #cfdae6;border-radius:8px;text-align:center;font-weight:700}"
+      + ".restock-form-row .restock-product-url{grid-column:1/-1;padding:7px 9px;text-align:left;font-weight:500}"
       + ".restock-note-label{display:block;margin-top:13px;color:#66768c;font-size:9px;font-weight:700}.restock-note{width:100%;height:65px;margin-top:6px;padding:9px;resize:vertical}"
       + ".restock-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:13px}"
       + ".restock-status-pending{background:#eaecf0;color:#475467}.restock-status-requested{background:#eaf3ff;color:#0b63ce}.restock-status-purchasing{background:#fef0c7;color:#b54708}.restock-status-received{background:#dcfae6;color:#027a48}"
@@ -441,21 +443,22 @@
     }
 
     function prepareEmail(request) {
-      const total = request.items.reduce(function (sum, item) { return sum + item.quantity; }, 0);
+      const missingLinks = request.items.filter(function (item) { return !item.productUrl; });
+      if (missingLinks.length) {
+        toast("Preencha o link do produto para: " + missingLinks.map(function (item) { return item.categoryName; }).join(", ") + ".");
+        return;
+      }
       const itemLines = request.items.map(function (item) {
-        return "- " + item.categoryName + ": atual " + item.currentStock
-          + " | mínimo " + item.minimumStock + " | solicitar " + item.quantity;
-      }).join("\n");
-      const subject = "Solicitação de reposição " + requestCode(request.id)
-        + " - " + total + " unidade" + (total === 1 ? "" : "s");
-      const body = "Olá,\n\nSolicito a reposição dos itens abaixo:\n\n"
-        + itemLines + "\n\nTotal solicitado: " + total + " unidade"
-        + (total === 1 ? "" : "s") + ".\n"
+        return item.categoryName + "\nQuantidade: " + item.quantity
+          + "\nLink do produto: " + item.productUrl;
+      }).join("\n\n");
+      const subject = "Compra de periféricos";
+      const body = "Val, bom dia.\n\n"
+        + "Favor abrir as SC´s para compra dos itens, quantidades e modelos exatos conforme relação abaixo.\n\n"
+        + itemLines + "\n\n"
+        + "Os modelos devem ser exatamente os mesmos indicados nos links acima.\n"
         + (request.notes ? "\nObservação: " + request.notes + "\n" : "")
-        + "\nSolicitação: " + requestCode(request.id)
-        + "\nRegistrada por: " + request.createdBy
-        + "\nData: " + formatDate(request.createdAt)
-        + "\n\nAtenciosamente,";
+        + "\nQualquer dúvida estou à disposição.\n\n\nAtenciosamente,";
       window.location.href = "mailto:?subject=" + encodeURIComponent(subject)
         + "&body=" + encodeURIComponent(body);
     }
@@ -471,7 +474,14 @@
       list.innerHTML = restockRequests.map(function (request) {
         const total = request.items.reduce(function (sum, item) { return sum + item.quantity; }, 0);
         const items = request.items.map(function (item) {
-          return '<div class="restock-item"><strong>' + esc(item.categoryName) + '</strong><span>Atual<br><b>'
+          const product = currentUser.canUpdateNxt
+            ? '<input class="restock-link-input" type="url" value="' + esc(item.productUrl || "")
+              + '" data-restock-link="' + request.id + '" data-category-key="' + esc(item.categoryKey)
+              + '" placeholder="Cole o link exato do produto">'
+            : (item.productUrl ? '<a class="restock-product-link" href="' + esc(item.productUrl)
+              + '" target="_blank" rel="noopener noreferrer">Abrir produto ↗</a>'
+              : '<small style="display:block;margin-top:5px;color:#98a2b3">Link não informado</small>');
+          return '<div class="restock-item"><div><strong>' + esc(item.categoryName) + '</strong>' + product + '</div><span>Atual<br><b>'
             + item.currentStock + '</b></span><span>Mínimo<br><b>' + item.minimumStock
             + '</b></span><span>Solicitar<br><b>' + item.quantity + '</b></span></div>';
         }).join("");
@@ -526,7 +536,10 @@
             const response = await fetch("/api/solicitacoes/" + id, {
               method: "PATCH", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ status: document.querySelector('[data-restock-status="' + id + '"]').value,
-                observacao: document.querySelector('[data-restock-notes="' + id + '"]').value })
+                observacao: document.querySelector('[data-restock-notes="' + id + '"]').value,
+                itens: Array.from(document.querySelectorAll('[data-restock-link="' + id + '"]')).map(function (input) {
+                  return { categoryKey: input.dataset.categoryKey, productUrl: input.value };
+                }) })
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.mensagem || "Não foi possível atualizar a solicitação.");
@@ -559,7 +572,9 @@
         return '<label class="restock-form-row"><strong>' + esc(item.type) + '</strong><span>Atual<br><b>' + item.current
           + '</b></span><span>Mínimo<br><b>' + item.minimum + '</b></span><input type="number" min="0" step="1" value="'
           + item.request + '" data-restock-quantity="' + index + '" data-category="' + esc(item.type) + '" data-current="'
-          + item.current + '" data-minimum="' + item.minimum + '" aria-label="Quantidade de ' + esc(item.type) + '"></label>';
+          + item.current + '" data-minimum="' + item.minimum + '" aria-label="Quantidade de ' + esc(item.type) + '">'
+          + '<input class="restock-product-url" type="url" data-restock-product="' + index
+          + '" placeholder="Cole o link exato do produto"></label>';
       }).join("");
       $("restockNote").value = "";
       modal.classList.add("show");
@@ -581,7 +596,8 @@
       const items = Array.from(document.querySelectorAll("[data-restock-quantity]")).map(function (input) {
         return { categoryKey: norm(input.dataset.category), categoryName: input.dataset.category,
           currentStock: Number(input.dataset.current), minimumStock: Number(input.dataset.minimum),
-          quantity: Math.max(0, Number.parseInt(input.value, 10) || 0) };
+          quantity: Math.max(0, Number.parseInt(input.value, 10) || 0),
+          productUrl: document.querySelector('[data-restock-product="' + input.dataset.restockQuantity + '"]').value };
       }).filter(function (item) { return item.quantity > 0; });
       button.disabled = true;
       button.textContent = "Salvando...";
