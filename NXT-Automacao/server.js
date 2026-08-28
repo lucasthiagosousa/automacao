@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { createAuth } = require("./auth");
+const tonerMonitor = require("./toner-monitor");
 
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
@@ -24,6 +25,11 @@ const arquivoBanco = path.join(
   pastaProjeto,
   "dados",
   "controle-estoque.db"
+);
+const arquivoToner = path.join(
+  pastaProjeto,
+  "dados",
+  "toner-atual.json"
 );
 
 app.use(express.json());
@@ -60,6 +66,21 @@ let estadoAtualizacao = {
   fim: null,
   log: [],
 };
+
+let tonerExecutando = false;
+
+function lerTonerAtual() {
+  try {
+    return JSON.parse(fs.readFileSync(arquivoToner, "utf8"));
+  } catch {
+    return {
+      updatedAt: null,
+      threshold: 20,
+      summary: { total: tonerMonitor.printers.length, online: 0, offline: 0, critical: 0, warning: 0 },
+      printers: []
+    };
+  }
+}
 
 function texto(valor) {
   if (valor === null || valor === undefined) {
@@ -522,6 +543,59 @@ app.delete(
       sucesso: true,
       mensagem: "Solicitação excluída.",
     });
+  }
+);
+
+/*
+ * Monitoramento local das impressoras por SNMP.
+ */
+app.get("/api/toner", (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    sucesso: true,
+    executando: tonerExecutando,
+    ...lerTonerAtual(),
+  });
+});
+
+app.post(
+  "/api/toner/atualizar",
+  auth.requireUpdatePermission,
+  async (req, res) => {
+    if (tonerExecutando) {
+      return res.status(409).json({
+        sucesso: false,
+        mensagem: "A consulta das impressoras já está em andamento.",
+      });
+    }
+
+    tonerExecutando = true;
+
+    try {
+      const relatorio = await tonerMonitor.scan({
+        threshold: req.body?.limite,
+      });
+
+      fs.mkdirSync(path.dirname(arquivoToner), { recursive: true });
+      fs.writeFileSync(
+        arquivoToner,
+        JSON.stringify(relatorio, null, 2),
+        "utf8"
+      );
+
+      return res.json({
+        sucesso: true,
+        executando: false,
+        ...relatorio,
+      });
+    } catch (erro) {
+      return res.status(500).json({
+        sucesso: false,
+        mensagem: "Não foi possível consultar as impressoras: " + erro.message,
+      });
+    } finally {
+      tonerExecutando = false;
+    }
   }
 );
 
