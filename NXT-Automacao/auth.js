@@ -63,6 +63,7 @@ function createAuth(options) {
     + "current_stock INTEGER NOT NULL CHECK(current_stock >= 0),"
     + "minimum_stock INTEGER NOT NULL CHECK(minimum_stock >= 0),"
     + "quantity INTEGER NOT NULL CHECK(quantity > 0),"
+    + "product_url TEXT NOT NULL DEFAULT '',"
     + "FOREIGN KEY(request_id) REFERENCES restock_requests(id) ON DELETE CASCADE"
     + ");"
     + "CREATE TABLE IF NOT EXISTS restock_request_events ("
@@ -76,6 +77,15 @@ function createAuth(options) {
     + "FOREIGN KEY(changed_by) REFERENCES users(id)"
     + ");"
   );
+
+  const requestItemColumns = database.prepare(
+    "PRAGMA table_info(restock_request_items)"
+  ).all().map(function (column) { return column.name; });
+  if (!requestItemColumns.includes("product_url")) {
+    database.exec(
+      "ALTER TABLE restock_request_items ADD COLUMN product_url TEXT NOT NULL DEFAULT ''"
+    );
+  }
 
   const router = express.Router();
   const loginAttempts = new Map();
@@ -94,6 +104,18 @@ function createAuth(options) {
       .replace(/[\u0300-\u036f]/g, "")
       .toUpperCase()
       .trim();
+  }
+
+  function normalizeProductUrl(value) {
+    const text = String(value || "").trim().slice(0, 2000);
+    if (!text) return "";
+    try {
+      const parsed = new URL(text);
+      if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+      return parsed.toString();
+    } catch {
+      throw new Error("Informe um link válido começando com http:// ou https://.");
+    }
   }
 
   function validateUsername(username) {
@@ -491,7 +513,7 @@ function createAuth(options) {
     const placeholders = ids.map(function () { return "?"; }).join(",");
     database.prepare(
       "SELECT request_id AS requestId,category_key AS categoryKey,category_name AS categoryName,"
-      + "current_stock AS currentStock,minimum_stock AS minimumStock,quantity "
+      + "current_stock AS currentStock,minimum_stock AS minimumStock,quantity,product_url AS productUrl "
       + "FROM restock_request_items WHERE request_id IN (" + placeholders + ") ORDER BY id"
     ).all(...ids).forEach(function (item) {
       const request = byId.get(Number(item.requestId));
@@ -500,7 +522,8 @@ function createAuth(options) {
         categoryName: item.categoryName,
         currentStock: Number(item.currentStock),
         minimumStock: Number(item.minimumStock),
-        quantity: Number(item.quantity)
+        quantity: Number(item.quantity),
+        productUrl: item.productUrl || ""
       });
     });
     database.prepare(
@@ -528,7 +551,8 @@ function createAuth(options) {
         categoryName: categoryName,
         currentStock: Math.max(0, Number.parseInt(item.currentStock, 10) || 0),
         minimumStock: Math.max(0, Number.parseInt(item.minimumStock, 10) || 0),
-        quantity: Math.max(0, Number.parseInt(item.quantity, 10) || 0)
+        quantity: Math.max(0, Number.parseInt(item.quantity, 10) || 0),
+        productUrl: normalizeProductUrl(item.productUrl)
       };
     }).filter(function (item) {
       return item.categoryKey && item.categoryName && item.quantity > 0;
@@ -545,12 +569,12 @@ function createAuth(options) {
       const requestId = Number(result.lastInsertRowid);
       const insertItem = database.prepare(
         "INSERT INTO restock_request_items "
-        + "(request_id,category_key,category_name,current_stock,minimum_stock,quantity) "
-        + "VALUES (?,?,?,?,?,?)"
+        + "(request_id,category_key,category_name,current_stock,minimum_stock,quantity,product_url) "
+        + "VALUES (?,?,?,?,?,?,?)"
       );
       validItems.forEach(function (item) {
         insertItem.run(requestId, item.categoryKey, item.categoryName,
-          item.currentStock, item.minimumStock, item.quantity);
+          item.currentStock, item.minimumStock, item.quantity, item.productUrl);
       });
       database.prepare(
         "INSERT INTO restock_request_events (request_id,status,notes,changed_by,changed_at) "
@@ -572,12 +596,24 @@ function createAuth(options) {
     const notes = typeof values.notes === "string"
       ? values.notes.trim().slice(0, 2000)
       : existing.notes;
+    const productLinks = (Array.isArray(values.items) ? values.items : []).slice(0, 200).map(function (item) {
+      return {
+        categoryKey: normalizeCategory(item.categoryKey || item.categoryName),
+        productUrl: normalizeProductUrl(item.productUrl)
+      };
+    }).filter(function (item) { return item.categoryKey; });
     const timestamp = nowIso();
     database.exec("BEGIN");
     try {
       database.prepare(
         "UPDATE restock_requests SET status=?,notes=?,updated_by=?,updated_at=? WHERE id=?"
       ).run(status, notes, userId, timestamp, id);
+      const updateProduct = database.prepare(
+        "UPDATE restock_request_items SET product_url=? WHERE request_id=? AND category_key=?"
+      );
+      productLinks.forEach(function (item) {
+        updateProduct.run(item.productUrl, id, item.categoryKey);
+      });
       database.prepare(
         "INSERT INTO restock_request_events (request_id,status,notes,changed_by,changed_at) "
         + "VALUES (?,?,?,?,?)"
