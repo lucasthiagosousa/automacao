@@ -471,6 +471,7 @@ app.patch(
       {
         status: req.body.status,
         notes: req.body.observacao,
+        items: req.body.itens,
       },
       Number(req.user.id)
     );
