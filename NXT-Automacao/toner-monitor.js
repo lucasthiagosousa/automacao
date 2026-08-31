@@ -191,9 +191,9 @@ async function scan(options = {}) {
   const results = [];
   let cursor = 0;
   async function worker() {
-    while (cursor < PRINTERS.length) {
+    while (cursor < printerList.length) {
       const index = cursor++;
-      results[index] = await checkPrinter(PRINTERS[index], threshold, timeout);
+      results[index] = await checkPrinter(printerList[index], threshold, timeout);
     }
   }
   await Promise.all(Array.from({ length: 6 }, worker));
