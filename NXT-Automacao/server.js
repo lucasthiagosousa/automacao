@@ -445,7 +445,7 @@ function salvarConfiguracaoEnv(changes) {
   const current = { ...lerConfiguracaoEnv(), ...changes };
   const content = Object.entries(current)
     .filter(([, value]) => value !== undefined && value !== null)
-    .map(([key, value]) => key + "=" + String(value).replace(/[\r\n]/g, ""))
+    .map(([key, value]) => key + "=" + JSON.stringify(String(value).replace(/[\r\n]/g, "")))
     .join("\n") + "\n";
   fs.mkdirSync(path.dirname(arquivoEnv), { recursive: true });
   fs.writeFileSync(arquivoEnv, content, "utf8");
