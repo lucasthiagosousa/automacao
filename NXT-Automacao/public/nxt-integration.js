@@ -663,7 +663,16 @@
       $("restockNote").value = "";
       const search = modal.querySelector(".minimum-settings-search");
       search.value = "";
-      search.oninput = function () { openSettings(required); };
+      search.oninput = function () {
+        const term = norm(search.value);
+        let shown = 0;
+        modal.querySelectorAll(".minimum-rule-card").forEach(function (card) {
+          const visible = !term || norm(card.textContent).includes(term);
+          card.style.display = visible ? "" : "none";
+          if (visible) shown += 1;
+        });
+        modal.querySelector(".minimum-settings-count").textContent = shown + " categoria" + (shown === 1 ? "" : "s");
+      };
       modal.classList.add("show");
       document.body.style.overflow = "hidden";
     }
