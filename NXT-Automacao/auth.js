@@ -92,6 +92,13 @@ function createAuth(options) {
     + "FOREIGN KEY(request_id) REFERENCES restock_requests(id) ON DELETE CASCADE,"
     + "FOREIGN KEY(changed_by) REFERENCES users(id)"
     + ");"
+    + "CREATE TABLE IF NOT EXISTS system_settings ("
+    + "setting_key TEXT PRIMARY KEY,"
+    + "setting_value TEXT NOT NULL,"
+    + "updated_by INTEGER,"
+    + "updated_at TEXT NOT NULL,"
+    + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
+    + ");"
     + "CREATE TABLE IF NOT EXISTS printers ("
     + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
     + "ip TEXT NOT NULL UNIQUE,"
@@ -560,6 +567,22 @@ function createAuth(options) {
     });
   }
 
+  function getSetting(key, fallbackValue) {
+    const row = database.prepare(
+      "SELECT setting_value FROM system_settings WHERE setting_key=?"
+    ).get(String(key));
+    return row ? row.setting_value : fallbackValue;
+  }
+
+  function setSetting(key, value, userId) {
+    database.prepare(
+      "INSERT INTO system_settings (setting_key,setting_value,updated_by,updated_at) VALUES (?,?,?,?) "
+      + "ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value,"
+      + "updated_by=excluded.updated_by,updated_at=excluded.updated_at"
+    ).run(String(key), String(value), Number(userId) || null, nowIso());
+    return getSetting(key, value);
+  }
+
   function getPrinters() {
     return database.prepare(
       "SELECT id,ip,model,location,active,created_at AS createdAt,updated_at AS updatedAt FROM printers ORDER BY ip"
@@ -860,6 +883,8 @@ function createAuth(options) {
     requireMaster: requireMaster,
     requireUpdatePermission: requireUpdatePermission,
     getMinimums: getMinimums,
+    getSetting: getSetting,
+    setSetting: setSetting,
     saveMinimums: saveMinimums,
     getPrinters: getPrinters,
     seedPrinters: seedPrinters,
