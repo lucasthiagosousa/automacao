@@ -91,8 +91,9 @@ async function executarComTentativas(
       "Abrindo o navegador..."
     );
 
+    const executarOculto = process.env.NXT_AUTOMATION_HEADLESS === "1";
     const opcoesNavegador = {
-      headless: false,
+      headless: executarOculto,
     };
 
     if (process.env.NXT_BROWSER_CHANNEL) {
@@ -111,7 +112,7 @@ async function executarComTentativas(
       console.warn(
         "Microsoft Edge não disponível. Tentando o Chromium do Playwright..."
       );
-      browser = await chromium.launch({ headless: false });
+      browser = await chromium.launch({ headless: executarOculto });
     }
 
     context = await browser.newContext({
