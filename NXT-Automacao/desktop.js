@@ -73,7 +73,9 @@ function criarJanelaConfiguracao(primeiroAcesso = false) {
     icon: path.join(__dirname, "build", "icon.ico"),
     webPreferences: { preload: path.join(__dirname, "desktop-preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  janelaConfiguracao.loadFile(path.join(__dirname, "desktop-setup.html"));
+  janelaConfiguracao.loadFile(path.join(__dirname, "desktop-setup.html"), {
+    query: { primeiroAcesso: primeiroAcesso ? "1" : "0" },
+  });
   janelaConfiguracao.on("closed", () => {
     janelaConfiguracao = null;
     if (primeiroAcesso && !janelaPrincipal) iniciarSistema();
