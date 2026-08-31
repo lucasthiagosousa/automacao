@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, shell, dialog } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
@@ -123,7 +123,7 @@ function iniciarSistema() {
       width: 1500, height: 920, minWidth: 1040, minHeight: 680, show: false,
       autoHideMenuBar: true, backgroundColor: "#f4f7fb",
       icon: path.join(__dirname, "build", "icon.ico"), title: "Central de Operações de TI",
-      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+      webPreferences: { preload: path.join(__dirname, "desktop-main-preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     const paginaInicial = abrirCriacaoAdmin ? "/setup.html" : "/";
     abrirCriacaoAdmin = false;
@@ -140,6 +140,26 @@ function iniciarSistema() {
   };
   if (servidor.listening) abrir(); else servidor.once("listening", abrir);
 }
+
+ipcMain.handle("report:save-pdf", async (_evento, options = {}) => {
+  if (!janelaPrincipal || janelaPrincipal.isDestroyed()) throw new Error("Janela principal indisponível.");
+  const suggestedName = String(options.fileName || "relatorio.pdf").replace(/[\\/:*?"<>|]/g, "-");
+  const selection = await dialog.showSaveDialog(janelaPrincipal, {
+    title: "Salvar relatório em PDF",
+    defaultPath: path.join(app.getPath("documents"), suggestedName),
+    filters: [{ name: "Documento PDF", extensions: ["pdf"] }],
+    properties: ["createDirectory", "showOverwriteConfirmation"],
+  });
+  if (selection.canceled || !selection.filePath) return { canceled: true };
+  const pdf = await janelaPrincipal.webContents.printToPDF({
+    printBackground: true,
+    landscape: true,
+    pageSize: "A4",
+    margins: { top: 0.35, bottom: 0.35, left: 0.35, right: 0.35 },
+  });
+  fs.writeFileSync(selection.filePath, pdf);
+  return { canceled: false, filePath: selection.filePath };
+});
 
 ipcMain.handle("nxt-config:get", () => {
   const config = carregarConfiguracao();
