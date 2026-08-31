@@ -20,11 +20,13 @@ win:
     - target: nsis
       arch: [x64]
   icon: build/icon.ico
+  requestedExecutionLevel: requireAdministrator
   artifactName: "Central-Operacoes-TI-Setup-${version}.${ext}"
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  perMachine: false
+  perMachine: true
+  include: build/installer.nsh
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: Central de Operações de TI
