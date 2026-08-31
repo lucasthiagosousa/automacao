@@ -188,6 +188,7 @@ async function checkPrinter(printer, threshold, timeout) {
 async function scan(options = {}) {
   const threshold = Math.max(1, Math.min(99, Number(options.threshold) || 20));
   const timeout = Math.max(500, Math.min(10000, Number(options.timeout) || 2200));
+  const printerList = Array.isArray(options.printers) ? options.printers : PRINTERS;
   const results = [];
   let cursor = 0;
   async function worker() {
