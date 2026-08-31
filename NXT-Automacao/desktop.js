@@ -9,6 +9,7 @@ let janelaConfiguracao = null;
 let servidor = null;
 let tray = null;
 let encerrando = false;
+let abrirCriacaoAdmin = false;
 
 app.setAppUserModelId(APP_ID);
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -29,19 +30,25 @@ function carregarConfiguracao() {
   return resultado;
 }
 
-function salvarConfiguracao({ email, password, skip = false }) {
+function salvarConfiguracao({ email, password, port = 3000, skip = false }) {
   const destino = caminhos();
   fs.mkdirSync(destino.raiz, { recursive: true });
   const limpar = (valor) => String(valor || "").replace(/[\r\n]/g, "").trim();
+  const porta = Number.parseInt(port, 10);
+  if (!Number.isInteger(porta) || porta < 1024 || porta > 65535) {
+    throw new Error("Escolha uma porta entre 1024 e 65535.");
+  }
   const conteudo = [
     `NXT_EMAIL=${limpar(email)}`,
     `NXT_PASSWORD=${limpar(password)}`,
+    `NXT_PORT=${porta}`,
     `NXT_SETUP_SKIPPED=${skip ? "1" : "0"}`,
     "",
   ].join("\n");
   fs.writeFileSync(destino.env, conteudo, { encoding: "utf8", mode: 0o600 });
   process.env.NXT_EMAIL = limpar(email);
   process.env.NXT_PASSWORD = limpar(password);
+  process.env.PORT = String(porta);
 }
 
 function configurarAmbiente() {
@@ -49,10 +56,12 @@ function configurarAmbiente() {
   fs.mkdirSync(destino.dados, { recursive: true });
   process.env.NXT_DESKTOP_MODE = "1";
   process.env.NXT_BROWSER_CHANNEL = process.env.NXT_BROWSER_CHANNEL || "msedge";
+  process.env.NXT_AUTOMATION_HEADLESS = "1";
   process.env.NXT_DATA_DIR = destino.dados;
   process.env.NXT_ENV_FILE = destino.env;
   process.env.NXT_HOST = "0.0.0.0";
-  process.env.PORT = "3000";
+  const config = carregarConfiguracao();
+  process.env.PORT = String(config.NXT_PORT || "3000");
 }
 
 function criarJanelaConfiguracao(primeiroAcesso = false) {
@@ -71,14 +80,18 @@ function criarJanelaConfiguracao(primeiroAcesso = false) {
   });
 }
 
+function portaConfigurada() {
+  return Number.parseInt(process.env.PORT || carregarConfiguracao().NXT_PORT || "3000", 10);
+}
+
 function obterEnderecoRede() {
   const interfaces = os.networkInterfaces();
   for (const enderecos of Object.values(interfaces)) {
     for (const endereco of enderecos || []) {
-      if (endereco.family === "IPv4" && !endereco.internal) return `http://${endereco.address}:3000`;
+      if (endereco.family === "IPv4" && !endereco.internal) return `http://${endereco.address}:${portaConfigurada()}`;
     }
   }
-  return "http://IP-DO-SERVIDOR:3000";
+  return `http://IP-DO-SERVIDOR:${portaConfigurada()}`;
 }
 
 function criarTray() {
@@ -102,14 +115,16 @@ function iniciarSistema() {
   ({ servidor } = require("./server"));
   const abrir = () => {
     const endereco = servidor.address();
-    const porta = typeof endereco === "object" && endereco ? endereco.port : 3000;
+    const porta = typeof endereco === "object" && endereco ? endereco.port : portaConfigurada();
     janelaPrincipal = new BrowserWindow({
       width: 1500, height: 920, minWidth: 1040, minHeight: 680, show: false,
       autoHideMenuBar: true, backgroundColor: "#f4f7fb",
       icon: path.join(__dirname, "build", "icon.ico"), title: "Central de Operações de TI",
       webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
-    janelaPrincipal.loadURL(`http://127.0.0.1:${porta}`);
+    const paginaInicial = abrirCriacaoAdmin ? "/setup.html" : "/";
+    abrirCriacaoAdmin = false;
+    janelaPrincipal.loadURL(`http://127.0.0.1:${porta}${paginaInicial}`);
     janelaPrincipal.once("ready-to-show", () => { janelaPrincipal.show(); janelaPrincipal.focus(); });
     janelaPrincipal.webContents.setWindowOpenHandler(({ url }) => {
       if (/^https?:/i.test(url) && !url.startsWith(`http://127.0.0.1:${porta}`)) shell.openExternal(url);
@@ -123,16 +138,20 @@ function iniciarSistema() {
   if (servidor.listening) abrir(); else servidor.once("listening", abrir);
 }
 
-ipcMain.handle("nxt-config:get", () => ({ email: carregarConfiguracao().NXT_EMAIL || "" }));
+ipcMain.handle("nxt-config:get", () => {
+  const config = carregarConfiguracao();
+  return { email: config.NXT_EMAIL || "", port: Number(config.NXT_PORT || 3000) };
+});
 ipcMain.handle("nxt-config:save", (_evento, dados) => {
   if (!dados?.email || !dados?.password) throw new Error("Informe o e-mail e a senha do NXT.");
   salvarConfiguracao(dados);
+  abrirCriacaoAdmin = Boolean(dados?.primeiroAcesso);
   janelaConfiguracao?.close();
   if (!janelaPrincipal) iniciarSistema();
   return { sucesso: true };
 });
 ipcMain.handle("nxt-config:skip", () => {
-  salvarConfiguracao({ email: "", password: "", skip: true });
+  salvarConfiguracao({ email: "", password: "", port: 3000, skip: true });
   janelaConfiguracao?.close();
   if (!janelaPrincipal) iniciarSistema();
   return { sucesso: true };
