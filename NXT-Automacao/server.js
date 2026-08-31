@@ -638,6 +638,20 @@ app.delete("/api/impressoras/:id", auth.requireUpdatePermission, (req, res) => {
   return res.json({ sucesso: true });
 });
 
+app.get("/api/configuracao/toner", auth.requireAuth, (req, res) => {
+  const limite = Math.max(1, Math.min(99, Number(auth.getSetting("toner_threshold", "20")) || 20));
+  res.json({ sucesso: true, limite, podeEditar: req.user.role === "master" });
+});
+
+app.put("/api/configuracao/toner", auth.requireMaster, (req, res) => {
+  const limite = Number.parseInt(req.body?.limite, 10);
+  if (!Number.isInteger(limite) || limite < 1 || limite > 99) {
+    return res.status(400).json({ sucesso: false, mensagem: "Informe um limite entre 1% e 99%." });
+  }
+  auth.setSetting("toner_threshold", String(limite), Number(req.user.id));
+  return res.json({ sucesso: true, limite });
+});
+
 /*
  * Monitoramento local das impressoras por SNMP.
  */
@@ -668,7 +682,7 @@ app.post(
         .filter((item) => item.active)
         .map((item) => [item.ip, item.model]);
       const relatorio = await tonerMonitor.scan({
-        threshold: req.body?.limite,
+        threshold: Math.max(1, Math.min(99, Number(auth.getSetting("toner_threshold", "20")) || 20),
         printers: impressoras,
       });
 
