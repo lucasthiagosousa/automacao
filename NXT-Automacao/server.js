@@ -10,6 +10,7 @@ require("dotenv").config({ path: arquivoEnv });
 
 const app = express();
 const PORTA = Number(process.env.PORT || 3000);
+const HOST = process.env.NXT_HOST || "127.0.0.1";
 
 const pastaProjeto = __dirname;
 const pastaPublica = path.join(pastaProjeto, "public");
@@ -808,7 +809,7 @@ app.use((req, res, next) => {
   );
 });
 
-const servidor = app.listen(PORTA, "127.0.0.1", () => {
+const servidor = app.listen(PORTA, HOST, () => {
   const endereco = servidor.address();
   const portaAtiva = typeof endereco === "object" && endereco
     ? endereco.port
@@ -816,7 +817,8 @@ const servidor = app.listen(PORTA, "127.0.0.1", () => {
 
   console.log("");
   console.log("Servidor do dashboard iniciado.");
-  console.log(`Acesse: http://127.0.0.1:${portaAtiva}`);
+  const hostAcesso = HOST === "0.0.0.0" ? "IP-DO-SERVIDOR" : HOST;
+  console.log(`Acesse: http://${hostAcesso}:${portaAtiva}`);
   console.log(`Dados: ${pastaDados}`);
   console.log(`Planilha: ${arquivoPlanilha}`);
   console.log("");
