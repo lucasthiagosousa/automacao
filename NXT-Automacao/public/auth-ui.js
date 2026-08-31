@@ -63,9 +63,10 @@
   }
 
   function accountControl(user) {
-    const element = document.createElement("div");
+    const element = document.createElement("a");
     element.className = "auth-account";
-    element.title = ROLE_LABELS[user.role] || user.role;
+    element.href = "/profile.html";
+    element.title = "Minha conta · " + (ROLE_LABELS[user.role] || user.role);
     element.innerHTML = '<span class="auth-avatar">' + String(user.username || "U").slice(0, 2).toUpperCase()
       + '</span><span class="auth-copy"><strong></strong><span></span></span>';
     element.querySelector("strong").textContent = user.username;
