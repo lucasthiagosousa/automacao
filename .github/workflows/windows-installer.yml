@@ -31,7 +31,7 @@ jobs:
         run: magick build/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
       - name: Validar banco local e permissões
         shell: powershell
-        run: node -e "const {createAuth}=require(\'./auth\'); const path=require(\'path\'); const fs=require(\'fs\'); const db=path.join(process.env.RUNNER_TEMP,\'nxt-smoke.db\'); try{fs.unlinkSync(db)}catch{} const auth=createAuth({databasePath:db}); auth.seedPrinters([[\'127.0.0.1\',\'Teste\']]); if(auth.getPrinters().length!==1) process.exit(1); console.log(\'Banco e cadastro de impressoras validados.\');"
+        run: node smoke-test.js
 
       - name: Gerar Setup.exe
         run: npx electron-builder --config electron-builder.yml --win nsis
