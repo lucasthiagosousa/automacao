@@ -700,7 +700,7 @@ app.post(
         ...process.env,
         ELECTRON_RUN_AS_NODE: process.versions.electron ? "1" : process.env.ELECTRON_RUN_AS_NODE,
       },
-      windowsHide: false,
+      windowsHide: process.env.NXT_AUTOMATION_HEADLESS === "1",
       shell: false,
     }
   );
