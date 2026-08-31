@@ -29,6 +29,10 @@ jobs:
       - name: Criar ícone do Windows
         shell: powershell
         run: magick build/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
+      - name: Validar banco local e permissões
+        shell: powershell
+        run: node -e "const {createAuth}=require(\'./auth\'); const path=require(\'path\'); const fs=require(\'fs\'); const db=path.join(process.env.RUNNER_TEMP,\'nxt-smoke.db\'); try{fs.unlinkSync(db)}catch{} const auth=createAuth({databasePath:db}); auth.seedPrinters([[\'127.0.0.1\',\'Teste\']]); if(auth.getPrinters().length!==1) process.exit(1); console.log(\'Banco e cadastro de impressoras validados.\');"
+
       - name: Gerar Setup.exe
         run: npx electron-builder --config electron-builder.yml --win nsis
       - name: Validar dependências empacotadas
@@ -54,11 +58,11 @@ jobs:
         run: |
           $arquivo = Get-ChildItem "dist\*Setup*.exe" | Select-Object -First 1
           if (-not $arquivo) { throw "Instalador não encontrado." }
-          gh release view "v1.0.4-server" *> $null
+          gh release view "v1.1.0-server" *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create "v1.0.4-server" --target "${{ github.sha }}" --title "Central de Operações de TI — Servidor v1.0.4" --notes "Instalador Windows em modo servidor, com acesso multiusuário pela rede, banco centralizado e histórico administrativo de solicitações."
+            gh release create "v1.1.0-server" --target "${{ github.sha }}" --title "Central de Operações de TI — Servidor v1.1.0" --notes "Instalador Windows em modo servidor, com acesso multiusuário pela rede, banco centralizado e histórico administrativo de solicitações."
           }
-          gh release upload "v1.0.4-server" $arquivo.FullName --clobber
+          gh release upload "v1.1.0-server" $arquivo.FullName --clobber
 
       - name: Publicar instalador temporário
         uses: actions/upload-artifact@v4
