@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths: ["NXT-Automacao/**", ".github/workflows/windows-installer.yml"]
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: windows-latest
@@ -31,7 +31,20 @@ jobs:
         run: magick build/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
       - name: Gerar Setup.exe
         run: npx electron-builder --config electron-builder.yml --win nsis
-      - name: Publicar instalador
+      - name: Publicar versão permanente
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $arquivo = Get-ChildItem "dist\*Setup*.exe" | Select-Object -First 1
+          if (-not $arquivo) { throw "Instalador não encontrado." }
+          gh release view "v1.0.0-server" *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create "v1.0.0-server" --target "${{ github.sha }}" --title "Central de Operações de TI — Servidor v1.0.0" --notes "Instalador Windows em modo servidor, com acesso multiusuário pela rede, banco centralizado e histórico administrativo de solicitações."
+          }
+          gh release upload "v1.0.0-server" $arquivo.FullName --clobber
+
+      - name: Publicar instalador temporário
         uses: actions/upload-artifact@v4
         with:
           name: Central-Operacoes-TI-Windows
