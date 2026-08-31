@@ -5,32 +5,26 @@ const { spawn } = require("node:child_process");
 const { createAuth } = require("./auth");
 const tonerMonitor = require("./toner-monitor");
 
-require("dotenv").config({ path: path.join(__dirname, ".env") });
+const arquivoEnv = process.env.NXT_ENV_FILE || path.join(__dirname, ".env");
+require("dotenv").config({ path: arquivoEnv });
 
 const app = express();
-const PORTA = 3000;
+const PORTA = Number(process.env.PORT || 3000);
 
 const pastaProjeto = __dirname;
 const pastaPublica = path.join(pastaProjeto, "public");
-const arquivoPlanilha = path.join(
-  pastaProjeto,
-  "dados",
-  "estoque-atual.xlsx"
-);
+const pastaDados = process.env.NXT_DATA_DIR
+  ? path.resolve(process.env.NXT_DATA_DIR)
+  : path.join(pastaProjeto, "dados");
+
+fs.mkdirSync(pastaDados, { recursive: true });
+const arquivoPlanilha = path.join(pastaDados, "estoque-atual.xlsx");
 const arquivoAutomacao = path.join(
   pastaProjeto,
   "automacao.js"
 );
-const arquivoBanco = path.join(
-  pastaProjeto,
-  "dados",
-  "controle-estoque.db"
-);
-const arquivoToner = path.join(
-  pastaProjeto,
-  "dados",
-  "toner-atual.json"
-);
+const arquivoBanco = path.join(pastaDados, "controle-estoque.db");
+const arquivoToner = path.join(pastaDados, "toner-atual.json");
 
 app.use(express.json());
 
@@ -701,7 +695,10 @@ app.post(
     [arquivoAutomacao],
     {
       cwd: pastaProjeto,
-      env: process.env,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: process.versions.electron ? "1" : process.env.ELECTRON_RUN_AS_NODE,
+      },
       windowsHide: false,
       shell: false,
     }
@@ -811,10 +808,18 @@ app.use((req, res, next) => {
   );
 });
 
-app.listen(PORTA, () => {
+const servidor = app.listen(PORTA, "127.0.0.1", () => {
+  const endereco = servidor.address();
+  const portaAtiva = typeof endereco === "object" && endereco
+    ? endereco.port
+    : PORTA;
+
   console.log("");
   console.log("Servidor do dashboard iniciado.");
-  console.log(`Acesse: http://localhost:${PORTA}`);
+  console.log(`Acesse: http://127.0.0.1:${portaAtiva}`);
+  console.log(`Dados: ${pastaDados}`);
   console.log(`Planilha: ${arquivoPlanilha}`);
   console.log("");
 });
+
+module.exports = { app, servidor };
