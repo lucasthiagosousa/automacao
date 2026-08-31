@@ -58,11 +58,11 @@ jobs:
         run: |
           $arquivo = Get-ChildItem "dist\*Setup*.exe" | Select-Object -First 1
           if (-not $arquivo) { throw "Instalador não encontrado." }
-          gh release view "v1.1.0-server" *> $null
+          gh release view "v1.1.1-server" *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create "v1.1.0-server" --target "${{ github.sha }}" --title "Central de Operações de TI — Servidor v1.1.0" --notes "Instalador Windows em modo servidor, com acesso multiusuário pela rede, banco centralizado e histórico administrativo de solicitações."
+            gh release create "v1.1.1-server" --target "${{ github.sha }}" --title "Central de Operações de TI — Servidor v1.1.1" --notes "Instalador Windows em modo servidor, com acesso multiusuário pela rede, banco centralizado e histórico administrativo de solicitações."
           }
-          gh release upload "v1.1.0-server" $arquivo.FullName --clobber
+          gh release upload "v1.1.1-server" $arquivo.FullName --clobber
 
       - name: Publicar instalador temporário
         uses: actions/upload-artifact@v4
