@@ -6,7 +6,8 @@ const { createAuth } = require("./auth");
 const tonerMonitor = require("./toner-monitor");
 
 const arquivoEnv = process.env.NXT_ENV_FILE || path.join(__dirname, ".env");
-require("dotenv").config({ path: arquivoEnv });
+const dotenv = require("dotenv");
+dotenv.config({ path: arquivoEnv });
 
 const app = express();
 const PORTA = Number(process.env.PORT || 3000);
@@ -32,6 +33,7 @@ app.use(express.json());
 const auth = createAuth({
   databasePath: arquivoBanco,
 });
+auth.seedPrinters(tonerMonitor.printers);
 
 app.get(["/login", "/login.html"], (req, res) => {
   res.sendFile(path.join(pastaPublica, "login.html"));
@@ -82,14 +84,15 @@ function lerTonerAtual() {
     return {
       updatedAt: null,
       threshold: 20,
-      summary: { total: tonerMonitor.printers.length, online: 0, offline: 0, critical: 0, warning: 0 },
-      printers: tonerMonitor.printers.map(([ip, model]) => ({
+      summary: { total: auth.getPrinters().filter((item) => item.active).length, online: 0, offline: 0, critical: 0, warning: 0 },
+      printers: auth.getPrinters().filter((item) => item.active).map(({ ip, model, location }) => ({
         ip,
         model,
         hostname: "",
         online: null,
         supplies: [],
         status: "unknown",
+        location,
         cartridge: "Aguardando consulta SNMP",
       }))
     };
@@ -429,6 +432,47 @@ async function lerPlanilha() {
   };
 }
 
+
+function lerConfiguracaoEnv() {
+  try {
+    return dotenv.parse(fs.readFileSync(arquivoEnv, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function salvarConfiguracaoEnv(changes) {
+  const current = { ...lerConfiguracaoEnv(), ...changes };
+  const content = Object.entries(current)
+    .filter(([, value]) => value !== undefined && value !== null)
+    .map(([key, value]) => key + "=" + String(value).replace(/[\r\n]/g, ""))
+    .join("\n") + "\n";
+  fs.mkdirSync(path.dirname(arquivoEnv), { recursive: true });
+  fs.writeFileSync(arquivoEnv, content, "utf8");
+  Object.assign(process.env, changes);
+}
+
+app.get("/api/configuracao/nxt", auth.requireMaster, (req, res) => {
+  res.json({
+    sucesso: true,
+    email: process.env.NXT_EMAIL || "",
+    senhaConfigurada: Boolean(process.env.NXT_PASSWORD),
+  });
+});
+
+app.put("/api/configuracao/nxt", auth.requireMaster, (req, res) => {
+  const email = String(req.body.email || "").trim();
+  const password = String(req.body.password || "");
+  if (!email) return res.status(400).json({ sucesso: false, mensagem: "Informe o usuário ou e-mail do NXT." });
+  if (!password && !process.env.NXT_PASSWORD) {
+    return res.status(400).json({ sucesso: false, mensagem: "Informe a senha do NXT." });
+  }
+  const changes = { NXT_EMAIL: email };
+  if (password) changes.NXT_PASSWORD = password;
+  salvarConfiguracaoEnv(changes);
+  return res.json({ sucesso: true, email, senhaConfigurada: true });
+});
+
 /*
  * Regras de estoque mínimo persistidas no banco local.
  */
@@ -560,6 +604,40 @@ app.delete(
   }
 );
 
+
+app.get("/api/impressoras", (req, res) => {
+  res.json({
+    sucesso: true,
+    impressoras: auth.getPrinters(),
+    podeEditar: ["master", "operator"].includes(req.user.role),
+  });
+});
+
+app.post("/api/impressoras", auth.requireUpdatePermission, (req, res) => {
+  try {
+    const impressora = auth.savePrinter(req.body, Number(req.user.id));
+    return res.status(201).json({ sucesso: true, impressora });
+  } catch (error) {
+    return res.status(400).json({ sucesso: false, mensagem: error.message });
+  }
+});
+
+app.patch("/api/impressoras/:id", auth.requireUpdatePermission, (req, res) => {
+  try {
+    const impressora = auth.savePrinter(req.body, Number(req.user.id), Number(req.params.id));
+    if (!impressora) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
+    return res.json({ sucesso: true, impressora });
+  } catch (error) {
+    return res.status(400).json({ sucesso: false, mensagem: error.message });
+  }
+});
+
+app.delete("/api/impressoras/:id", auth.requireUpdatePermission, (req, res) => {
+  const deleted = auth.deletePrinter(Number(req.params.id));
+  if (!deleted) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
+  return res.json({ sucesso: true });
+});
+
 /*
  * Monitoramento local das impressoras por SNMP.
  */
@@ -586,8 +664,12 @@ app.post(
     tonerExecutando = true;
 
     try {
+      const impressoras = auth.getPrinters()
+        .filter((item) => item.active)
+        .map((item) => [item.ip, item.model]);
       const relatorio = await tonerMonitor.scan({
         threshold: req.body?.limite,
+        printers: impressoras,
       });
 
       fs.mkdirSync(path.dirname(arquivoToner), { recursive: true });
