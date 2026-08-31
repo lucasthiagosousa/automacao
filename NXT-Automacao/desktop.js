@@ -42,6 +42,7 @@ function salvarConfiguracao({ email, password, port = 3000, skip = false }) {
     `NXT_EMAIL=${limpar(email)}`,
     `NXT_PASSWORD=${limpar(password)}`,
     `NXT_PORT=${porta}`,
+    "NXT_CONFIG_VERSION=2",
     `NXT_SETUP_SKIPPED=${skip ? "1" : "0"}`,
     "",
   ].join("\n");
@@ -164,7 +165,9 @@ app.whenReady().then(() => {
   app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
   configurarAmbiente();
   const config = carregarConfiguracao();
-  if (!config.NXT_EMAIL && config.NXT_SETUP_SKIPPED !== "1") criarJanelaConfiguracao(true);
+  const configuracaoAtual = config.NXT_CONFIG_VERSION === "2";
+  const credenciaisCompletas = Boolean(config.NXT_EMAIL && config.NXT_PASSWORD);
+  if (!configuracaoAtual || !credenciaisCompletas) criarJanelaConfiguracao(true);
   else iniciarSistema();
 });
 app.on("before-quit", () => { encerrando = true; if (servidor?.listening) servidor.close(); });
