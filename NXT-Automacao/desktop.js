@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 
 const APP_ID = "br.com.operacoesti.controle";
 let janelaPrincipal = null;
@@ -50,7 +51,8 @@ function configurarAmbiente() {
   process.env.NXT_BROWSER_CHANNEL = process.env.NXT_BROWSER_CHANNEL || "msedge";
   process.env.NXT_DATA_DIR = destino.dados;
   process.env.NXT_ENV_FILE = destino.env;
-  process.env.PORT = "0";
+  process.env.NXT_HOST = "0.0.0.0";
+  process.env.PORT = "3000";
 }
 
 function criarJanelaConfiguracao(primeiroAcesso = false) {
@@ -69,12 +71,23 @@ function criarJanelaConfiguracao(primeiroAcesso = false) {
   });
 }
 
+function obterEnderecoRede() {
+  const interfaces = os.networkInterfaces();
+  for (const enderecos of Object.values(interfaces)) {
+    for (const endereco of enderecos || []) {
+      if (endereco.family === "IPv4" && !endereco.internal) return `http://${endereco.address}:3000`;
+    }
+  }
+  return "http://IP-DO-SERVIDOR:3000";
+}
+
 function criarTray() {
   const imagem = nativeImage.createFromPath(path.join(__dirname, "build", "icon.ico"));
   tray = new Tray(imagem);
   tray.setToolTip("Central de Operações de TI");
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Abrir sistema", click: () => janelaPrincipal?.show() },
+    { label: `Acesso na rede: ${obterEnderecoRede()}`, click: () => shell.openExternal(obterEnderecoRede()) },
     { label: "Configurar credenciais NXT", click: () => criarJanelaConfiguracao(false) },
     { label: "Abrir pasta de dados", click: () => shell.openPath(caminhos().dados) },
     { type: "separator" },
@@ -127,6 +140,7 @@ ipcMain.handle("nxt-config:skip", () => {
 
 app.on("second-instance", () => { janelaPrincipal?.show(); janelaPrincipal?.focus(); });
 app.whenReady().then(() => {
+  app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
   configurarAmbiente();
   const config = carregarConfiguracao();
   if (!config.NXT_EMAIL && config.NXT_SETUP_SKIPPED !== "1") criarJanelaConfiguracao(true);
