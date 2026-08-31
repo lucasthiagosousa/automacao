@@ -417,6 +417,23 @@
     const detailPanel = $("stockDetailPanel");
     (detailPanel || inventoryPanel).insertAdjacentElement("afterend", panel);
 
+    const settingsStyle = document.createElement("style");
+    settingsStyle.textContent =
+      ".minimum-modal-card{width:min(920px,calc(100vw - 28px));max-height:90vh;display:flex;flex-direction:column;overflow:hidden}" +
+      ".minimum-settings-toolbar{padding:14px 18px;border-bottom:1px solid #e5ebf2;background:#f8fbff;display:flex;align-items:center;gap:10px}" +
+      ".minimum-settings-search{flex:1}.minimum-settings-count{color:#6b7c93;font-size:10px;font-weight:800;white-space:nowrap}" +
+      ".minimum-settings-list{padding:14px 18px!important;overflow:auto!important;display:grid;gap:10px;background:#f4f7fb}" +
+      ".minimum-rule-card{padding:14px!important;border:1px solid #dce5ee!important;border-radius:13px!important;background:#fff!important}" +
+      ".minimum-rule-card>.detail-label:first-child{display:block;margin:0 0 8px!important;color:#102a43;font-size:12px;font-weight:800}" +
+      ".minimum-rule-card>[data-minimum-rule-index]{width:120px;font-size:15px;font-weight:800;background:#f3f8ff}" +
+      ".minimum-catalog{margin-top:12px;border-top:1px solid #e7edf4;padding-top:10px}" +
+      ".minimum-catalog summary{cursor:pointer;color:#1769e0;font-size:10px;font-weight:800;list-style:none}" +
+      ".minimum-catalog summary::-webkit-details-marker{display:none}.minimum-catalog summary:after{content:'  ▾'}" +
+      ".minimum-catalog[open] summary{margin-bottom:10px}.minimum-catalog[open] summary:after{content:'  ▴'}" +
+      ".minimum-catalog .detail-label{display:block;margin:9px 0 0!important}.minimum-catalog .control{width:100%}" +
+      "@media(max-width:640px){.minimum-settings-toolbar{align-items:stretch;flex-direction:column}.minimum-settings-search{width:100%}.minimum-rule-card>[data-minimum-rule-index]{width:100%}}";
+    document.head.appendChild(settingsStyle);
+
     const modal = document.createElement("div");
     modal.className = "modal";
     modal.id = "restockModal";
@@ -644,6 +661,9 @@
           + '" value="' + esc(item.rule.productUrl || "") + '" placeholder="Link não cadastrado — cole aqui"></label>';
       }).join("");
       $("restockNote").value = "";
+      const search = modal.querySelector(".minimum-settings-search");
+      search.value = "";
+      search.oninput = function () { openSettings(required); };
       modal.classList.add("show");
       document.body.style.overflow = "hidden";
     }
@@ -848,13 +868,14 @@
     const modal = document.createElement("div");
     modal.className = "modal";
     modal.innerHTML =
-      '<div class="modal-card" role="dialog" aria-modal="true">'
+      '<div class="modal-card minimum-modal-card" role="dialog" aria-modal="true">'
       + '<div class="modal-head"><button class="modal-close" type="button" aria-label="Fechar">×</button>'
       + '<div class="modal-eyebrow">Parâmetros de reposição</div>'
       + '<div class="modal-title" id="minimumSettingsTitle">Estoques mínimos</div></div>'
       + '<p id="minimumSettingsDescription" style="margin:16px 18px 0;color:#6b7c93;font-size:12px;line-height:1.55">'
       + 'Defina o mínimo e mantenha o catálogo de compra de cada categoria.</p>'
-      + '<div class="details" id="minimumSettingsList"></div>'
+      + '<div class="minimum-settings-toolbar"><input class="control minimum-settings-search" type="search" placeholder="Buscar categoria, modelo ou fabricante..."><span class="minimum-settings-count"></span></div>'
+      + '<div class="details minimum-settings-list" id="minimumSettingsList"></div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;padding:0 18px 18px">'
       + '<button class="btn" type="button" data-cancel-minimum>Cancelar</button>'
       + '<button class="btn btn-primary" type="button" data-save-minimum>Salvar alterações</button>'
@@ -883,11 +904,15 @@
         return summaries.some(function (item) { return item.rule === rule; })
           || Number(rule.minimum) > 0;
       });
-      visibleRules.forEach(function (rule) {
+      const search = modal.querySelector(".minimum-settings-search");
+      const query = norm(search ? search.value : "");
+      const filteredRules = visibleRules.filter(function (rule) { return !query || norm([rule.item, rule.productModel, rule.manufacturer, rule.preferredSupplier].join(" ")).includes(query); });
+      modal.querySelector(".minimum-settings-count").textContent = filteredRules.length + " categoria" + (filteredRules.length === 1 ? "" : "s");
+      filteredRules.forEach(function (rule) {
         const index = minimumStockRules.indexOf(rule);
         const summary = summaries.find(function (item) { return item.rule === rule; });
         const field = document.createElement("div");
-        field.className = "detail";
+        field.className = "detail minimum-rule-card";
         const label = document.createElement("span");
         label.className = "detail-label";
         label.textContent = rule.item + " · atual: " + (summary ? summary.current : 0);
@@ -938,6 +963,13 @@
         catalogInput("Data da última compra", "date", rule.lastPurchaseDate, "purchaseDateRuleIndex", "");
         field.appendChild(linkLabel);
         field.appendChild(linkInput);
+        const catalog = document.createElement("details");
+        catalog.className = "minimum-catalog";
+        const catalogSummary = document.createElement("summary");
+        catalogSummary.textContent = "Dados do produto e da compra";
+        catalog.appendChild(catalogSummary);
+        while (field.children.length > 2) catalog.appendChild(field.children[2]);
+        field.appendChild(catalog);
         list.appendChild(field);
       });
       modal.classList.add("show");
