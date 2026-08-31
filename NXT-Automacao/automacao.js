@@ -63,15 +63,11 @@ async function executarComTentativas(
     process.exit(1);
   }
 
-  const dadosDir = path.join(
-    __dirname,
-    "dados"
-  );
+  const dadosDir = process.env.NXT_DATA_DIR
+    ? path.resolve(process.env.NXT_DATA_DIR)
+    : path.join(__dirname, "dados");
 
-  const erroDir = path.join(
-    __dirname,
-    "erros"
-  );
+  const erroDir = path.join(dadosDir, "erros");
 
   const arquivoFinal = path.join(
     dadosDir,
@@ -95,9 +91,28 @@ async function executarComTentativas(
       "Abrindo o navegador..."
     );
 
-    browser = await chromium.launch({
+    const opcoesNavegador = {
       headless: false,
-    });
+    };
+
+    if (process.env.NXT_BROWSER_CHANNEL) {
+      opcoesNavegador.channel = process.env.NXT_BROWSER_CHANNEL;
+    } else if (process.env.NXT_DESKTOP_MODE === "1") {
+      opcoesNavegador.channel = "msedge";
+    }
+
+    try {
+      browser = await chromium.launch(opcoesNavegador);
+    } catch (erroNavegador) {
+      if (!opcoesNavegador.channel) {
+        throw erroNavegador;
+      }
+
+      console.warn(
+        "Microsoft Edge não disponível. Tentando o Chromium do Playwright..."
+      );
+      browser = await chromium.launch({ headless: false });
+    }
 
     context = await browser.newContext({
       acceptDownloads: true,
