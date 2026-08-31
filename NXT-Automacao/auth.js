@@ -92,6 +92,19 @@ function createAuth(options) {
     + "FOREIGN KEY(request_id) REFERENCES restock_requests(id) ON DELETE CASCADE,"
     + "FOREIGN KEY(changed_by) REFERENCES users(id)"
     + ");"
+    + "CREATE TABLE IF NOT EXISTS printers ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    + "ip TEXT NOT NULL UNIQUE,"
+    + "model TEXT NOT NULL DEFAULT '',"
+    + "location TEXT NOT NULL DEFAULT '',"
+    + "active INTEGER NOT NULL DEFAULT 1,"
+    + "created_by INTEGER,"
+    + "created_at TEXT NOT NULL,"
+    + "updated_by INTEGER,"
+    + "updated_at TEXT NOT NULL,"
+    + "FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL,"
+    + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
+    + ");"
   );
 
   const requestItemColumns = database.prepare(
@@ -277,6 +290,9 @@ function createAuth(options) {
       active: Boolean(user.active),
       canEditMinimum: user.role === "master",
       canManageUsers: user.role === "master",
+      canManageNxtCredentials: user.role === "master",
+      canManagePrinters: user.role === "master" || user.role === "operator",
+      canEditOperationalData: user.role === "master" || user.role === "operator",
       canUpdateNxt: user.role === "master" || user.role === "operator"
     };
   }
@@ -439,6 +455,25 @@ function createAuth(options) {
     response.json({ sucesso: true, user: publicUser(request.user) });
   });
 
+
+  router.post("/change-password", requireAuth, function (request, response) {
+    const currentPassword = String(request.body.currentPassword || "");
+    const newPassword = String(request.body.newPassword || "");
+    const user = database.prepare("SELECT * FROM users WHERE id = ?").get(Number(request.user.id));
+    if (!user || !verifyPassword(currentPassword, user)) {
+      return response.status(400).json({ sucesso: false, mensagem: "A senha atual está incorreta." });
+    }
+    const error = passwordError(newPassword);
+    if (error) return response.status(400).json({ sucesso: false, mensagem: error });
+    const created = createPassword(newPassword);
+    database.prepare(
+      "UPDATE users SET password_hash=?,password_salt=?,updated_at=? WHERE id=?"
+    ).run(created.hash, created.salt, nowIso(), Number(user.id));
+    database.prepare("DELETE FROM sessions WHERE user_id = ?").run(Number(user.id));
+    clearSession(request, response);
+    return response.json({ sucesso: true, mensagem: "Senha alterada. Entre novamente." });
+  });
+
   router.get("/users", requireAuth, requireMaster, function (request, response) {
     const users = database.prepare(
       "SELECT id,username,role,active,created_at,updated_at FROM users ORDER BY username"
@@ -515,6 +550,77 @@ function createAuth(options) {
     ).get(id);
     response.json({ sucesso: true, user: publicUser(updated) });
   });
+
+
+  function validIp(value) {
+    const ip = String(value || "").trim();
+    const parts = ip.split(".");
+    return parts.length === 4 && parts.every(function (part) {
+      return /^\d{1,3}$/.test(part) && Number(part) >= 0 && Number(part) <= 255;
+    });
+  }
+
+  function getPrinters() {
+    return database.prepare(
+      "SELECT id,ip,model,location,active,created_at AS createdAt,updated_at AS updatedAt FROM printers ORDER BY ip"
+    ).all().map(function (row) {
+      return { ...row, id: Number(row.id), active: Boolean(row.active) };
+    });
+  }
+
+  function seedPrinters(items) {
+    if (database.prepare("SELECT COUNT(*) AS total FROM printers").get().total > 0) return getPrinters();
+    const insert = database.prepare(
+      "INSERT OR IGNORE INTO printers (ip,model,location,active,created_at,updated_at) VALUES (?,?,?,1,?,?)"
+    );
+    const timestamp = nowIso();
+    database.exec("BEGIN");
+    try {
+      (items || []).forEach(function (item) {
+        const ip = Array.isArray(item) ? item[0] : item.ip;
+        const model = Array.isArray(item) ? item[1] : item.model;
+        if (validIp(ip)) insert.run(String(ip).trim(), String(model || "").trim().slice(0, 120), "", timestamp, timestamp);
+      });
+      database.exec("COMMIT");
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
+    return getPrinters();
+  }
+
+  function savePrinter(values, userId, id) {
+    const ip = String(values.ip || "").trim();
+    if (!validIp(ip)) throw new Error("Informe um endereço IPv4 válido.");
+    const model = String(values.model || "").trim().slice(0, 120);
+    const location = String(values.location || "").trim().slice(0, 160);
+    const active = values.active === false ? 0 : 1;
+    const timestamp = nowIso();
+    try {
+      if (id) {
+        const result = database.prepare(
+          "UPDATE printers SET ip=?,model=?,location=?,active=?,updated_by=?,updated_at=? WHERE id=?"
+        ).run(ip, model, location, active, userId, timestamp, Number(id));
+        if (!result.changes) return null;
+      } else {
+        const result = database.prepare(
+          "INSERT INTO printers (ip,model,location,active,created_by,created_at,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?)"
+        ).run(ip, model, location, active, userId, timestamp, userId, timestamp);
+        id = Number(result.lastInsertRowid);
+      }
+    } catch (error) {
+      if (/UNIQUE/i.test(error.message)) throw new Error("Este IP já está cadastrado.");
+      throw error;
+    }
+    const row = database.prepare(
+      "SELECT id,ip,model,location,active,created_at AS createdAt,updated_at AS updatedAt FROM printers WHERE id=?"
+    ).get(Number(id));
+    return row ? { ...row, id: Number(row.id), active: Boolean(row.active) } : null;
+  }
+
+  function deletePrinter(id) {
+    return Boolean(database.prepare("DELETE FROM printers WHERE id=?").run(Number(id)).changes);
+  }
 
   function getMinimums() {
     return database.prepare(
@@ -755,6 +861,10 @@ function createAuth(options) {
     requireUpdatePermission: requireUpdatePermission,
     getMinimums: getMinimums,
     saveMinimums: saveMinimums,
+    getPrinters: getPrinters,
+    seedPrinters: seedPrinters,
+    savePrinter: savePrinter,
+    deletePrinter: deletePrinter,
     getRestockRequests: getRestockRequests,
     createRestockRequest: createRestockRequest,
     updateRestockRequest: updateRestockRequest,
