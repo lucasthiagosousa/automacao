@@ -31,7 +31,17 @@
           <div class="message" id="formMessage" role="alert"></div>
         </form>
       </section>
-      <section class="panel">
+      <section class="panel" style="margin-bottom:14px">
+      <div class="panel-head"><h2 class="panel-title">Integração NXT4Insight</h2><p class="panel-desc">Somente o Master Admin pode editar estas credenciais.</p></div>
+      <form class="form" id="nxtForm">
+        <label>Usuário ou e-mail NXT<input id="nxtEmail" autocomplete="username" required></label>
+        <label>Nova senha NXT<input id="nxtPassword" type="password" autocomplete="new-password" placeholder="Deixe vazio para manter a atual"></label>
+        <button class="btn btn-primary" id="nxtSave" type="submit">Salvar credenciais</button>
+        <div class="message" id="nxtMessage" role="alert"></div>
+      </form>
+    </section>
+
+    <section class="panel">
         <div class="panel-head"><h2 class="panel-title">Usuários cadastrados</h2><p class="panel-desc">Somente o Master pode alterar perfis, senhas e regras de estoque mínimo.</p></div>
         <div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Perfil</th><th>Status</th><th>Ações</th></tr></thead><tbody id="usersBody"><tr><td colspan="4"><div class="empty">Carregando usuários...</div></td></tr></tbody></table></div>
       </section>
@@ -215,6 +225,43 @@
       if (event.target === dialog) dialog.classList.remove("show");
     });
 
+
+    async function loadNxtConfiguration() {
+      const data = await api("/api/configuracao/nxt", { cache: "no-store" });
+      document.getElementById("nxtEmail").value = data.email || "";
+      document.getElementById("nxtPassword").placeholder = data.senhaConfigurada
+        ? "Senha configurada — deixe vazio para manter"
+        : "Informe a senha do NXT";
+    }
+
+    document.getElementById("nxtForm").addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const message = document.getElementById("nxtMessage");
+      const button = document.getElementById("nxtSave");
+      message.textContent = "";
+      button.disabled = true;
+      try {
+        await api("/api/configuracao/nxt", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: document.getElementById("nxtEmail").value,
+            password: document.getElementById("nxtPassword").value
+          })
+        });
+        document.getElementById("nxtPassword").value = "";
+        message.textContent = "Credenciais do NXT atualizadas.";
+        await loadNxtConfiguration();
+      } catch (error) {
+        message.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    loadNxtConfiguration().catch(function (error) {
+      document.getElementById("nxtMessage").textContent = error.message;
+    });
     loadUsers();
   </script>
 </body>
