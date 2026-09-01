@@ -98,7 +98,7 @@ function obterEnderecoRede() {
 }
 
 function criarTray() {
-  const imagem = nativeImage.createFromPath(path.join(__dirname, "build", "icon.ico"));
+  const imagem = nativeImage.createFromDataURL("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAACAUlEQVR4nO1b23ECMQw0DAWEvqAXqIT0QvoiHSQ/0Yw5/JCRVrId709mIHfWriVr7TtCWFj419hJLv44XX60ApHi++vzLS7NF/VEOocWMdj/OALxLThC7Dk3GpF8CLy4qwKMSp5Qi78owOjkCSUeWQFmIU/I8UkKYEX+cb89/UUjxetgMvIGKcL02fF8NY3lpU0gZ79lppFCxO2R1QY10JrmVmUBL4ESkXiWvcriqQQ0059LXOu6VlAZqAtQS10OCY171AARQHv2kNmgKgA6bREZoSKAVb0ixiMBIG0QtWoj7isSYBvQ8XyFtiyEN1DxAWj7iuwKYgG8ZlxrXJfNUA0WPoDQnQDWnaUbAayJE9wF8CJOMNsOt8LqYERFAEl/lngJDV+gVgLSvXvLdZqGSLwZygVjuReQbIZga4C2bUUdkamdB6BWc9R9XU6EtOq82xMhgsTKWtlgqACE1lm0NEUmAhBqxDzcoKkAhF6eDIWg3Aa5xLikpnaC9H0qeEviBHcn+LjfxMSHdoIesx5jOcH4w+UElxNcTnA5Qchof5jWCXKh7QQ1YPqWWAyJE5QifkvM7blAbImt3w2M4f5cwJN8CAkB3v3lxSjY8nPPAG8kBZg1C1K8shkwmwg5PsUSmEWEEo/qGjC6CLX4WYvgqCJw4l6/G5QM1JMYo2bpgjd+AQjsZlmiUMdBAAAAAElFTkSuQmCC").resize({ width: 32, height: 32 });
   tray = new Tray(imagem);
   tray.setToolTip("Central de Operações de TI");
   tray.setContextMenu(Menu.buildFromTemplate([
@@ -109,7 +109,8 @@ function criarTray() {
     { type: "separator" },
     { label: "Sair", click: () => { encerrando = true; app.quit(); } },
   ]));
-  tray.on("double-click", () => janelaPrincipal?.show());
+  tray.on("click", () => { janelaPrincipal?.show(); janelaPrincipal?.focus(); });
+  tray.on("double-click", () => { janelaPrincipal?.show(); janelaPrincipal?.focus(); });
 }
 
 function iniciarSistema() {
