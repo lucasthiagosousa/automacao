@@ -1,3 +1,7 @@
+!macro customInit
+  nsExec::ExecToLog 'taskkill /F /IM "Central de Operações de TI.exe"'
+!macroend
+
 !macro customInstall
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="Central de Operações de TI"'
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="Central de Operações de TI" dir=in action=allow protocol=TCP localport=3000 profile=domain,private'
