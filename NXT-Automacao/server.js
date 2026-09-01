@@ -49,6 +49,9 @@ app.get(["/admin", "/admin.html"], auth.requireAuth, (req, res) => {
   if (req.user.role !== "master") {
     return res.redirect("/");
   }
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
   return res.sendFile(path.join(pastaPublica, "admin.html"));
 });
 
