@@ -181,7 +181,21 @@ ipcMain.handle("nxt-config:skip", () => {
   return { sucesso: true };
 });
 
-app.on("second-instance", () => { janelaPrincipal?.show(); janelaPrincipal?.focus(); });
+app.on("second-instance", () => {
+  if (janelaConfiguracao && !janelaConfiguracao.isDestroyed()) {
+    janelaConfiguracao.show();
+    janelaConfiguracao.restore();
+    janelaConfiguracao.focus();
+    return;
+  }
+  if (janelaPrincipal && !janelaPrincipal.isDestroyed()) {
+    janelaPrincipal.show();
+    janelaPrincipal.restore();
+    janelaPrincipal.focus();
+    return;
+  }
+  iniciarSistema();
+});
 app.whenReady().then(() => {
   app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
   configurarAmbiente();
