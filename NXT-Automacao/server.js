@@ -28,7 +28,8 @@ const arquivoAutomacao = path.join(
 const arquivoBanco = path.join(pastaDados, "controle-estoque.db");
 const arquivoToner = path.join(pastaDados, "toner-atual.json");
 
-app.use(express.json());\napp.use("/assets", express.static(path.join(pastaPublica, "assets")));
+app.use(express.json());
+app.use("/assets", express.static(path.join(pastaPublica, "assets")));
 
 const auth = createAuth({
   databasePath: arquivoBanco,
