@@ -13,6 +13,7 @@
       const key = norm(rule.item);
       if (saved[key] && Number.isFinite(Number(saved[key].minimum))) {
         rule.minimum = Math.max(0, Number(saved[key].minimum));
+        rule.monitored = Boolean(saved[key].monitored);
         rule.productUrl = saved[key].productUrl || "";
         rule.productModel = saved[key].productModel || "";
         rule.manufacturer = saved[key].manufacturer || "";
@@ -32,6 +33,7 @@
       const key = norm(item.categoryKey || item.categoryName);
       values[key] = {
         minimum: Math.max(0, Number(item.minimum) || 0),
+        monitored: Boolean(item.monitored),
         productUrl: item.productUrl || "",
         productModel: item.productModel || "",
         manufacturer: item.manufacturer || "",
@@ -43,6 +45,7 @@
         minimumStockRules.push({
           item: item.categoryName || item.categoryKey,
           minimum: values[key].minimum,
+          monitored: values[key].monitored,
           productUrl: values[key].productUrl,
           productModel: values[key].productModel,
           manufacturer: values[key].manufacturer,
@@ -70,6 +73,7 @@
             categoryKey: norm(rule.item),
             categoryName: rule.item,
             minimum: Math.max(0, Number(rule.minimum) || 0),
+            monitored: isRuleMonitored(rule),
             productUrl: rule.productUrl || "",
             productModel: rule.productModel || "",
             manufacturer: rule.manufacturer || "",
@@ -83,6 +87,10 @@
     const result = await response.json();
     if (!response.ok) throw new Error(result.mensagem || "Não foi possível salvar os estoques mínimos.");
     minimumsConfigured = true;
+  }
+
+  function isRuleMonitored(rule) {
+    return typeof rule.monitored === "boolean" ? rule.monitored : Number(rule.minimum) > 0;
   }
 
   function countRule(rule, inventory) {
@@ -134,7 +142,7 @@
       });
     });
     if (!bestRule && createIfMissing) {
-      bestRule = { item: type || "Sem categoria", minimum: 0, productUrl: "", productModel: "",
+      bestRule = { item: type || "Sem categoria", minimum: 0, monitored: false, productUrl: "", productModel: "",
         manufacturer: "", preferredSupplier: "", lastPrice: 0, lastPurchaseDate: "",
         aliases: [type || "Sem categoria"] };
       minimumStockRules.push(bestRule);
@@ -150,44 +158,38 @@
     source.forEach(function (row) {
       const type = clean(row[typeField]) || "Não informado";
       const key = norm(type);
-      if (!grouped.has(key)) {
-        grouped.set(key, { type: type, rows: [] });
-      }
+      if (!grouped.has(key)) grouped.set(key, { type: type, rows: [] });
       grouped.get(key).rows.push(row);
+    });
+    minimumStockRules.filter(isRuleMonitored).forEach(function (rule) {
+      const represented = Array.from(grouped.values()).some(function (group) {
+        return ruleForType(group.type, false) === rule;
+      });
+      if (!represented) grouped.set("__catalog__" + norm(rule.item), { type: rule.item, rows: [] });
     });
     return Array.from(grouped.values()).map(function (group) {
       const current = sumQty(group.rows);
       const rule = ruleForType(group.type, true);
+      const monitored = isRuleMonitored(rule);
       const minimum = Math.max(0, Number(rule.minimum) || 0);
-      const request = Math.max(0, minimum - current);
-      let status = "Adequado";
-      let badge = "badge-green";
-      if (request > 0) {
-        status = current === 0 ? "Crítico" : "Repor";
-        badge = "badge-red";
-      } else if (minimum > 0 && current === minimum) {
-        status = "No limite";
-        badge = "badge-amber";
-      }
+      const request = monitored ? Math.max(0, minimum - current) : 0;
+      let status = monitored ? "Adequado" : "Não monitorado";
+      let badge = monitored ? "badge-green" : "badge-gray";
+      if (request > 0) { status = current === 0 ? "Crítico" : "Repor"; badge = "badge-red"; }
+      else if (monitored && minimum > 0 && current === minimum) { status = "No limite"; badge = "badge-amber"; }
       const models = new Map();
       group.rows.forEach(function (row) {
         const model = modelField ? clean(row[modelField]) || "Não informado" : "Não informado";
         models.set(model, (models.get(model) || 0) + qty(row));
       });
-      return {
-        type: group.type,
-        current: current,
-        minimum: minimum,
-        request: request,
-        status: status,
-        badge: badge,
-        rule: rule,
+      return { type: group.type, current: current, minimum: minimum, request: request,
+        monitored: monitored, status: status, badge: badge, rule: rule,
         models: Array.from(models.entries()).map(function (entry) {
           return { name: entry[0], quantity: entry[1] };
-        }).sort(function (a, b) { return b.quantity - a.quantity; })
-      };
+        }).sort(function (a, b) { return b.quantity - a.quantity; }) };
     }).sort(function (a, b) {
-      return b.request - a.request || a.type.localeCompare(b.type, "pt-BR");
+      return b.request - a.request || Number(b.monitored) - Number(a.monitored)
+        || a.type.localeCompare(b.type, "pt-BR");
     });
   }
 
@@ -425,6 +427,7 @@
       ".minimum-settings-list{padding:14px 18px!important;overflow:auto!important;display:grid;gap:10px;background:#f4f7fb}" +
       ".minimum-rule-card{padding:14px!important;border:1px solid #dce5ee!important;border-radius:13px!important;background:#fff!important}" +
       ".minimum-rule-card>.detail-label:first-child{display:block;margin:0 0 8px!important;color:#102a43;font-size:12px;font-weight:800}" +
+      ".minimum-monitor-row{display:flex;align-items:center;gap:9px;margin:0 0 10px;padding:9px 10px;border-radius:9px;background:#f3f8ff;color:#344054;font-size:10px;font-weight:700}.minimum-monitor-row input{width:17px;height:17px;accent-color:#1769e0}" +
       ".minimum-rule-card>[data-minimum-rule-index]{width:120px;font-size:15px;font-weight:800;background:#f3f8ff}" +
       ".minimum-catalog{margin-top:12px;border-top:1px solid #e7edf4;padding-top:10px}" +
       ".minimum-catalog summary{cursor:pointer;color:#1769e0;font-size:10px;font-weight:800;list-style:none}" +
@@ -441,7 +444,7 @@
       + '<div class="modal-head"><button class="modal-close" type="button" aria-label="Fechar">×</button>'
       + '<div class="modal-eyebrow">Reposição automática</div><div class="modal-title">Gerar solicitação</div>'
       + '<span class="badge badge-red" id="restockModalCount"></span></div>'
-      + '<div class="restock-form-body"><p>Confira as quantidades calculadas. Você pode ajustar quanto será solicitado.</p>'
+      + '<div class="restock-form-body"><p>Selecione os itens que entrarão nesta compra e ajuste as quantidades quando necessário.</p>'
       + '<div class="restock-form-items" id="restockFormItems"></div>'
       + '<label class="restock-note-label">Observação<textarea class="control restock-note" id="restockNote" maxlength="2000" placeholder="Ex.: prioridade, centro de custo ou fornecedor..."></textarea></label>'
       + '<div class="restock-form-actions"><button class="btn" type="button" data-restock-cancel>Cancelar</button>'
@@ -467,7 +470,7 @@
       + ".restock-history{margin-top:10px;color:#8290a4;font-size:8px;line-height:1.6}.restock-empty{padding:36px 18px;color:#748197;font-size:10px;text-align:center}"
       + ".restock-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}.restock-delete{border-color:#fecdca;color:#b42318;background:#fff4f3}"
       + ".restock-form-body{padding:18px}.restock-form-body>p{margin:0 0 13px;color:#748197;font-size:10px}.restock-form-items{display:grid;gap:8px;max-height:310px;overflow:auto}"
-      + ".restock-form-row{display:grid;grid-template-columns:1fr 68px 68px 82px;gap:8px;align-items:center;padding:9px;border:1px solid #e5eaf1;border-radius:10px;background:#fafbfd;font-size:9px}"
+      + ".restock-form-row{display:grid;grid-template-columns:28px 1fr 68px 68px 82px;gap:8px;align-items:center;padding:9px;border:1px solid #e5eaf1;border-radius:10px;background:#fafbfd;font-size:9px}.restock-form-row:has([data-restock-select]:not(:checked)){opacity:.55}.restock-form-row .restock-select{width:18px;height:18px;accent-color:#1769e0}"
       + ".restock-form-row strong{color:#263b55}.restock-form-row span{text-align:center;color:#748197}.restock-form-row input{width:100%;height:34px;border:1px solid #cfdae6;border-radius:8px;text-align:center;font-weight:700}"
       + ".restock-form-row .restock-product-url{grid-column:1/-1;padding:7px 9px;text-align:left;font-weight:500}"
       + ".restock-note-label{display:block;margin-top:13px;color:#66768c;font-size:9px;font-weight:700}.restock-note{width:100%;height:65px;margin-top:6px;padding:9px;resize:vertical}"
@@ -653,7 +656,7 @@
       }
       $("restockModalCount").textContent = critical.length + " item" + (critical.length === 1 ? "" : "s");
       $("restockFormItems").innerHTML = critical.map(function (item, index) {
-        return '<label class="restock-form-row"><strong>' + esc(item.type) + '</strong><span>Atual<br><b>' + item.current
+        return '<label class="restock-form-row"><input class="restock-select" type="checkbox" checked data-restock-select="' + index + '" aria-label="Incluir ' + esc(item.type) + ' na solicitação"><strong>' + esc(item.type) + '</strong><span>Atual<br><b>' + item.current
           + '</b></span><span>Mínimo<br><b>' + item.minimum + '</b></span><input type="number" min="0" step="1" value="'
           + item.request + '" data-restock-quantity="' + index + '" data-category="' + esc(item.type) + '" data-current="'
           + item.current + '" data-minimum="' + item.minimum + '" aria-label="Quantidade de ' + esc(item.type) + '">'
@@ -677,7 +680,10 @@
     modal.addEventListener("click", function (event) { if (event.target === modal) closeCreateRequest(); });
     modal.querySelector("[data-restock-save]").addEventListener("click", async function () {
       const button = this;
-      const items = Array.from(document.querySelectorAll("[data-restock-quantity]")).map(function (input) {
+      const items = Array.from(document.querySelectorAll("[data-restock-quantity]")).filter(function (input) {
+        const selector = document.querySelector('[data-restock-select="' + input.dataset.restockQuantity + '"]');
+        return selector && selector.checked;
+      }).map(function (input) {
         const rule = ruleForType(input.dataset.category, true);
         return { categoryKey: norm(input.dataset.category), categoryName: input.dataset.category,
           currentStock: Number(input.dataset.current), minimumStock: Number(input.dataset.minimum),
@@ -888,8 +894,9 @@
         ? "Defina as regras do estoque"
         : "Estoques mínimos";
       modal.querySelector("#minimumSettingsDescription").textContent = required
-        ? "Antes de abrir o painel, informe o mínimo. Os demais dados do catálogo podem ser completados agora ou depois."
-        : "Atualize o mínimo, modelo exato, fabricante, fornecedor, preço, última compra e link permanente.";
+        ? "Escolha quais itens serão monitorados e informe o estoque mínimo de cada um."
+        : "Marque os itens obrigatórios, defina o mínimo e complete os dados do produto quando necessário.";
+
       modal.querySelector("[data-save-minimum]").textContent = required
         ? "Salvar e abrir o painel"
         : "Salvar alterações";
@@ -897,9 +904,8 @@
       const summaries = inventorySummaries(rawData);
       const list = modal.querySelector("#minimumSettingsList");
       list.innerHTML = "";
-      const visibleRules = minimumStockRules.filter(function (rule) {
-        return summaries.some(function (item) { return item.rule === rule; })
-          || Number(rule.minimum) > 0;
+      const visibleRules = minimumStockRules.slice().sort(function (a, b) {
+        return Number(isRuleMonitored(b)) - Number(isRuleMonitored(a)) || a.item.localeCompare(b.item, "pt-BR");
       });
       const search = modal.querySelector(".minimum-settings-search");
       const query = norm(search ? search.value : "");
@@ -913,6 +919,14 @@
         const label = document.createElement("span");
         label.className = "detail-label";
         label.textContent = rule.item + " · atual: " + (summary ? summary.current : 0);
+        const monitorRow = document.createElement("label");
+        monitorRow.className = "minimum-monitor-row";
+        const monitorInput = document.createElement("input");
+        monitorInput.type = "checkbox"; monitorInput.checked = isRuleMonitored(rule);
+        monitorInput.dataset.monitorRuleIndex = String(index);
+        const monitorText = document.createElement("span");
+        monitorText.textContent = "Monitorar este item e alertar quando estiver abaixo do mínimo";
+        monitorRow.appendChild(monitorInput); monitorRow.appendChild(monitorText);
         const input = document.createElement("input");
         input.className = "control";
         input.type = "number";
@@ -952,6 +966,7 @@
           field.appendChild(catalogField);
         }
         field.appendChild(label);
+        field.appendChild(monitorRow);
         field.appendChild(input);
         catalogInput("Modelo exato", "text", rule.productModel, "modelRuleIndex", "Ex.: Galaxy A35 5G 128 GB");
         catalogInput("Fabricante", "text", rule.manufacturer, "manufacturerRuleIndex", "Ex.: Samsung");
@@ -985,11 +1000,15 @@
     modal.querySelector("[data-save-minimum]").addEventListener("click", async function () {
       const saveButton = modal.querySelector("[data-save-minimum]");
       const previousValues = minimumStockRules.map(function (rule) { return rule.minimum; });
+      const previousMonitored = minimumStockRules.map(function (rule) { return isRuleMonitored(rule); });
       const previousLinks = minimumStockRules.map(function (rule) { return rule.productUrl || ""; });
       const previousCatalog = minimumStockRules.map(function (rule) {
         return { productModel: rule.productModel || "", manufacturer: rule.manufacturer || "",
           preferredSupplier: rule.preferredSupplier || "", lastPrice: Number(rule.lastPrice) || 0,
           lastPurchaseDate: rule.lastPurchaseDate || "" };
+      });
+      modal.querySelectorAll("[data-monitor-rule-index]").forEach(function (input) {
+        minimumStockRules[Number(input.dataset.monitorRuleIndex)].monitored = input.checked;
       });
       modal.querySelectorAll("[data-minimum-rule-index]").forEach(function (input) {
         minimumStockRules[Number(input.dataset.minimumRuleIndex)].minimum =
@@ -1024,6 +1043,7 @@
       } catch (error) {
         minimumStockRules.forEach(function (rule, index) {
           rule.minimum = previousValues[index];
+          rule.monitored = previousMonitored[index];
           rule.productUrl = previousLinks[index];
           Object.assign(rule, previousCatalog[index]);
         });
