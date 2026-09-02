@@ -196,6 +196,50 @@
   .mono{font-family:var(--mono); color:var(--text-dim); font-size:12.5px;}
   .arrow{color:var(--text-faint); margin:0 6px;}
   .dept{color:var(--text);}
+
+  .vacation-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0;}
+  .vacation-summary .mini{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;}
+  .vacation-summary .mini strong{display:block;font-size:22px;margin-top:5px;}
+  .vacation-summary .mini span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);font-weight:700;}
+  .access-list{display:flex;gap:5px;flex-wrap:wrap;max-width:390px;}
+  .access-tag{background:var(--accent-dim);color:#1455a3;border:1px solid #cfe1fb;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:600;}
+  .access-tag.empty{background:var(--panel-2);color:var(--text-faint);border-color:var(--line);}
+  .btn-action{border:1px solid #b9d4f6;background:#fff;color:#1455a3;border-radius:9px;padding:8px 11px;font-weight:700;cursor:pointer;white-space:nowrap;}
+  .btn-action:hover{background:var(--accent-dim);}
+  .countdown{display:inline-flex;flex-direction:column;gap:3px;}
+  .countdown strong{font-size:13px;}
+  .countdown small{color:var(--text-faint);}
+  .countdown.today strong,.countdown.late strong{color:var(--danger);}
+  .countdown.soon strong{color:var(--warn);}
+  .countdown.done strong{color:var(--ok);}
+  .vacation-help{background:linear-gradient(135deg,#edf6ff,#f3fbfa);border:1px solid #cfe1ef;border-radius:12px;padding:14px 16px;color:var(--text-dim);font-size:12px;margin:14px 0;}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(6,24,44,.58);display:flex;align-items:center;justify-content:center;padding:20px;z-index:1000;}
+  .modal-backdrop.hidden{display:none;}
+  .modal-card{width:min(620px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;box-shadow:0 24px 70px rgba(5,29,55,.3);padding:22px;}
+  .modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px;}
+  .modal-head h2{font-size:19px;margin:0 0 4px;}
+  .modal-head p{margin:0;color:var(--text-dim);font-size:12px;}
+  .modal-close{border:0;background:var(--panel-2);border-radius:9px;width:34px;height:34px;cursor:pointer;font-size:18px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .form-group{display:flex;flex-direction:column;gap:7px;}
+  .form-group.full{grid-column:1/-1;}
+  .form-group label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;color:var(--text-dim);}
+  .form-group input,.form-group textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;color:var(--text);background:#fff;}
+  .form-group textarea{min-height:118px;resize:vertical;}
+  .check-row{display:flex;gap:10px;align-items:center;background:var(--panel-2);border-radius:10px;padding:12px;}
+  .check-row input{width:18px;height:18px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+  .btn-primary{border:0;background:linear-gradient(135deg,#146cf0,#087f8c);color:#fff;border-radius:10px;padding:11px 17px;font-weight:700;cursor:pointer;}
+  .btn-primary:disabled{opacity:.55;cursor:wait;}
+  .toast{position:fixed;right:22px;bottom:22px;background:#102a43;color:#fff;padding:12px 16px;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.22);z-index:1100;font-size:13px;}
+  @media(max-width:800px){
+    .vacation-summary{grid-template-columns:1fr;}
+    .form-grid{grid-template-columns:1fr;}
+    .form-group.full{grid-column:auto;}
+    #panel-ferias .table-wrap{overflow-x:auto;}
+    #panel-ferias table{min-width:900px;}
+  }
+
   .empty-state{
     padding:60px 20px; text-align:center; color:var(--text-faint);
   }
@@ -241,6 +285,7 @@
       <button class="tab active" data-tab="demitidos">Desligados <span class="count" id="countDemitidos">0</span></button>
       <button class="tab" data-tab="transferencias">Transferências <span class="count" id="countTransferencias">0</span></button>
       <button class="tab" data-tab="situacao">Ativos / Férias / Afastados <span class="count" id="countSituacao">0</span></button>
+      <button class="tab" data-tab="ferias">Férias e acessos <span class="count" id="countFerias">0</span></button>
     </div>
 
     <!-- DEMITIDOS PANEL -->
@@ -325,6 +370,45 @@
       </div>
     </div>
 
+    <!-- FERIAS E ACESSOS PANEL -->
+    <div id="panel-ferias" class="hidden">
+      <div class="vacation-summary">
+        <div class="mini"><span>Em férias hoje</span><strong id="vacationCurrent">0</strong></div>
+        <div class="mini"><span>Retornos em até 7 dias</span><strong id="vacationSoon">0</strong></div>
+        <div class="mini"><span>Acessos pendentes</span><strong id="vacationPending">0</strong></div>
+      </div>
+      <div class="vacation-help">A data sugerida para reativar os acessos é o primeiro dia após o fim das férias. Master Admin e operadores podem alterar a data, registrar os acessos e marcar a reativação como concluída.</div>
+      <div class="toolbar">
+        <div class="search-box"><input type="text" id="searchFerias" placeholder="Buscar colaborador, matrícula ou acesso..."></div>
+        <div class="field"><label>Exibir</label><select id="filterFerias"><option value="all">Todos os períodos</option><option value="current">Em férias</option><option value="soon">Retorno em até 7 dias</option><option value="pending">Acessos pendentes</option><option value="done">Reativados</option></select></div>
+        <button class="btn-clear" id="clearFerias">Limpar filtros</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Colaborador</th><th>Período de férias</th><th>Retorno previsto</th><th>Contagem</th><th>Acessos a reativar</th><th>Controle</th></tr></thead>
+          <tbody id="tbodyFerias"></tbody>
+        </table>
+        <div class="empty-state hidden" id="emptyFerias"><div class="big">🏖️</div>Nenhum período de férias com data de início e fim foi encontrado.</div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="vacationModal" role="dialog" aria-modal="true" aria-labelledby="vacationModalTitle">
+      <div class="modal-card">
+        <div class="modal-head"><div><h2 id="vacationModalTitle">Acessos do retorno</h2><p id="vacationModalPerson"></p></div><button class="modal-close" id="closeVacationModal" aria-label="Fechar">×</button></div>
+        <form id="vacationForm">
+          <input type="hidden" id="vacationKey">
+          <div class="form-grid">
+            <div class="form-group"><label>Data para reativar</label><input type="date" id="vacationActivationDate" required></div>
+            <div class="form-group"><label>Período informado</label><input type="text" id="vacationPeriod" disabled></div>
+            <div class="form-group full"><label>Acessos a reativar — um por linha</label><textarea id="vacationAccesses" placeholder="Microsoft 365&#10;VPN&#10;NXT4Insight"></textarea></div>
+            <div class="form-group full"><label>Observações</label><textarea id="vacationNotes" placeholder="Detalhes necessários para a reativação"></textarea></div>
+            <label class="check-row form-group full"><input type="checkbox" id="vacationCompleted"><span>Acessos reativados e conferidos</span></label>
+          </div>
+          <div class="modal-actions"><button type="button" class="btn-clear" id="cancelVacationModal">Cancelar</button><button type="submit" class="btn-primary" id="saveVacationPlan">Salvar controle</button></div>
+        </form>
+      </div>
+    </div>
+
   </div>
 
   <footer>Os dados são processados inteiramente no seu navegador — nenhuma informação é enviada a servidores externos.</footer>
@@ -342,6 +426,9 @@
   let demitidos = [];
   let transferencias = [];
   let situacoes = [];
+  let ferias = [];
+  let vacationPlans = new Map();
+  let currentUser = null;
 
   // ---------- drag & drop ----------
   dropzone.addEventListener('click', () => fileInput.click());
@@ -447,6 +534,10 @@
     }
     const header = rows[headerIdx].map(h => normalize(h));
     const col = (name) => header.indexOf(normalize(name));
+    const colAny = (names) => {
+      for(const name of names){ const found = col(name); if(found > -1) return found; }
+      return -1;
+    };
 
     const idx = {
       filial: col('filial'),
@@ -455,6 +546,8 @@
       situacao: col('situacao'),
       dtDemissao: col('dt demissao'),
       dtTransf: col('dt transferencia'),
+      dtFeriasInicio: colAny(['inicio ferias','data inicio ferias','dt inicio ferias','inicio das ferias','data inicial ferias','inicio de ferias']),
+      dtFeriasFim: colAny(['fim ferias','data fim ferias','dt fim ferias','final ferias','termino ferias','data final ferias','fim de ferias']),
       deptOrigemDesc: col('desc dpto origem'),
       deptDestinoDesc: col('desc dpto destino'),
       deptFolhaDesc: col('desc dpto folha'),
@@ -475,8 +568,10 @@
       const situacao = idx.situacao>-1 ? String(r[idx.situacao]||'').trim() : '';
       const dept = idx.deptFolhaDesc>-1 ? String(r[idx.deptFolhaDesc]||'').trim() : '';
 
+      const feriasInicio = idx.dtFeriasInicio>-1 ? parseDate(r[idx.dtFeriasInicio]) : null;
+      const feriasFim = idx.dtFeriasFim>-1 ? parseDate(r[idx.dtFeriasFim]) : null;
       // Situação geral (ativo / férias / afastado / demitido)
-      situacoesMap.set(key, { nome, mat, dept, situacao });
+      situacoesMap.set(key, { key, nome, mat, dept, situacao, feriasInicio, feriasFim });
 
       // Desligamentos
       const dtDemRaw = idx.dtDemissao>-1 ? r[idx.dtDemissao] : '';
@@ -508,6 +603,7 @@
     demitidos = Array.from(demitidosMap.values()).sort((a,b) => b.data - a.data);
     transferencias = Array.from(transferenciasMap.values()).sort((a,b) => b.data - a.data);
     situacoes = Array.from(situacoesMap.values()).sort((a,b) => a.nome.localeCompare(b.nome));
+    ferias = situacoes.filter(s => s.feriasInicio && s.feriasFim).sort((a,b) => a.feriasFim - b.feriasFim);
 
     fileMeta.textContent = '';
     statusPill.classList.add('live');
@@ -518,6 +614,7 @@
     applyDemitidosFilters();
     applyTransfFilters();
     applySituacaoFilters();
+    applyFeriasFilters();
   }
 
   // ---------- cards ----------
@@ -563,6 +660,8 @@
       document.getElementById('panel-demitidos').classList.toggle('hidden', target !== 'demitidos');
       document.getElementById('panel-transferencias').classList.toggle('hidden', target !== 'transferencias');
       document.getElementById('panel-situacao').classList.toggle('hidden', target !== 'situacao');
+      document.getElementById('panel-ferias').classList.toggle('hidden', target !== 'ferias');
+      if(target === 'ferias') applyFeriasFilters();
     });
   });
 
@@ -787,6 +886,127 @@
       </tr>
     `).join('');
   }
+
+
+  // ---------- férias e reativação de acessos ----------
+  function dayStart(value){
+    const d = new Date(value);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+  function addDays(value, amount){
+    const d = dayStart(value); d.setDate(d.getDate()+amount); return d;
+  }
+  function diffDays(from, to){
+    return Math.round((dayStart(to)-dayStart(from))/86400000);
+  }
+  function vacationPlan(person){
+    return vacationPlans.get(String(person.key)) || {
+      employeeKey:String(person.key), employeeName:person.nome, employeeCode:person.mat,
+      accesses:[], activationDate:toInputDate(addDays(person.feriasFim,1)), notes:'', completed:false
+    };
+  }
+  function countdownInfo(person, plan){
+    const today=dayStart(new Date()), start=dayStart(person.feriasInicio), end=dayStart(person.feriasFim);
+    const activation=plan.activationDate ? dayStart(new Date(plan.activationDate+'T00:00:00')) : addDays(end,1);
+    if(plan.completed) return {label:'Reativado',detail:plan.completedAt ? fmtDate(new Date(plan.completedAt)) : 'Concluído',cls:'done'};
+    if(today < start) return {label:'Começa em '+diffDays(today,start)+' dias',detail:'Retorno em '+diffDays(today,activation)+' dias',cls:''};
+    if(today <= end){
+      const remaining=diffDays(today,end);
+      return {label:remaining===0?'Termina hoje':'Faltam '+remaining+' dias',detail:'Ativar em '+diffDays(today,activation)+' dias',cls:remaining<=2?'soon':''};
+    }
+    const distance=diffDays(today,activation);
+    if(distance===0) return {label:'Reativar hoje',detail:'Acessos pendentes',cls:'today'};
+    if(distance>0) return {label:'Reativar em '+distance+' dias',detail:'Agendado',cls:distance<=7?'soon':''};
+    return {label:'Atrasado há '+Math.abs(distance)+' dias',detail:'Acessos pendentes',cls:'late'};
+  }
+  function applyFeriasFilters(){
+    const search=normalize(document.getElementById('searchFerias').value);
+    const filter=document.getElementById('filterFerias').value;
+    const today=dayStart(new Date());
+    const filtered=ferias.filter(person=>{
+      const plan=vacationPlan(person);
+      const activation=plan.activationDate?dayStart(new Date(plan.activationDate+'T00:00:00')):addDays(person.feriasFim,1);
+      const hay=normalize(person.nome+' '+person.mat+' '+plan.accesses.join(' '));
+      if(search && !hay.includes(search)) return false;
+      if(filter==='current' && !(today>=dayStart(person.feriasInicio)&&today<=dayStart(person.feriasFim))) return false;
+      if(filter==='soon' && !(diffDays(today,activation)>=0&&diffDays(today,activation)<=7)) return false;
+      if(filter==='pending' && plan.completed) return false;
+      if(filter==='done' && !plan.completed) return false;
+      return true;
+    });
+    document.getElementById('countFerias').textContent=ferias.length;
+    document.getElementById('vacationCurrent').textContent=ferias.filter(p=>today>=dayStart(p.feriasInicio)&&today<=dayStart(p.feriasFim)).length;
+    document.getElementById('vacationSoon').textContent=ferias.filter(p=>{const plan=vacationPlan(p),d=diffDays(today,plan.activationDate?new Date(plan.activationDate+'T00:00:00'):addDays(p.feriasFim,1));return !plan.completed&&d>=0&&d<=7;}).length;
+    document.getElementById('vacationPending').textContent=ferias.filter(p=>!vacationPlan(p).completed).length;
+    renderFerias(filtered);
+  }
+  function renderFerias(list){
+    const tbody=document.getElementById('tbodyFerias'),empty=document.getElementById('emptyFerias');
+    if(!list.length){tbody.innerHTML='';empty.classList.remove('hidden');return;}
+    empty.classList.add('hidden');
+    const canEdit=currentUser && currentUser.canEditOperationalData;
+    tbody.innerHTML=list.map(person=>{
+      const plan=vacationPlan(person),info=countdownInfo(person,plan);
+      const tags=plan.accesses.length?plan.accesses.map(a=>'<span class="access-tag">'+escapeHtml(a)+'</span>').join(''):'<span class="access-tag empty">Não definidos</span>';
+      return '<tr><td><div class="name-cell">'+escapeHtml(person.nome)+'</div><div class="sub-cell">'+escapeHtml(person.mat)+'</div></td>'+
+        '<td class="mono">'+fmtDate(person.feriasInicio)+' → '+fmtDate(person.feriasFim)+'</td>'+
+        '<td class="mono">'+fmtDate(plan.activationDate?new Date(plan.activationDate+'T00:00:00'):addDays(person.feriasFim,1))+'</td>'+
+        '<td><span class="countdown '+info.cls+'"><strong>'+escapeHtml(info.label)+'</strong><small>'+escapeHtml(info.detail)+'</small></span></td>'+
+        '<td><div class="access-list">'+tags+'</div></td>'+
+        '<td><button class="btn-action" data-vacation-key="'+escapeHtml(person.key)+'">'+(canEdit?'Configurar':'Visualizar')+'</button></td></tr>';
+    }).join('');
+    tbody.querySelectorAll('[data-vacation-key]').forEach(button=>button.addEventListener('click',()=>openVacationModal(button.dataset.vacationKey)));
+  }
+  function openVacationModal(key){
+    const person=ferias.find(item=>String(item.key)===String(key)); if(!person)return;
+    const plan=vacationPlan(person),canEdit=currentUser&&currentUser.canEditOperationalData;
+    document.getElementById('vacationKey').value=person.key;
+    document.getElementById('vacationModalPerson').textContent=person.nome+(person.mat?' · '+person.mat:'');
+    document.getElementById('vacationActivationDate').value=plan.activationDate||toInputDate(addDays(person.feriasFim,1));
+    document.getElementById('vacationPeriod').value=fmtDate(person.feriasInicio)+' a '+fmtDate(person.feriasFim);
+    document.getElementById('vacationAccesses').value=plan.accesses.join('\n');
+    document.getElementById('vacationNotes').value=plan.notes||'';
+    document.getElementById('vacationCompleted').checked=Boolean(plan.completed);
+    ['vacationActivationDate','vacationAccesses','vacationNotes','vacationCompleted'].forEach(id=>document.getElementById(id).disabled=!canEdit);
+    document.getElementById('saveVacationPlan').classList.toggle('hidden',!canEdit);
+    document.getElementById('vacationModal').classList.remove('hidden');
+  }
+  function closeVacationModal(){document.getElementById('vacationModal').classList.add('hidden');}
+  document.getElementById('closeVacationModal').addEventListener('click',closeVacationModal);
+  document.getElementById('cancelVacationModal').addEventListener('click',closeVacationModal);
+  document.getElementById('vacationModal').addEventListener('click',e=>{if(e.target.id==='vacationModal')closeVacationModal();});
+  document.getElementById('searchFerias').addEventListener('input',applyFeriasFilters);
+  document.getElementById('filterFerias').addEventListener('change',applyFeriasFilters);
+  document.getElementById('clearFerias').addEventListener('click',()=>{document.getElementById('searchFerias').value='';document.getElementById('filterFerias').value='all';applyFeriasFilters();});
+  document.getElementById('vacationForm').addEventListener('submit',async e=>{
+    e.preventDefault();
+    const key=document.getElementById('vacationKey').value;
+    const person=ferias.find(item=>String(item.key)===String(key)); if(!person)return;
+    const button=document.getElementById('saveVacationPlan');button.disabled=true;button.textContent='Salvando...';
+    try{
+      const payload={employeeName:person.nome,employeeCode:person.mat,activationDate:document.getElementById('vacationActivationDate').value,
+        accesses:document.getElementById('vacationAccesses').value.split(/\r?\n|,/).map(v=>v.trim()).filter(Boolean),
+        notes:document.getElementById('vacationNotes').value,completed:document.getElementById('vacationCompleted').checked};
+      const response=await fetch('/api/auth/vacation-access-plans/'+encodeURIComponent(key),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const data=await response.json();if(!response.ok)throw new Error(data.mensagem||'Não foi possível salvar.');
+      vacationPlans.set(String(key),data.plan);closeVacationModal();applyFeriasFilters();showToast('Controle de acessos salvo.');
+    }catch(error){showToast(error.message,true);}
+    finally{button.disabled=false;button.textContent='Salvar controle';}
+  });
+  function showToast(message,isError){
+    const old=document.querySelector('.toast');if(old)old.remove();
+    const toast=document.createElement('div');toast.className='toast';toast.textContent=message;
+    if(isError)toast.style.background='#b42318';document.body.appendChild(toast);setTimeout(()=>toast.remove(),3500);
+  }
+  async function loadVacationContext(){
+    try{
+      const responses=await Promise.all([fetch('/api/auth/me'),fetch('/api/auth/vacation-access-plans')]);
+      if(responses[0].ok){const me=await responses[0].json();currentUser=me.user;}
+      if(responses[1].ok){const data=await responses[1].json();vacationPlans=new Map((data.plans||[]).map(plan=>[String(plan.employeeKey),plan]));}
+      if(ferias.length)applyFeriasFilters();
+    }catch(error){console.warn('Não foi possível carregar o controle de férias.',error);}
+  }
+  loadVacationContext();
 
   function escapeHtml(str){
     return String(str||'').replace(/[&<>"']/g, m => ({
