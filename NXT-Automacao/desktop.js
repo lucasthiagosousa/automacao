@@ -10,6 +10,23 @@ let servidor = null;
 let tray = null;
 let encerrando = false;
 let abrirCriacaoAdmin = false;
+const arquivoLog = path.join(os.tmpdir(), "Central-Operacoes-TI.log");
+
+function registrarErroInicializacao(error) {
+  const mensagem = error?.stack || error?.message || String(error);
+  try {
+    fs.appendFileSync(arquivoLog, `[${new Date().toISOString()}] ${mensagem}\n\n`, "utf8");
+  } catch {}
+  try {
+    dialog.showErrorBox(
+      "Não foi possível abrir a Central de Operações de TI",
+      `${error?.message || mensagem}\n\nDetalhes foram salvos em:\n${arquivoLog}`
+    );
+  } catch {}
+}
+
+process.on("uncaughtException", registrarErroInicializacao);
+process.on("unhandledRejection", registrarErroInicializacao);
 
 app.setAppUserModelId(APP_ID);
 if (!app.requestSingleInstanceLock()) app.quit();
