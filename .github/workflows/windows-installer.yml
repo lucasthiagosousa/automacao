@@ -32,6 +32,14 @@ jobs:
       - name: Validar banco local e permissões
         shell: powershell
         run: node smoke-test.js
+      - name: Validar sintaxe e vídeo do login
+        shell: powershell
+        run: |
+          node --check server.js
+          node --check desktop.js
+          if (-not (Test-Path "public\\assets\\login-background.mp4")) {
+            throw "Video do login nao encontrado."
+          }
 
       - name: Gerar Setup.exe
         run: npx electron-builder --config electron-builder.yml --win nsis
