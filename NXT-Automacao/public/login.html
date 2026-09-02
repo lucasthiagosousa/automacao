@@ -3,31 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#061b28">
+  <meta name="theme-color" content="#020908">
   <title>Entrar · Central de Operações de TI</title>
   <style>
-    :root{--ink:#f7fbff;--muted:#a9bcc9;--line:rgba(255,255,255,.14);--accent:#22c7b8;--accent-2:#1597b0;--error:#ff8a85}
+    :root{--white:#f8fbfa;--muted:rgba(224,239,235,.58);--line:rgba(255,255,255,.17);--green:#13d58b;--error:#ff8f8f}
     *{box-sizing:border-box}html,body{width:100%;min-height:100%;margin:0}button,input{font:inherit}
-    body{overflow:hidden;background:#04141f;color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased}
-    .background,.veil{position:fixed;inset:0;width:100%;height:100%}.background{z-index:0;object-fit:cover;filter:saturate(.88) contrast(1.08) brightness(.76);transform:scale(1.02)}.veil{z-index:1;background:linear-gradient(90deg,rgba(1,12,20,.86) 0%,rgba(2,17,28,.46) 48%,rgba(1,11,18,.74) 100%),linear-gradient(0deg,rgba(2,14,23,.66),transparent 55%)}
-    .page{position:relative;z-index:2;min-height:100svh;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(390px,.7fr);align-items:center;gap:7vw;padding:clamp(32px,5vw,76px)}
-    .identity{max-width:720px;align-self:end;padding-bottom:clamp(28px,8vh,88px);animation:rise .75s cubic-bezier(.2,.8,.2,1) both}
-    .eyebrow{display:inline-flex;align-items:center;gap:9px;margin-bottom:22px;color:#c8f7f1;font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}.eyebrow:before{content:"";width:8px;height:8px;border-radius:50%;background:#35dec6;box-shadow:0 0 0 6px rgba(53,222,198,.13)}
-    .identity h1{max-width:680px;margin:0;font-size:clamp(54px,7vw,108px);font-weight:650;line-height:.88;letter-spacing:-.065em}.identity h1 span{display:block;color:transparent;-webkit-text-stroke:1px rgba(255,255,255,.55)}
-    .identity p{max-width:500px;margin:27px 0 0;color:#b6c7d2;font-size:clamp(15px,1.2vw,18px);line-height:1.6}
-    .login-shell{width:min(470px,100%);justify-self:end;animation:rise .75s .08s cubic-bezier(.2,.8,.2,1) both}
-    .login-card{padding:clamp(27px,3vw,42px);border:1px solid var(--line);border-radius:28px;background:linear-gradient(145deg,rgba(7,28,39,.77),rgba(3,14,22,.9));box-shadow:0 30px 90px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.05);backdrop-filter:blur(22px)}
-    .brand{display:flex;align-items:center;gap:13px;margin-bottom:42px}.brand-mark{width:43px;height:43px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.16);border-radius:13px;background:linear-gradient(145deg,rgba(42,191,190,.24),rgba(26,103,151,.2));box-shadow:inset 0 1px rgba(255,255,255,.08)}.brand-mark svg{width:23px;height:23px}.brand strong{display:block;font-size:14px;font-weight:650}.brand small{display:block;margin-top:3px;color:#91a8b7;font-size:11px}
-    .login-card h2{margin:0 0 8px;font-size:30px;font-weight:580;letter-spacing:-.035em}.intro{margin:0 0 30px;color:var(--muted);font-size:14px;line-height:1.5}
-    .field{display:block;margin-bottom:20px;color:#b9c8d2;font-size:12px;font-weight:600;letter-spacing:.04em}.input-wrap{position:relative;display:block;margin-top:9px}.input-wrap>svg{position:absolute;left:15px;top:50%;width:18px;height:18px;color:#7d99aa;transform:translateY(-50%);pointer-events:none}
-    .input-wrap input{width:100%;height:53px;padding:0 48px 0 46px;border:1px solid rgba(255,255,255,.13);border-radius:13px;outline:none;background:rgba(255,255,255,.055);color:#fff;font-size:15px;font-weight:400;transition:.18s}.input-wrap input::placeholder{color:#6f8796}.input-wrap input:hover{border-color:rgba(255,255,255,.22)}.input-wrap input:focus{border-color:rgba(46,211,192,.72);background:rgba(255,255,255,.075);box-shadow:0 0 0 4px rgba(46,211,192,.09)}
-    .password-toggle{position:absolute;right:8px;top:50%;width:37px;height:37px;display:grid;place-items:center;border:0;border-radius:9px;background:transparent;color:#7892a2;cursor:pointer;transform:translateY(-50%)}.password-toggle:hover{color:#d7e5ec;background:rgba(255,255,255,.07)}.password-toggle svg{width:17px}
-    .submit{width:100%;height:54px;margin-top:7px;display:flex;align-items:center;justify-content:center;gap:10px;border:0;border-radius:14px;background:linear-gradient(135deg,#35d3bc,#159eae);color:#03191f;cursor:pointer;font-size:14px;font-weight:750;box-shadow:0 15px 32px rgba(16,174,164,.2);transition:transform .18s,filter .18s,box-shadow .18s}.submit:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.06);box-shadow:0 19px 38px rgba(16,174,164,.28)}.submit:disabled{cursor:wait;opacity:.65}.submit svg{width:18px}
-    .message{min-height:20px;margin-top:13px;color:var(--error);font-size:13px;font-weight:500;text-align:center}
-    @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
-    @media(max-width:900px){.page{grid-template-columns:1fr;padding:24px}.identity{display:none}.login-shell{justify-self:center;width:min(460px,100%)}}
-    @media(max-width:520px){body{overflow:auto}.page{padding:16px}.login-card{padding:25px 20px;border-radius:22px}.brand{margin-bottom:34px}.login-card h2{font-size:27px}}
-    @media(prefers-reduced-motion:reduce){.background{display:none}.identity,.login-shell{animation:none}.veil{background:linear-gradient(135deg,#061c2b,#073c4a)}}
+    body{overflow:hidden;background:#010706;color:var(--white);font-family:Inter,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+    .background,.veil{position:fixed;inset:0;width:100%;height:100%}.background{z-index:0;object-fit:cover;filter:saturate(1.22) contrast(1.12) brightness(.7);transform:scale(1.015)}
+    .veil{z-index:1;background:linear-gradient(90deg,rgba(0,4,3,.5),rgba(0,7,5,.12) 52%,rgba(0,6,4,.38)),linear-gradient(0deg,rgba(0,0,0,.42),transparent 62%)}
+    .page{position:relative;z-index:2;min-height:100svh;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(420px,.8fr);align-items:center;gap:8vw;padding:clamp(48px,7.5vw,108px)}
+    .identity{align-self:end;padding-bottom:clamp(80px,18vh,180px);animation:enter .75s ease-out both}
+    .identity h1{margin:0;font-size:clamp(76px,10vw,148px);font-weight:660;line-height:.8;letter-spacing:-.075em;text-transform:uppercase}.identity h1 span{display:block}
+    .identity p{margin:34px 0 0 4px;color:rgba(255,255,255,.78);font-size:18px;font-weight:550}
+    .login-shell{width:min(500px,100%);justify-self:end;animation:enter .75s .08s ease-out both}
+    .login-card{min-height:548px;display:flex;flex-direction:column;justify-content:center;padding:54px 42px;border:1px solid var(--line);border-radius:30px;background:linear-gradient(145deg,rgba(0,35,22,.48),rgba(1,11,9,.77));box-shadow:0 28px 80px rgba(0,0,0,.34);backdrop-filter:blur(18px)}
+    .field{display:block;margin-bottom:34px;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+    .input-wrap{display:block;margin-top:14px;border-bottom:1px solid rgba(255,255,255,.22)}
+    .input-wrap input{width:100%;height:48px;padding:0;border:0;outline:0;background:transparent;color:#fff;font-size:17px;font-weight:400}.input-wrap input::placeholder{color:rgba(211,229,222,.33)}.input-wrap:focus-within{border-color:rgba(57,229,164,.75)}
+    .password-wrap{position:relative}.password-wrap input{padding-right:42px}.password-toggle{position:absolute;right:0;bottom:5px;width:38px;height:38px;border:0;background:transparent;color:rgba(220,239,232,.55);cursor:pointer}.password-toggle:hover{color:#fff}.password-toggle svg{width:19px}
+    .submit{width:100%;height:55px;margin-top:18px;border:0;border-radius:28px;background:linear-gradient(180deg,#22dc99,#08b971);color:#00160d;cursor:pointer;font-size:15px;font-weight:700;box-shadow:0 15px 36px rgba(0,210,126,.18);transition:.18s}.submit:hover:not(:disabled){transform:translateY(-2px);filter:brightness(1.08)}.submit:disabled{opacity:.62;cursor:wait}
+    .message{min-height:20px;margin-top:18px;color:var(--error);font-size:13px;text-align:center}
+    @keyframes enter{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+    @media(max-width:900px){.page{grid-template-columns:1fr;padding:22px}.identity{display:none}.login-shell{justify-self:center}.login-card{min-height:auto}}
+    @media(max-width:520px){body{overflow:auto}.login-card{padding:45px 25px;border-radius:24px}.page{padding:15px}}
+    @media(prefers-reduced-motion:reduce){.identity,.login-shell{animation:none}.background{transform:none}}
   </style>
 </head>
 <body>
@@ -35,18 +34,14 @@
   <div class="veil" aria-hidden="true"></div>
   <main class="page">
     <section class="identity">
-      <div class="eyebrow">Central de Operações de TI</div>
-      <h1>Controle em uma <span>única visão.</span></h1>
-      <p>Estoque, toners e movimentações organizados para uma operação mais clara e segura.</p>
+      <h1>Controle<span>de TI</span></h1>
+      <p>Estoque, toners e colaboradores em um só lugar.</p>
     </section>
     <section class="login-shell" aria-label="Acesso ao sistema">
       <form class="login-card" id="loginForm">
-        <div class="brand"><span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="m4 12 8 4 8-4M4 17l8 4 8-4"/></svg></span><span><strong>Operações de TI</strong><small>Acesso interno</small></span></div>
-        <h2>Bem-vindo</h2>
-        <p class="intro">Entre com suas credenciais para acessar o painel.</p>
-        <label class="field">Usuário<span class="input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><input id="username" name="username" autocomplete="username" placeholder="Digite seu usuário" required autofocus></span></label>
-        <label class="field">Senha<span class="input-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Digite sua senha" required><button class="password-toggle" id="passwordToggle" type="button" aria-label="Mostrar senha" title="Mostrar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></span></label>
-        <button class="submit" id="submitButton" type="submit"><span>Entrar</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M14 7l5 5-5 5"/></svg></button>
+        <label class="field">Usuário<span class="input-wrap"><input id="username" name="username" autocomplete="username" placeholder="Digite seu usuário" required autofocus></span></label>
+        <label class="field">Senha<span class="input-wrap password-wrap"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Digite sua senha" required><button class="password-toggle" id="passwordToggle" type="button" aria-label="Mostrar senha" title="Mostrar senha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></span></label>
+        <button class="submit" id="submitButton" type="submit"><span>Entrar</span></button>
         <div class="message" id="message" role="alert" aria-live="polite"></div>
       </form>
     </section>
