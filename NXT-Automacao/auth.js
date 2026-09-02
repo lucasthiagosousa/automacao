@@ -40,6 +40,7 @@ function createAuth(options) {
     + "category_key TEXT PRIMARY KEY,"
     + "category_name TEXT NOT NULL,"
     + "minimum INTEGER NOT NULL CHECK(minimum >= 0),"
+    + "monitored INTEGER NOT NULL DEFAULT 0,"
     + "product_url TEXT NOT NULL DEFAULT '',"
     + "product_model TEXT NOT NULL DEFAULT '',"
     + "manufacturer TEXT NOT NULL DEFAULT '',"
@@ -152,6 +153,10 @@ function createAuth(options) {
   const minimumColumns = database.prepare(
     "PRAGMA table_info(minimum_stock)"
   ).all().map(function (column) { return column.name; });
+  if (!minimumColumns.includes("monitored")) {
+    database.exec("ALTER TABLE minimum_stock ADD COLUMN monitored INTEGER NOT NULL DEFAULT 0");
+    database.exec("UPDATE minimum_stock SET monitored = 1 WHERE minimum > 0");
+  }
   if (!minimumColumns.includes("product_url")) {
     database.exec(
       "ALTER TABLE minimum_stock ADD COLUMN product_url TEXT NOT NULL DEFAULT ''"
@@ -715,7 +720,7 @@ function createAuth(options) {
 
   function getMinimums() {
     return database.prepare(
-      "SELECT category_key AS categoryKey,category_name AS categoryName,minimum,product_url AS productUrl,"
+      "SELECT category_key AS categoryKey,category_name AS categoryName,minimum,monitored,product_url AS productUrl,"
       + "product_model AS productModel,manufacturer,preferred_supplier AS preferredSupplier,"
       + "last_price AS lastPrice,last_purchase_date AS lastPurchaseDate,updated_at AS updatedAt "
       + "FROM minimum_stock ORDER BY category_name"
@@ -724,6 +729,7 @@ function createAuth(options) {
         categoryKey: row.categoryKey,
         categoryName: row.categoryName,
         minimum: Number(row.minimum),
+        monitored: Boolean(row.monitored),
         productUrl: row.productUrl || "",
         productModel: row.productModel || "",
         manufacturer: row.manufacturer || "",
@@ -737,10 +743,10 @@ function createAuth(options) {
 
   function saveMinimums(items, userId) {
     const upsert = database.prepare(
-      "INSERT INTO minimum_stock (category_key,category_name,minimum,product_url,product_model,manufacturer,"
+      "INSERT INTO minimum_stock (category_key,category_name,minimum,monitored,product_url,product_model,manufacturer,"
       + "preferred_supplier,last_price,last_purchase_date,updated_by,updated_at) "
-      + "VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(category_key) DO UPDATE SET "
-      + "category_name=excluded.category_name,minimum=excluded.minimum,"
+      + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(category_key) DO UPDATE SET "
+      + "category_name=excluded.category_name,minimum=excluded.minimum,monitored=excluded.monitored,"
       + "product_url=excluded.product_url,product_model=excluded.product_model,"
       + "manufacturer=excluded.manufacturer,preferred_supplier=excluded.preferred_supplier,"
       + "last_price=excluded.last_price,last_purchase_date=excluded.last_purchase_date,"
@@ -752,13 +758,14 @@ function createAuth(options) {
         const name = String(item.categoryName || "").trim();
         const key = normalizeCategory(item.categoryKey || name);
         const minimum = Math.max(0, Number.parseInt(item.minimum, 10) || 0);
+        const monitored = item.monitored ? 1 : 0;
         const productUrl = normalizeProductUrl(item.productUrl);
         const productModel = safeText(item.productModel, 200);
         const manufacturer = safeText(item.manufacturer, 160);
         const preferredSupplier = safeText(item.preferredSupplier, 200);
         const lastPrice = Math.max(0, Number(item.lastPrice) || 0);
         const lastPurchaseDate = normalizeDate(item.lastPurchaseDate);
-        if (name && key) upsert.run(key, name, minimum, productUrl, productModel,
+        if (name && key) upsert.run(key, name, minimum, monitored, productUrl, productModel,
           manufacturer, preferredSupplier, lastPrice, lastPurchaseDate, userId, nowIso());
       });
       database.exec("COMMIT");
