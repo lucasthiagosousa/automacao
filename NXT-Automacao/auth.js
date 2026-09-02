@@ -113,6 +113,21 @@ function createAuth(options) {
     + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
     + ");"
   );
+  database.exec(
+    "CREATE TABLE IF NOT EXISTS vacation_access_plans ("
+    + "employee_key TEXT PRIMARY KEY,"
+    + "employee_name TEXT NOT NULL DEFAULT '',"
+    + "employee_code TEXT NOT NULL DEFAULT '',"
+    + "accesses_json TEXT NOT NULL DEFAULT '[]',"
+    + "activation_date TEXT NOT NULL DEFAULT '',"
+    + "notes TEXT NOT NULL DEFAULT '',"
+    + "completed INTEGER NOT NULL DEFAULT 0,"
+    + "completed_at TEXT NOT NULL DEFAULT '',"
+    + "updated_by INTEGER,"
+    + "updated_at TEXT NOT NULL,"
+    + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
+    + ");"
+  );
 
   const requestItemColumns = database.prepare(
     "PRAGMA table_info(restock_request_items)"
@@ -460,6 +475,59 @@ function createAuth(options) {
   router.get("/me", requireAuth, function (request, response) {
     response.setHeader("Cache-Control", "no-store");
     response.json({ sucesso: true, user: publicUser(request.user) });
+  });
+
+  router.get("/vacation-access-plans", requireAuth, function (request, response) {
+    const plans = database.prepare(
+      "SELECT employee_key AS employeeKey,employee_name AS employeeName,"
+      + "employee_code AS employeeCode,accesses_json AS accessesJson,"
+      + "activation_date AS activationDate,notes,completed,completed_at AS completedAt,"
+      + "updated_at AS updatedAt FROM vacation_access_plans ORDER BY employee_name"
+    ).all().map(function (row) {
+      let accesses = [];
+      try { accesses = JSON.parse(row.accessesJson || "[]"); } catch { accesses = []; }
+      return {
+        employeeKey: row.employeeKey, employeeName: row.employeeName, employeeCode: row.employeeCode,
+        accesses: Array.isArray(accesses) ? accesses : [], activationDate: row.activationDate || "",
+        notes: row.notes || "", completed: Boolean(row.completed),
+        completedAt: row.completedAt || "", updatedAt: row.updatedAt
+      };
+    });
+    response.setHeader("Cache-Control", "no-store");
+    response.json({ sucesso: true, plans: plans });
+  });
+
+  router.put("/vacation-access-plans/:employeeKey", requireAuth, requireUpdatePermission, function (request, response) {
+    const employeeKey = safeText(request.params.employeeKey, 160);
+    const employeeName = safeText(request.body.employeeName, 160);
+    const employeeCode = safeText(request.body.employeeCode, 80);
+    const activationDate = normalizeDate(request.body.activationDate);
+    const notes = safeText(request.body.notes, 1000);
+    const completed = request.body.completed ? 1 : 0;
+    const accesses = (Array.isArray(request.body.accesses) ? request.body.accesses : [])
+      .map(function (item) { return safeText(item, 120); })
+      .filter(Boolean).filter(function (item, index, list) { return list.indexOf(item) === index; })
+      .slice(0, 30);
+    if (!employeeKey || !employeeName) {
+      return response.status(400).json({ sucesso: false, mensagem: "Colaborador inválido." });
+    }
+    const timestamp = nowIso();
+    const completedAt = completed ? timestamp : "";
+    database.prepare(
+      "INSERT INTO vacation_access_plans "
+      + "(employee_key,employee_name,employee_code,accesses_json,activation_date,notes,completed,completed_at,updated_by,updated_at) "
+      + "VALUES (?,?,?,?,?,?,?,?,?,?) "
+      + "ON CONFLICT(employee_key) DO UPDATE SET employee_name=excluded.employee_name,"
+      + "employee_code=excluded.employee_code,accesses_json=excluded.accesses_json,"
+      + "activation_date=excluded.activation_date,notes=excluded.notes,completed=excluded.completed,"
+      + "completed_at=excluded.completed_at,updated_by=excluded.updated_by,updated_at=excluded.updated_at"
+    ).run(employeeKey, employeeName, employeeCode, JSON.stringify(accesses), activationDate, notes,
+      completed, completedAt, Number(request.user.id), timestamp);
+    response.json({ sucesso: true, plan: {
+      employeeKey: employeeKey, employeeName: employeeName, employeeCode: employeeCode,
+      accesses: accesses, activationDate: activationDate, notes: notes, completed: Boolean(completed),
+      completedAt: completedAt, updatedAt: timestamp
+    } });
   });
 
 
