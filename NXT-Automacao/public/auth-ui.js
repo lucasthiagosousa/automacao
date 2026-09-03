@@ -57,6 +57,20 @@
       body.workspace-operational a[data-old-workspace-link]{display:none!important}
       @media(max-width:1328px){body.workspace-page-colaboradores .wrap>header{padding-left:24px;padding-right:24px}}
       @media(max-width:900px){body.workspace-operational .header-inner,body.workspace-page-colaboradores .wrap>header{align-items:flex-start!important;flex-direction:column!important}.header-actions,.header-right{width:100%;justify-content:flex-start!important}.workspace-tabs{width:calc(100% - 24px);height:55px}.workspace-tab{padding:0 12px}.workspace-tab-copy small{display:none}.workspace-page-heading{align-items:flex-start;flex-direction:column;gap:7px}.workspace-page-heading p{text-align:left}}
+      /* Identidade verde global: ações e estados interativos */
+      body.workspace-operational{--blue:#0aad63!important;--accent:#0aad63!important;--accent-dim:#e4f8ee!important}
+      body.workspace-operational .content .btn-primary,body.workspace-operational main .btn-primary,body.workspace-operational .modal .btn-primary,body.workspace-operational #saveVacationPlan{border-color:#0a9b59!important;background:linear-gradient(135deg,#12cc78,#079854)!important;color:#fff!important;box-shadow:0 7px 18px rgba(5,143,79,.18)!important}
+      body.workspace-operational .content .btn-primary:hover,body.workspace-operational main .btn-primary:hover,body.workspace-operational .modal .btn-primary:hover{background:linear-gradient(135deg,#18d982,#087f49)!important;transform:translateY(-1px)}
+      body.workspace-operational .btn-soft,body.workspace-operational .btn-action{border-color:#bce8d2!important;background:#f3fcf7!important;color:#087747!important}
+      body.workspace-operational .btn-soft:hover,body.workspace-operational .btn-action:hover{border-color:#7bd5a7!important;background:#e6f8ef!important}
+      body.workspace-operational input:focus,body.workspace-operational select:focus,body.workspace-operational textarea:focus,body.workspace-operational .control:focus{border-color:#35b97b!important;box-shadow:0 0 0 3px rgba(10,173,99,.11)!important;outline:none!important}
+      body.workspace-operational input[type="checkbox"],body.workspace-operational input[type="radio"]{accent-color:#0aad63!important}
+      body.workspace-operational .result-count,body.workspace-operational .count,body.workspace-operational .access-tag{background:#e4f8ee!important;color:#087747!important;border-color:#bce8d2!important}
+      body.workspace-operational .code,body.workspace-operational .browse,body.workspace-operational .workspace-page-heading span{color:#088b50!important}
+      body.workspace-page-colaboradores .tab.active,body.workspace-page-colaboradores .chip.active{border-color:#0aad63!important;background:#0aad63!important;color:#fff!important;box-shadow:0 6px 16px rgba(10,173,99,.18)!important}
+      body.workspace-page-colaboradores #dropzone:hover,body.workspace-page-colaboradores #dropzone.drag{border-color:#29b974!important;background:#f1fbf6!important}
+      body.workspace-operational ::selection{background:#bdebd2;color:#063e25}
+      .btn-primary{border-color:#0a9b59!important;background:linear-gradient(135deg,#12cc78,#079854)!important;color:#fff!important}
       @media(max-width:560px){body.workspace-operational .header-inner,.workspace-tabs{width:calc(100% - 24px)!important}body.workspace-page-colaboradores .wrap>#dropzone,body.workspace-page-colaboradores .wrap>#app,body.workspace-page-colaboradores .wrap>footer{width:calc(100% - 24px)}body.workspace-page-toner .toolbar #search,body.workspace-page-toner .toolbar #status,body.workspace-page-toner .toolbar .btn{flex:1 1 100%;width:100%!important}.auth-copy{display:none}.auth-account{padding:5px}.header-actions,.header-right{gap:6px!important}.header-actions>.btn,.header-right>.btn,.header-right>.back-link{min-height:36px!important;padding:7px 9px!important;font-size:10px!important}.workspace-tabs{gap:4px}.workspace-tab{flex:0 0 auto;height:37px;font-size:10px}}
     `;
     document.head.appendChild(style);
