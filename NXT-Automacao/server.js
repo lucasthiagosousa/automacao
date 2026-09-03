@@ -28,7 +28,7 @@ const arquivoAutomacao = path.join(
 const arquivoBanco = path.join(pastaDados, "controle-estoque.db");
 const arquivoToner = path.join(pastaDados, "toner-atual.json");
 
-app.use(express.json());
+app.use(express.json({ limit: "8mb" }));
 app.use("/assets", express.static(path.join(pastaPublica, "assets")));
 
 const auth = createAuth({
@@ -620,6 +620,7 @@ app.get("/api/impressoras", (req, res) => {
 app.post("/api/impressoras", auth.requireUpdatePermission, (req, res) => {
   try {
     const impressora = auth.savePrinter(req.body, Number(req.user.id));
+    auth.addAudit(req.user.id, "create", "printer", String(impressora.id), "Impressora cadastrada: " + impressora.ip);
     return res.status(201).json({ sucesso: true, impressora });
   } catch (error) {
     return res.status(400).json({ sucesso: false, mensagem: error.message });
@@ -630,6 +631,7 @@ app.patch("/api/impressoras/:id", auth.requireUpdatePermission, (req, res) => {
   try {
     const impressora = auth.savePrinter(req.body, Number(req.user.id), Number(req.params.id));
     if (!impressora) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
+    auth.addAudit(req.user.id, "update", "printer", String(impressora.id), "Impressora atualizada: " + impressora.ip);
     return res.json({ sucesso: true, impressora });
   } catch (error) {
     return res.status(400).json({ sucesso: false, mensagem: error.message });
@@ -639,6 +641,7 @@ app.patch("/api/impressoras/:id", auth.requireUpdatePermission, (req, res) => {
 app.delete("/api/impressoras/:id", auth.requireUpdatePermission, (req, res) => {
   const deleted = auth.deletePrinter(Number(req.params.id));
   if (!deleted) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
+  auth.addAudit(req.user.id, "delete", "printer", String(req.params.id), "Impressora removida");
   return res.json({ sucesso: true });
 });
 
@@ -653,6 +656,7 @@ app.put("/api/configuracao/toner", auth.requireMaster, (req, res) => {
     return res.status(400).json({ sucesso: false, mensagem: "Informe um limite entre 1% e 99%." });
   }
   auth.setSetting("toner_threshold", String(limite), Number(req.user.id));
+  auth.addAudit(req.user.id, "update", "toner_threshold", "", "Limite de toner alterado para " + limite + "%");
   return res.json({ sucesso: true, limite });
 });
 
