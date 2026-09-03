@@ -129,6 +129,56 @@ function createAuth(options) {
     + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
     + ");"
   );
+  database.exec(
+    "CREATE TABLE IF NOT EXISTS audit_log ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    + "action TEXT NOT NULL,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL DEFAULT '',"
+    + "description TEXT NOT NULL DEFAULT '',user_id INTEGER,created_at TEXT NOT NULL,"
+    + "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL"
+    + ");"
+    + "CREATE TABLE IF NOT EXISTS operational_tasks ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL DEFAULT 'general',"
+    + "source_type TEXT NOT NULL DEFAULT '',source_id TEXT NOT NULL DEFAULT '',"
+    + "responsible TEXT NOT NULL DEFAULT '',due_date TEXT NOT NULL DEFAULT '',"
+    + "status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','done')),"
+    + "comments TEXT NOT NULL DEFAULT '',created_by INTEGER,created_at TEXT NOT NULL,"
+    + "updated_by INTEGER,updated_at TEXT NOT NULL,"
+    + "FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE SET NULL,"
+    + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
+    + ");"
+    + "CREATE TABLE IF NOT EXISTS collaborator_snapshot ("
+    + "id INTEGER PRIMARY KEY CHECK(id=1),file_name TEXT NOT NULL DEFAULT '',"
+    + "data_json TEXT NOT NULL DEFAULT '[]',row_count INTEGER NOT NULL DEFAULT 0,"
+    + "updated_by INTEGER,updated_at TEXT NOT NULL,"
+    + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
+    + ");"
+    + "CREATE TABLE IF NOT EXISTS access_templates ("
+    + "access_key TEXT PRIMARY KEY,access_name TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,"
+    + "updated_by INTEGER,updated_at TEXT NOT NULL,"
+    + "FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL"
+    + ");"
+  );
+
+  const vacationColumns = database.prepare("PRAGMA table_info(vacation_access_plans)")
+    .all().map(function (column) { return column.name; });
+  [
+    ["access_items_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["responsible", "TEXT NOT NULL DEFAULT ''"],
+    ["due_date", "TEXT NOT NULL DEFAULT ''"],
+    ["comments", "TEXT NOT NULL DEFAULT ''"]
+  ].forEach(function (migration) {
+    if (!vacationColumns.includes(migration[0])) {
+      database.exec("ALTER TABLE vacation_access_plans ADD COLUMN " + migration[0] + " " + migration[1]);
+    }
+  });
+  if (!database.prepare("SELECT access_key FROM access_templates LIMIT 1").get()) {
+    const seedAccess = database.prepare(
+      "INSERT INTO access_templates (access_key,access_name,active,updated_at) VALUES (?,?,1,?)"
+    );
+    ["Microsoft 365","VPN","NXT4Insight","ERP","Pastas de rede"].forEach(function (name) {
+      seedAccess.run(normalizeSeedKey(name), name, new Date().toISOString());
+    });
+  }
 
   const requestItemColumns = database.prepare(
     "PRAGMA table_info(restock_request_items)"
@@ -192,6 +242,10 @@ function createAuth(options) {
 
   function nowIso() {
     return new Date().toISOString();
+  }
+
+  function normalizeSeedKey(value) {
+    return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   }
 
   function normalizeUsername(value) {
@@ -367,6 +421,13 @@ function createAuth(options) {
     return next();
   }
 
+  function addAudit(userId, action, entityType, entityId, description) {
+    database.prepare(
+      "INSERT INTO audit_log (action,entity_type,entity_id,description,user_id,created_at) VALUES (?,?,?,?,?,?)"
+    ).run(safeText(action,80),safeText(entityType,80),safeText(entityId,160),
+      safeText(description,600),userId ? Number(userId) : null,nowIso());
+  }
+
   function setupRequired() {
     const result = database.prepare("SELECT COUNT(*) AS total FROM users").get();
     return Number(result.total) === 0;
@@ -485,16 +546,18 @@ function createAuth(options) {
   router.get("/vacation-access-plans", requireAuth, function (request, response) {
     const plans = database.prepare(
       "SELECT employee_key AS employeeKey,employee_name AS employeeName,"
-      + "employee_code AS employeeCode,accesses_json AS accessesJson,"
-      + "activation_date AS activationDate,notes,completed,completed_at AS completedAt,"
+      + "employee_code AS employeeCode,accesses_json AS accessesJson,access_items_json AS accessItemsJson,"
+      + "activation_date AS activationDate,notes,responsible,due_date AS dueDate,comments,completed,completed_at AS completedAt,"
       + "updated_at AS updatedAt FROM vacation_access_plans ORDER BY employee_name"
     ).all().map(function (row) {
-      let accesses = [];
+      let accesses = [], accessItems = [];
       try { accesses = JSON.parse(row.accessesJson || "[]"); } catch { accesses = []; }
+      try { accessItems = JSON.parse(row.accessItemsJson || "[]"); } catch { accessItems = []; }
+      if (!Array.isArray(accessItems) || !accessItems.length) accessItems = (Array.isArray(accesses) ? accesses : []).map(function (name) { return { name: name, completed: Boolean(row.completed) }; });
       return {
         employeeKey: row.employeeKey, employeeName: row.employeeName, employeeCode: row.employeeCode,
-        accesses: Array.isArray(accesses) ? accesses : [], activationDate: row.activationDate || "",
-        notes: row.notes || "", completed: Boolean(row.completed),
+        accesses: Array.isArray(accesses) ? accesses : [], accessItems: accessItems, activationDate: row.activationDate || "",
+        notes: row.notes || "", responsible: row.responsible || "", dueDate: row.dueDate || "", comments: row.comments || "", completed: Boolean(row.completed),
         completedAt: row.completedAt || "", updatedAt: row.updatedAt
       };
     });
@@ -508,11 +571,17 @@ function createAuth(options) {
     const employeeCode = safeText(request.body.employeeCode, 80);
     const activationDate = normalizeDate(request.body.activationDate);
     const notes = safeText(request.body.notes, 1000);
+    const responsible = safeText(request.body.responsible, 160);
+    const dueDate = normalizeDate(request.body.dueDate);
+    const comments = safeText(request.body.comments, 1500);
     const completed = request.body.completed ? 1 : 0;
     const accesses = (Array.isArray(request.body.accesses) ? request.body.accesses : [])
       .map(function (item) { return safeText(item, 120); })
       .filter(Boolean).filter(function (item, index, list) { return list.indexOf(item) === index; })
       .slice(0, 30);
+    const accessItems = (Array.isArray(request.body.accessItems) ? request.body.accessItems : accesses.map(function (name) { return { name: name, completed: false }; }))
+      .map(function (item) { return { name: safeText(item && item.name,120), completed: Boolean(item && item.completed) }; })
+      .filter(function (item) { return item.name; }).slice(0,30);
     if (!employeeKey || !employeeName) {
       return response.status(400).json({ sucesso: false, mensagem: "Colaborador inválido." });
     }
@@ -520,19 +589,84 @@ function createAuth(options) {
     const completedAt = completed ? timestamp : "";
     database.prepare(
       "INSERT INTO vacation_access_plans "
-      + "(employee_key,employee_name,employee_code,accesses_json,activation_date,notes,completed,completed_at,updated_by,updated_at) "
-      + "VALUES (?,?,?,?,?,?,?,?,?,?) "
+      + "(employee_key,employee_name,employee_code,accesses_json,access_items_json,activation_date,notes,responsible,due_date,comments,completed,completed_at,updated_by,updated_at) "
+      + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
       + "ON CONFLICT(employee_key) DO UPDATE SET employee_name=excluded.employee_name,"
-      + "employee_code=excluded.employee_code,accesses_json=excluded.accesses_json,"
-      + "activation_date=excluded.activation_date,notes=excluded.notes,completed=excluded.completed,"
+      + "employee_code=excluded.employee_code,accesses_json=excluded.accesses_json,access_items_json=excluded.access_items_json,"
+      + "activation_date=excluded.activation_date,notes=excluded.notes,responsible=excluded.responsible,due_date=excluded.due_date,comments=excluded.comments,completed=excluded.completed,"
       + "completed_at=excluded.completed_at,updated_by=excluded.updated_by,updated_at=excluded.updated_at"
-    ).run(employeeKey, employeeName, employeeCode, JSON.stringify(accesses), activationDate, notes,
-      completed, completedAt, Number(request.user.id), timestamp);
+    ).run(employeeKey, employeeName, employeeCode, JSON.stringify(accesses), JSON.stringify(accessItems), activationDate, notes,
+      responsible, dueDate, comments, completed, completedAt, Number(request.user.id), timestamp);
+    addAudit(request.user.id, "update", "vacation_access", employeeKey, "Controle de retorno atualizado para " + employeeName);
     response.json({ sucesso: true, plan: {
       employeeKey: employeeKey, employeeName: employeeName, employeeCode: employeeCode,
-      accesses: accesses, activationDate: activationDate, notes: notes, completed: Boolean(completed),
+      accesses: accesses, accessItems: accessItems, activationDate: activationDate, notes: notes, responsible: responsible, dueDate: dueDate, comments: comments, completed: Boolean(completed),
       completedAt: completedAt, updatedAt: timestamp
     } });
+  });
+
+
+  router.get("/access-templates", requireAuth, function (request, response) {
+    const items = database.prepare("SELECT access_key AS accessKey,access_name AS accessName,active,updated_at AS updatedAt FROM access_templates ORDER BY access_name")
+      .all().map(function (row) { return { accessKey: row.accessKey, accessName: row.accessName, active: Boolean(row.active), updatedAt: row.updatedAt }; });
+    response.json({ sucesso: true, items: items });
+  });
+
+  router.put("/access-templates", requireAuth, requireMaster, function (request, response) {
+    const items = (Array.isArray(request.body.items) ? request.body.items : []).slice(0,100);
+    const upsert = database.prepare("INSERT INTO access_templates (access_key,access_name,active,updated_by,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(access_key) DO UPDATE SET access_name=excluded.access_name,active=excluded.active,updated_by=excluded.updated_by,updated_at=excluded.updated_at");
+    items.forEach(function (item) {
+      const name=safeText(item.accessName,120),key=normalizeSeedKey(item.accessKey||name);
+      if(name&&key)upsert.run(key,name,item.active===false?0:1,Number(request.user.id),nowIso());
+    });
+    addAudit(request.user.id,"update","access_templates","","Catálogo de acessos atualizado");
+    response.json({ sucesso:true });
+  });
+
+  router.get("/collaborators-snapshot", requireAuth, function (request, response) {
+    const row=database.prepare("SELECT file_name AS fileName,data_json AS dataJson,row_count AS rowCount,updated_at AS updatedAt FROM collaborator_snapshot WHERE id=1").get();
+    if(!row)return response.json({sucesso:true,snapshot:null});
+    let data=[];try{data=JSON.parse(row.dataJson||"[]");}catch{data=[];}
+    response.setHeader("Cache-Control","no-store");
+    response.json({sucesso:true,snapshot:{fileName:row.fileName,data:data,rowCount:Number(row.rowCount),updatedAt:row.updatedAt}});
+  });
+
+  router.put("/collaborators-snapshot", requireAuth, requireUpdatePermission, function (request, response) {
+    const data=(Array.isArray(request.body.data)?request.body.data:[]).slice(0,10000);
+    const fileName=safeText(request.body.fileName,240),timestamp=nowIso();
+    database.prepare("INSERT INTO collaborator_snapshot (id,file_name,data_json,row_count,updated_by,updated_at) VALUES (1,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET file_name=excluded.file_name,data_json=excluded.data_json,row_count=excluded.row_count,updated_by=excluded.updated_by,updated_at=excluded.updated_at")
+      .run(fileName,JSON.stringify(data),data.length,Number(request.user.id),timestamp);
+    addAudit(request.user.id,"import","collaborators","",fileName+" · "+data.length+" registros");
+    response.json({sucesso:true,updatedAt:timestamp,rowCount:data.length});
+  });
+
+  router.get("/tasks", requireAuth, function (request, response) {
+    const tasks=database.prepare("SELECT tasks.id,tasks.title,tasks.category,tasks.source_type AS sourceType,tasks.source_id AS sourceId,tasks.responsible,tasks.due_date AS dueDate,tasks.status,tasks.comments,tasks.created_at AS createdAt,tasks.updated_at AS updatedAt,users.username AS updatedBy FROM operational_tasks tasks LEFT JOIN users ON users.id=tasks.updated_by ORDER BY CASE tasks.status WHEN 'pending' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,tasks.due_date,tasks.id DESC").all();
+    response.json({sucesso:true,tasks:tasks.map(function(t){return {...t,id:Number(t.id)};})});
+  });
+
+  router.post("/tasks", requireAuth, requireUpdatePermission, function (request, response) {
+    const title=safeText(request.body.title,200);if(!title)return response.status(400).json({sucesso:false,mensagem:"Informe o título da tarefa."});
+    const timestamp=nowIso(),status=["pending","in_progress","done"].includes(request.body.status)?request.body.status:"pending";
+    const result=database.prepare("INSERT INTO operational_tasks (title,category,source_type,source_id,responsible,due_date,status,comments,created_by,created_at,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(title,safeText(request.body.category,80)||"general",safeText(request.body.sourceType,80),safeText(request.body.sourceId,160),safeText(request.body.responsible,160),normalizeDate(request.body.dueDate),status,safeText(request.body.comments,1500),Number(request.user.id),timestamp,Number(request.user.id),timestamp);
+    addAudit(request.user.id,"create","task",String(result.lastInsertRowid),title);
+    response.status(201).json({sucesso:true,id:Number(result.lastInsertRowid)});
+  });
+
+  router.patch("/tasks/:id", requireAuth, requireUpdatePermission, function (request, response) {
+    const id=Number(request.params.id),existing=database.prepare("SELECT * FROM operational_tasks WHERE id=?").get(id);
+    if(!existing)return response.status(404).json({sucesso:false,mensagem:"Tarefa não encontrada."});
+    const status=["pending","in_progress","done"].includes(request.body.status)?request.body.status:existing.status;
+    database.prepare("UPDATE operational_tasks SET title=?,responsible=?,due_date=?,status=?,comments=?,updated_by=?,updated_at=? WHERE id=?")
+      .run(safeText(request.body.title===undefined?existing.title:request.body.title,200),safeText(request.body.responsible===undefined?existing.responsible:request.body.responsible,160),request.body.dueDate===undefined?existing.due_date:normalizeDate(request.body.dueDate),status,safeText(request.body.comments===undefined?existing.comments:request.body.comments,1500),Number(request.user.id),nowIso(),id);
+    addAudit(request.user.id,"update","task",String(id),"Tarefa atualizada: "+existing.title);
+    response.json({sucesso:true});
+  });
+
+  router.get("/audit", requireAuth, requireMaster, function (request, response) {
+    const items=database.prepare("SELECT audit.id,audit.action,audit.entity_type AS entityType,audit.entity_id AS entityId,audit.description,audit.created_at AS createdAt,users.username FROM audit_log audit LEFT JOIN users ON users.id=audit.user_id ORDER BY audit.id DESC LIMIT 500").all();
+    response.json({sucesso:true,items:items.map(function(item){return {...item,id:Number(item.id)};})});
   });
 
 
@@ -773,6 +907,7 @@ function createAuth(options) {
       database.exec("ROLLBACK");
       throw error;
     }
+    addAudit(userId,"update","minimum_stock","",items.length+" regras de estoque atualizadas");
     return getMinimums();
   }
 
@@ -893,6 +1028,7 @@ function createAuth(options) {
         + "VALUES (?,'pending',?,?,?)"
       ).run(requestId, "Solicitação criada.", userId, timestamp);
       database.exec("COMMIT");
+      addAudit(userId,"create","restock_request",String(requestId),"Solicitação de reposição criada");
       return getRestockRequests().find(function (request) { return request.id === requestId; });
     } catch (error) {
       database.exec("ROLLBACK");
@@ -942,6 +1078,7 @@ function createAuth(options) {
       database.exec("ROLLBACK");
       throw error;
     }
+    addAudit(userId,"update","restock_request",String(id),"Solicitação de reposição atualizada");
     return getRestockRequests().find(function (request) { return request.id === id; });
   }
 
@@ -969,6 +1106,7 @@ function createAuth(options) {
     createRestockRequest: createRestockRequest,
     updateRestockRequest: updateRestockRequest,
     deleteRestockRequest: deleteRestockRequest,
+    addAudit: addAudit,
     setupRequired: setupRequired
   };
 }
