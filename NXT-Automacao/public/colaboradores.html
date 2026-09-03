@@ -203,7 +203,7 @@
   .vacation-summary .mini span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);font-weight:700;}
   .access-list{display:flex;gap:5px;flex-wrap:wrap;max-width:390px;}
   .access-tag{background:var(--accent-dim);color:#1455a3;border:1px solid #cfe1fb;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:600;}
-  .access-tag.empty{background:var(--panel-2);color:var(--text-faint);border-color:var(--line);}
+  .access-tag.empty{background:var(--panel-2);color:var(--text-faint);border-color:var(--line);}.access-tag.done{background:var(--ok-dim);color:var(--ok);border-color:#bdebd0}.access-checklist{display:grid;gap:7px;margin-top:8px}.access-check{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2);font-size:12px}.access-check input{width:17px;height:17px;accent-color:var(--ok)}
   .btn-action{border:1px solid #b9d4f6;background:#fff;color:#1455a3;border-radius:9px;padding:8px 11px;font-weight:700;cursor:pointer;white-space:nowrap;}
   .btn-action:hover{background:var(--accent-dim);}
   .countdown{display:inline-flex;flex-direction:column;gap:3px;}
@@ -400,8 +400,11 @@
           <div class="form-grid">
             <div class="form-group"><label>Data para reativar</label><input type="date" id="vacationActivationDate" required></div>
             <div class="form-group"><label>Período informado</label><input type="text" id="vacationPeriod" disabled></div>
-            <div class="form-group full"><label>Acessos a reativar — um por linha</label><textarea id="vacationAccesses" placeholder="Microsoft 365&#10;VPN&#10;NXT4Insight"></textarea></div>
+            <div class="form-group"><label>Responsável</label><input type="text" id="vacationResponsible" placeholder="Nome do responsável"></div>
+            <div class="form-group"><label>Prazo da tarefa</label><input type="date" id="vacationDueDate"></div>
+            <div class="form-group full"><label>Acessos a reativar — um por linha</label><textarea id="vacationAccesses" placeholder="Microsoft 365&#10;VPN&#10;NXT4Insight"></textarea><div class="access-checklist" id="vacationChecklist"></div></div>
             <div class="form-group full"><label>Observações</label><textarea id="vacationNotes" placeholder="Detalhes necessários para a reativação"></textarea></div>
+            <div class="form-group full"><label>Comentários do acompanhamento</label><textarea id="vacationComments" placeholder="Registre validações, impedimentos ou orientações"></textarea></div>
             <label class="check-row form-group full"><input type="checkbox" id="vacationCompleted"><span>Acessos reativados e conferidos</span></label>
           </div>
           <div class="modal-actions"><button type="button" class="btn-clear" id="cancelVacationModal">Cancelar</button><button type="submit" class="btn-primary" id="saveVacationPlan">Salvar controle</button></div>
@@ -429,6 +432,7 @@
   let ferias = [];
   let vacationPlans = new Map();
   let currentUser = null;
+  let accessTemplates = [];
 
   // ---------- drag & drop ----------
   dropzone.addEventListener('click', () => fileInput.click());
@@ -615,6 +619,7 @@
     applyTransfFilters();
     applySituacaoFilters();
     applyFeriasFilters();
+    saveCollaboratorSnapshot(filename);
   }
 
   // ---------- cards ----------
@@ -902,7 +907,7 @@
   function vacationPlan(person){
     return vacationPlans.get(String(person.key)) || {
       employeeKey:String(person.key), employeeName:person.nome, employeeCode:person.mat,
-      accesses:[], activationDate:toInputDate(addDays(person.feriasFim,1)), notes:'', completed:false
+      accesses:accessTemplates.slice(), accessItems:accessTemplates.map(name=>({name,completed:false})), activationDate:toInputDate(addDays(person.feriasFim,1)), notes:'', responsible:'', dueDate:toInputDate(addDays(person.feriasFim,1)), comments:'', completed:false
     };
   }
   function countdownInfo(person, plan){
@@ -947,7 +952,8 @@
     const canEdit=currentUser && currentUser.canEditOperationalData;
     tbody.innerHTML=list.map(person=>{
       const plan=vacationPlan(person),info=countdownInfo(person,plan);
-      const tags=plan.accesses.length?plan.accesses.map(a=>'<span class="access-tag">'+escapeHtml(a)+'</span>').join(''):'<span class="access-tag empty">Não definidos</span>';
+      const accessItems=(plan.accessItems&&plan.accessItems.length)?plan.accessItems:plan.accesses.map(a=>({name:a,completed:plan.completed}));
+      const tags=accessItems.length?accessItems.map(a=>'<span class="access-tag '+(a.completed?'done':'')+'">'+(a.completed?'✓ ':'')+escapeHtml(a.name)+'</span>').join(''):'<span class="access-tag empty">Não definidos</span>';
       return '<tr><td><div class="name-cell">'+escapeHtml(person.nome)+'</div><div class="sub-cell">'+escapeHtml(person.mat)+'</div></td>'+
         '<td class="mono">'+fmtDate(person.feriasInicio)+' → '+fmtDate(person.feriasFim)+'</td>'+
         '<td class="mono">'+fmtDate(plan.activationDate?new Date(plan.activationDate+'T00:00:00'):addDays(person.feriasFim,1))+'</td>'+
@@ -965,16 +971,27 @@
     document.getElementById('vacationActivationDate').value=plan.activationDate||toInputDate(addDays(person.feriasFim,1));
     document.getElementById('vacationPeriod').value=fmtDate(person.feriasInicio)+' a '+fmtDate(person.feriasFim);
     document.getElementById('vacationAccesses').value=plan.accesses.join('\n');
+    document.getElementById('vacationResponsible').value=plan.responsible||'';
+    document.getElementById('vacationDueDate').value=plan.dueDate||plan.activationDate||toInputDate(addDays(person.feriasFim,1));
     document.getElementById('vacationNotes').value=plan.notes||'';
+    document.getElementById('vacationComments').value=plan.comments||'';
+    renderAccessChecklist(plan.accessItems||[]);
     document.getElementById('vacationCompleted').checked=Boolean(plan.completed);
-    ['vacationActivationDate','vacationAccesses','vacationNotes','vacationCompleted'].forEach(id=>document.getElementById(id).disabled=!canEdit);
+    ['vacationActivationDate','vacationResponsible','vacationDueDate','vacationAccesses','vacationNotes','vacationComments','vacationCompleted'].forEach(id=>document.getElementById(id).disabled=!canEdit);
     document.getElementById('saveVacationPlan').classList.toggle('hidden',!canEdit);
     document.getElementById('vacationModal').classList.remove('hidden');
+  }
+  function renderAccessChecklist(savedItems){
+    const names=document.getElementById('vacationAccesses').value.split(/\r?\n|,/).map(v=>v.trim()).filter(Boolean);
+    const saved=new Map((savedItems||[]).map(item=>[normalize(item.name),Boolean(item.completed)]));
+    document.getElementById('vacationChecklist').innerHTML=names.map((name,index)=>'<label class="access-check"><input type="checkbox" data-access-check="'+index+'" '+(saved.get(normalize(name))?'checked':'')+'><span>'+escapeHtml(name)+'</span></label>').join('');
+    const canEdit=currentUser&&currentUser.canEditOperationalData;document.querySelectorAll('[data-access-check]').forEach(input=>input.disabled=!canEdit);
   }
   function closeVacationModal(){document.getElementById('vacationModal').classList.add('hidden');}
   document.getElementById('closeVacationModal').addEventListener('click',closeVacationModal);
   document.getElementById('cancelVacationModal').addEventListener('click',closeVacationModal);
   document.getElementById('vacationModal').addEventListener('click',e=>{if(e.target.id==='vacationModal')closeVacationModal();});
+  document.getElementById('vacationAccesses').addEventListener('input',()=>renderAccessChecklist(Array.from(document.querySelectorAll('[data-access-check]')).map(input=>({name:input.nextElementSibling.textContent,completed:input.checked}))));
   document.getElementById('searchFerias').addEventListener('input',applyFeriasFilters);
   document.getElementById('filterFerias').addEventListener('change',applyFeriasFilters);
   document.getElementById('clearFerias').addEventListener('click',()=>{document.getElementById('searchFerias').value='';document.getElementById('filterFerias').value='all';applyFeriasFilters();});
@@ -984,9 +1001,12 @@
     const person=ferias.find(item=>String(item.key)===String(key)); if(!person)return;
     const button=document.getElementById('saveVacationPlan');button.disabled=true;button.textContent='Salvando...';
     try{
+      const accesses=document.getElementById('vacationAccesses').value.split(/\r?\n|,/).map(v=>v.trim()).filter(Boolean);
+      const checks=Array.from(document.querySelectorAll('[data-access-check]'));
       const payload={employeeName:person.nome,employeeCode:person.mat,activationDate:document.getElementById('vacationActivationDate').value,
-        accesses:document.getElementById('vacationAccesses').value.split(/\r?\n|,/).map(v=>v.trim()).filter(Boolean),
-        notes:document.getElementById('vacationNotes').value,completed:document.getElementById('vacationCompleted').checked};
+        accesses:accesses,accessItems:accesses.map((name,index)=>({name,completed:Boolean(checks[index]&&checks[index].checked)})),
+        responsible:document.getElementById('vacationResponsible').value,dueDate:document.getElementById('vacationDueDate').value,
+        notes:document.getElementById('vacationNotes').value,comments:document.getElementById('vacationComments').value,completed:document.getElementById('vacationCompleted').checked};
       const response=await fetch('/api/auth/vacation-access-plans/'+encodeURIComponent(key),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const data=await response.json();if(!response.ok)throw new Error(data.mensagem||'Não foi possível salvar.');
       vacationPlans.set(String(key),data.plan);closeVacationModal();applyFeriasFilters();showToast('Controle de acessos salvo.');
@@ -1000,13 +1020,29 @@
   }
   async function loadVacationContext(){
     try{
-      const responses=await Promise.all([fetch('/api/auth/me'),fetch('/api/auth/vacation-access-plans')]);
+      const responses=await Promise.all([fetch('/api/auth/me'),fetch('/api/auth/vacation-access-plans'),fetch('/api/auth/access-templates')]);
       if(responses[0].ok){const me=await responses[0].json();currentUser=me.user;}
       if(responses[1].ok){const data=await responses[1].json();vacationPlans=new Map((data.plans||[]).map(plan=>[String(plan.employeeKey),plan]));}
+      if(responses[2].ok){const data=await responses[2].json();accessTemplates=(data.items||[]).filter(item=>item.active).map(item=>item.accessName);}
       if(ferias.length)applyFeriasFilters();
     }catch(error){console.warn('Não foi possível carregar o controle de férias.',error);}
   }
-  loadVacationContext();
+  async function saveCollaboratorSnapshot(filename){
+    if(!currentUser||!currentUser.canEditOperationalData)return;const data=[];
+    situacoes.forEach(x=>data.push({kind:'situation',key:x.key,nome:x.nome,mat:x.mat,dept:x.dept,situacao:x.situacao,feriasInicio:x.feriasInicio?x.feriasInicio.toISOString():'',feriasFim:x.feriasFim?x.feriasFim.toISOString():''}));
+    demitidos.forEach(x=>data.push({kind:'dismissal',nome:x.nome,mat:x.mat,dept:x.dept,data:x.data?x.data.toISOString():''}));
+    transferencias.forEach(x=>data.push({kind:'transfer',nome:x.nome,mat:x.mat,origem:x.origem,destino:x.destino,data:x.data?x.data.toISOString():''}));
+    try{await fetch('/api/auth/collaborators-snapshot',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileName:filename,data})});}catch(error){console.warn('Não foi possível compartilhar a planilha.',error);}
+  }
+  async function loadCollaboratorSnapshot(){
+    try{const response=await fetch('/api/auth/collaborators-snapshot',{cache:'no-store'});if(!response.ok)return;const result=await response.json(),snapshot=result.snapshot;if(!snapshot||!snapshot.data||!snapshot.data.length)return;
+      situacoes=snapshot.data.filter(x=>x.kind==='situation').map(x=>({...x,feriasInicio:parseDate(x.feriasInicio),feriasFim:parseDate(x.feriasFim)}));
+      demitidos=snapshot.data.filter(x=>x.kind==='dismissal').map(x=>({...x,data:parseDate(x.data)})).filter(x=>x.data).sort((a,b)=>b.data-a.data);
+      transferencias=snapshot.data.filter(x=>x.kind==='transfer').map(x=>({...x,data:parseDate(x.data)})).filter(x=>x.data).sort((a,b)=>b.data-a.data);
+      ferias=situacoes.filter(x=>x.feriasInicio&&x.feriasFim).sort((a,b)=>a.feriasFim-b.feriasFim);statusPill.classList.add('live');statusText.textContent=snapshot.fileName+' · compartilhada em '+new Date(snapshot.updatedAt).toLocaleString('pt-BR');fileMeta.textContent='Última planilha carregada automaticamente do servidor.';appEl.classList.remove('hidden');renderCards();applyDemitidosFilters();applyTransfFilters();applySituacaoFilters();applyFeriasFilters();
+    }catch(error){console.warn('Não foi possível carregar a última planilha.',error);}
+  }
+  loadVacationContext().then(loadCollaboratorSnapshot);
 
   function escapeHtml(str){
     return String(str||'').replace(/[&<>"']/g, m => ({
