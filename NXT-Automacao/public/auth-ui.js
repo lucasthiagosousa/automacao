@@ -2,7 +2,7 @@
   "use strict";
 
   const ROLE_LABELS = { master: "Master Admin", operator: "Operador", viewer: "Visualizador" };
-  const WORKSPACE_PAGES = ["/", "/index.html", "/toner.html", "/colaboradores.html"];
+  const WORKSPACE_PAGES = ["/central.html", "/", "/index.html", "/toner.html", "/colaboradores.html"];
 
   window.addEventListener("pageshow", function (event) {
     if (event.persisted) window.location.reload();
@@ -83,6 +83,7 @@
   }
 
   function workspaceIcon(type) {
+    if (type === "central") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M14 17h7M17.5 13.5v7"/></svg>';
     if (type === "stock") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-9 5 9 5 9-5-9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg>';
     if (type === "toner") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7"/></svg>';
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>';
@@ -92,11 +93,12 @@
     const path = window.location.pathname;
     if (!WORKSPACE_PAGES.includes(path)) return;
     document.body.classList.add("workspace-operational");
+    if (path === "/central.html") document.body.classList.add("workspace-page-central");
     if (path === "/" || path === "/index.html") document.body.classList.add("workspace-page-stock");
     if (path === "/toner.html") document.body.classList.add("workspace-page-toner");
     if (path === "/colaboradores.html") document.body.classList.add("workspace-page-colaboradores");
 
-    document.querySelectorAll('a[href="/"],a[href="/index.html"],a[href="/toner.html"],a[href="/colaboradores.html"]').forEach(function (anchor) {
+    document.querySelectorAll('a[href="/central.html"],a[href="/"],a[href="/index.html"],a[href="/toner.html"],a[href="/colaboradores.html"]').forEach(function (anchor) {
       if (anchor.closest(".header-actions, .header-right")) anchor.dataset.oldWorkspaceLink = "true";
     });
 
@@ -106,6 +108,7 @@
     nav.className = "workspace-tabs";
     nav.setAttribute("aria-label", "Módulos do sistema");
     [
+      { href: "/central.html", type: "central", title: "Central", subtitle: "Pendências e indicadores", paths: ["/central.html"] },
       { href: "/", type: "stock", title: "Estoque", subtitle: "Ativos e solicitações", paths: ["/", "/index.html"] },
       { href: "/toner.html?v=20260828-9", type: "toner", title: "Toners", subtitle: "Impressoras e suprimentos", paths: ["/toner.html"] },
       { href: "/colaboradores.html", type: "people", title: "Colaboradores", subtitle: "Acessos e movimentações", paths: ["/colaboradores.html"] }
