@@ -55,6 +55,16 @@
         <div class="panel-head"><h2 class="panel-title">Notificações automáticas</h2><p class="panel-desc">Resumos consolidados de estoque e impressoras, além do andamento de compras, férias e tarefas.</p></div>
         <form class="form" id="notificationForm">
           <label class="check-item"><input id="notificationEnabled" type="checkbox"> Ativar notificações automáticas</label>
+          <div class="check-grid">
+            <label class="check-item"><input id="notifyStock" type="checkbox" checked> Resumo de estoque</label>
+            <label class="check-item"><input id="notifyToner" type="checkbox" checked> Resumo de toners</label>
+            <label class="check-item"><input id="autoUpdate" type="checkbox"> Atualizar NXT automaticamente</label>
+            <label class="check-item"><input id="dailyReport" type="checkbox"> Fechamento diário do estoque</label>
+          </div>
+          <div class="inline-grid">
+            <label>Atualizar NXT a cada<select id="autoUpdateHours"><option value="1">1 hora</option><option value="2">2 horas</option><option value="4">4 horas</option><option value="6">6 horas</option></select></label>
+            <label>Horário do fechamento diário<input id="dailyReportTime" type="time" value="18:00"></label>
+          </div>
           <div class="inline-grid">
             <label>Canal<select id="notificationChannel"><option value="teams">Microsoft Teams</option><option value="email">E-mail</option><option value="both">Teams e e-mail</option></select></label>
             <label>E-mail destinatário<input id="notificationEmail" type="email" placeholder="compras@empresa.com"></label>
@@ -98,6 +108,19 @@
       <div class="policy">Mínimo de 10 caracteres, com maiúscula, minúscula, número e símbolo.</div>
       <div class="message" id="passwordMessage"></div>
       <div class="dialog-actions"><button class="btn" id="cancelPassword" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Salvar senha</button></div>
+    </form>
+  </div>
+
+  <div class="password-dialog" id="notificationSendDialog">
+    <form class="dialog-card" id="notificationSendForm">
+      <h2>Enviar dados ao Teams</h2>
+      <p>Selecione quais informações devem ser publicadas no canal.</p>
+      <div class="check-grid">
+        <label class="check-item"><input id="manualStock" type="checkbox" checked> Estoque mínimo e compras</label>
+        <label class="check-item"><input id="manualToner" type="checkbox" checked> Impressoras e toners críticos</label>
+      </div>
+      <div class="message" id="manualNotificationMessage"></div>
+      <div class="dialog-actions"><button class="btn" id="cancelNotificationSend" type="button">Cancelar</button><button class="btn btn-primary" type="submit">Enviar ao canal</button></div>
     </form>
   </div>
 
@@ -329,13 +352,15 @@
       const data=await api("/api/auth/notification-settings",{cache:"no-store"}),s=data.settings;
       notificationEnabled.checked=s.enabled;notificationChannel.value=s.channel;notificationEmail.value=s.emailTo||"";teamsWebhook.value=s.teamsWebhook||"";
       smtpHost.value=s.smtpHost||"";smtpPort.value=s.smtpPort||587;smtpFrom.value=s.smtpFrom||"";smtpUser.value=s.smtpUser||"";smtpSsl.checked=s.smtpSsl!==false;
-      staleDays.value=s.staleDays||5;taskLeadDays.value=s.taskLeadDays||2;
+      staleDays.value=s.staleDays||5;taskLeadDays.value=s.taskLeadDays||2;notifyStock.checked=s.notifyStock!==false;notifyToner.checked=s.notifyToner!==false;autoUpdate.checked=Boolean(s.autoUpdate);autoUpdateHours.value=String(s.autoUpdateHours||1);dailyReport.checked=Boolean(s.dailyReport);dailyReportTime.value=s.dailyReportTime||"18:00";
     }
     document.getElementById("notificationForm").addEventListener("submit",async function(event){
       event.preventDefault();const message=document.getElementById("notificationMessage");message.textContent="";
-      try{await api("/api/auth/notification-settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:notificationEnabled.checked,channel:notificationChannel.value,emailTo:notificationEmail.value,teamsWebhook:teamsWebhook.value,smtpHost:smtpHost.value,smtpPort:smtpPort.value,smtpFrom:smtpFrom.value,smtpUser:smtpUser.value,smtpPassword:smtpPassword.value,smtpSsl:smtpSsl.checked,staleDays:staleDays.value,taskLeadDays:taskLeadDays.value})});smtpPassword.value="";message.style.color="#027a48";message.textContent="Configurações salvas.";}catch(error){message.style.color="#b42318";message.textContent=error.message;}
+      try{await api("/api/auth/notification-settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:notificationEnabled.checked,channel:notificationChannel.value,emailTo:notificationEmail.value,teamsWebhook:teamsWebhook.value,smtpHost:smtpHost.value,smtpPort:smtpPort.value,smtpFrom:smtpFrom.value,smtpUser:smtpUser.value,smtpPassword:smtpPassword.value,smtpSsl:smtpSsl.checked,staleDays:staleDays.value,taskLeadDays:taskLeadDays.value,notifyStock:notifyStock.checked,notifyToner:notifyToner.checked,autoUpdate:autoUpdate.checked,autoUpdateHours:autoUpdateHours.value,dailyReport:dailyReport.checked,dailyReportTime:dailyReportTime.value})});smtpPassword.value="";message.style.color="#027a48";message.textContent="Configurações salvas.";}catch(error){message.style.color="#b42318";message.textContent=error.message;}
     });
-    document.getElementById("testNotification").onclick=async function(){const message=document.getElementById("notificationMessage");try{await api("/api/notifications/test",{method:"POST"});message.style.color="#027a48";message.textContent="Teste enviado com sucesso.";}catch(error){message.style.color="#b42318";message.textContent=error.message;}};document.getElementById("sendDigest").onclick=async function(){const message=document.getElementById("notificationMessage");try{const data=await api("/api/notifications/digest",{method:"POST"});message.style.color="#027a48";message.textContent=data.mensagem||"Resumo operacional enviado ao canal.";}catch(error){message.style.color="#b42318";message.textContent=error.message;}};
+    document.getElementById("testNotification").onclick=async function(){const message=document.getElementById("notificationMessage");try{await api("/api/notifications/test",{method:"POST"});message.style.color="#027a48";message.textContent="Teste enviado com sucesso.";}catch(error){message.style.color="#b42318";message.textContent=error.message;}};document.getElementById("sendDigest").onclick=function(){document.getElementById("manualNotificationMessage").textContent="";document.getElementById("notificationSendDialog").classList.add("show");};
+    document.getElementById("cancelNotificationSend").onclick=function(){document.getElementById("notificationSendDialog").classList.remove("show");};
+    document.getElementById("notificationSendForm").onsubmit=async function(event){event.preventDefault();const types=[];if(manualStock.checked)types.push("stock");if(manualToner.checked)types.push("toner");const message=document.getElementById("manualNotificationMessage");if(!types.length){message.textContent="Selecione Estoque ou Toners.";return;}try{const data=await api("/api/notifications/digest",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({types:types})});message.style.color="#027a48";message.textContent=data.mensagem||"Dados enviados.";setTimeout(function(){document.getElementById("notificationSendDialog").classList.remove("show");},900);}catch(error){message.style.color="#b42318";message.textContent=error.message;}};
 
     document.getElementById("restoreButton").onclick=async function(){
       const file=document.getElementById("restoreFile").files[0],message=document.getElementById("backupMessage");if(!file){message.textContent="Selecione um arquivo de backup.";return;}
