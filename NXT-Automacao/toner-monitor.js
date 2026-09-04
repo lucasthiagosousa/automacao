@@ -156,7 +156,9 @@ async function walk(ip, baseOid, timeout) {
 }
 
 function tonerSupply(description) {
-  return /(toner|cartridge|cartucho|tinta|ink)/i.test(description);
+  const text=String(description||"");
+  if (/(unidade de coleta|coleta de toner|collection unit|waste toner|reservatório de resíduos|recipiente de resíduos)/i.test(text)) return false;
+  return /(toner|cartridge|cartucho|tinta|ink)/i.test(text);
 }
 
 async function checkPrinter(printer, threshold, timeout) {
