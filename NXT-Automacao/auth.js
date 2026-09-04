@@ -237,6 +237,34 @@ function createAuth(options) {
     }
   });
 
+  database.exec(
+    "CREATE TABLE IF NOT EXISTS notification_log ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,event_type TEXT NOT NULL,"
+    + "title TEXT NOT NULL,message TEXT NOT NULL,channel TEXT NOT NULL,status TEXT NOT NULL,"
+    + "created_at TEXT NOT NULL,sent_at TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT ''"
+    + ");"
+    + "CREATE TABLE IF NOT EXISTS toner_history ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,printer_ip TEXT NOT NULL,printer_model TEXT NOT NULL DEFAULT '',"
+    + "supply_name TEXT NOT NULL,supply_color TEXT NOT NULL DEFAULT '',level INTEGER NOT NULL,"
+    + "status TEXT NOT NULL DEFAULT '',recorded_at TEXT NOT NULL"
+    + ");"
+    + "CREATE INDEX IF NOT EXISTS idx_toner_history_ip_date ON toner_history(printer_ip,recorded_at);"
+    + "CREATE TABLE IF NOT EXISTS inventory_counts ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',"
+    + "scheduled_date TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',created_by INTEGER,"
+    + "created_at TEXT NOT NULL,closed_at TEXT NOT NULL DEFAULT '',FOREIGN KEY(created_by) REFERENCES users(id)"
+    + ");"
+    + "CREATE TABLE IF NOT EXISTS inventory_count_items ("
+    + "id INTEGER PRIMARY KEY AUTOINCREMENT,count_id INTEGER NOT NULL,category_key TEXT NOT NULL,"
+    + "category_name TEXT NOT NULL,system_quantity INTEGER NOT NULL,physical_quantity INTEGER,"
+    + "notes TEXT NOT NULL DEFAULT '',FOREIGN KEY(count_id) REFERENCES inventory_counts(id) ON DELETE CASCADE"
+    + ");"
+  );
+  const userColumns = database.prepare("PRAGMA table_info(users)").all().map(function (column) { return column.name; });
+  if (!userColumns.includes("permissions_json")) {
+    database.exec("ALTER TABLE users ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '{}'");
+  }
+
   const router = express.Router();
   const loginAttempts = new Map();
 
@@ -357,24 +385,37 @@ function createAuth(options) {
     if (!token) return null;
     database.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(Date.now());
     return database.prepare(
-      "SELECT users.id,users.username,users.role,users.active,sessions.expires_at "
+      "SELECT users.id,users.username,users.role,users.active,users.permissions_json,sessions.expires_at "
       + "FROM sessions JOIN users ON users.id = sessions.user_id "
       + "WHERE sessions.token_hash = ? AND sessions.expires_at > ? AND users.active = 1"
     ).get(tokenHash(token), Date.now()) || null;
   }
 
+  const PERMISSION_KEYS = ["stock","toner","collaborators","create_requests","edit_tasks","view_audit"];
+  function defaultPermissions(role) {
+    if (role === "master") return Object.fromEntries(PERMISSION_KEYS.map(function (key) { return [key, true]; }));
+    if (role === "operator") return { stock:true,toner:true,collaborators:true,create_requests:true,edit_tasks:true,view_audit:false };
+    return { stock:true,toner:true,collaborators:true,create_requests:false,edit_tasks:false,view_audit:false };
+  }
+  function userPermissions(user) {
+    const defaults = defaultPermissions(user.role);
+    try {
+      const custom = JSON.parse(user.permissions_json || "{}");
+      PERMISSION_KEYS.forEach(function (key) { if (typeof custom[key] === "boolean") defaults[key] = custom[key]; });
+    } catch {}
+    if (user.role === "master") PERMISSION_KEYS.forEach(function (key) { defaults[key] = true; });
+    return defaults;
+  }
   function publicUser(user) {
+    const permissions = userPermissions(user);
     return {
-      id: Number(user.id),
-      username: user.username,
-      role: user.role,
-      active: Boolean(user.active),
-      canEditMinimum: user.role === "master",
-      canManageUsers: user.role === "master",
+      id: Number(user.id), username: user.username, role: user.role, active: Boolean(user.active),
+      permissions: permissions,
+      canEditMinimum: user.role === "master", canManageUsers: user.role === "master",
       canManageNxtCredentials: user.role === "master",
-      canManagePrinters: user.role === "master" || user.role === "operator",
-      canEditOperationalData: user.role === "master" || user.role === "operator",
-      canUpdateNxt: user.role === "master" || user.role === "operator"
+      canManagePrinters: user.role === "master" || (user.role === "operator" && permissions.toner),
+      canEditOperationalData: user.role === "master" || (user.role === "operator" && permissions.edit_tasks),
+      canUpdateNxt: user.role === "master" || (user.role === "operator" && permissions.stock)
     };
   }
 
@@ -405,6 +446,19 @@ function createAuth(options) {
       });
     }
     return next();
+  }
+
+  function requirePermission(permission) {
+    return function (request, response, next) {
+      if (!request.user) {
+        const user = currentUser(request);
+        if (user) request.user = user;
+      }
+      if (!request.user || !userPermissions(request.user)[permission]) {
+        return response.status(403).json({ sucesso:false, mensagem:"Seu usuário não possui permissão para esta ação." });
+      }
+      return next();
+    };
   }
 
   function requireUpdatePermission(request, response, next) {
@@ -670,6 +724,59 @@ function createAuth(options) {
   });
 
 
+  router.get("/notification-settings", requireAuth, requireMaster, function (request, response) {
+    response.json({ sucesso:true, settings:{
+      enabled:getSetting("notifications_enabled","0")==="1", channel:getSetting("notifications_channel","teams"),
+      teamsWebhook:getSetting("notifications_teams_webhook",""), emailTo:getSetting("notifications_email_to",""),
+      staleDays:Number(getSetting("notifications_stale_days","5"))||5, taskLeadDays:Number(getSetting("notifications_task_lead_days","2"))||2
+    }});
+  });
+  router.put("/notification-settings", requireAuth, requireMaster, function (request, response) {
+    const channel=["teams","email","both"].includes(request.body.channel)?request.body.channel:"teams";
+    setSetting("notifications_enabled",request.body.enabled?"1":"0",request.user.id);
+    setSetting("notifications_channel",channel,request.user.id);
+    setSetting("notifications_teams_webhook",safeText(request.body.teamsWebhook,2000),request.user.id);
+    setSetting("notifications_email_to",safeText(request.body.emailTo,500),request.user.id);
+    setSetting("notifications_stale_days",String(Math.max(1,Number(request.body.staleDays)||5)),request.user.id);
+    setSetting("notifications_task_lead_days",String(Math.max(0,Number(request.body.taskLeadDays)||2)),request.user.id);
+    addAudit(request.user.id,"update","notifications","","Configurações de notificações atualizadas");
+    response.json({sucesso:true});
+  });
+
+  router.get("/notification-log", requireAuth, requireMaster, function (request,response) {
+    response.json({sucesso:true,items:database.prepare("SELECT * FROM notification_log ORDER BY id DESC LIMIT 200").all()});
+  });
+
+  router.get("/toner-history", requireAuth, requirePermission("toner"), function (request,response) {
+    const days=Math.max(1,Math.min(365,Number(request.query.days)||30));
+    const since=new Date(Date.now()-days*86400000).toISOString();
+    const rows=database.prepare("SELECT printer_ip AS printerIp,printer_model AS printerModel,supply_name AS supplyName,supply_color AS supplyColor,level,status,recorded_at AS recordedAt FROM toner_history WHERE recorded_at>=? ORDER BY recorded_at").all(since);
+    response.json({sucesso:true,items:rows});
+  });
+
+  router.get("/inventory-counts", requireAuth, requirePermission("stock"), function (request,response) {
+    const counts=database.prepare("SELECT * FROM inventory_counts ORDER BY id DESC").all();
+    const getItems=database.prepare("SELECT id,category_key AS categoryKey,category_name AS categoryName,system_quantity AS systemQuantity,physical_quantity AS physicalQuantity,notes FROM inventory_count_items WHERE count_id=? ORDER BY category_name");
+    response.json({sucesso:true,counts:counts.map(function(c){return {...c,items:getItems.all(c.id)};})});
+  });
+  router.post("/inventory-counts", requireAuth, requirePermission("edit_tasks"), function (request,response) {
+    const title=safeText(request.body.title,180)||"Conferência de estoque";
+    const rows=(Array.isArray(request.body.items)?request.body.items:[]).slice(0,500);
+    const result=database.prepare("INSERT INTO inventory_counts (title,status,scheduled_date,notes,created_by,created_at) VALUES (?,'open',?,?,?,?)").run(title,normalizeDate(request.body.scheduledDate),safeText(request.body.notes,1000),request.user.id,nowIso());
+    const insert=database.prepare("INSERT INTO inventory_count_items (count_id,category_key,category_name,system_quantity,physical_quantity,notes) VALUES (?,?,?,?,NULL,'')");
+    rows.forEach(function(item){const key=normalizeCategory(item.categoryKey||item.categoryName);if(key)insert.run(result.lastInsertRowid,key,safeText(item.categoryName,160)||key,Math.max(0,Number(item.systemQuantity)||0));});
+    addAudit(request.user.id,"create","inventory_count",String(result.lastInsertRowid),title);
+    response.status(201).json({sucesso:true,id:Number(result.lastInsertRowid)});
+  });
+  router.patch("/inventory-counts/:id", requireAuth, requirePermission("edit_tasks"), function (request,response) {
+    const id=Number(request.params.id),items=(Array.isArray(request.body.items)?request.body.items:[]);
+    const update=database.prepare("UPDATE inventory_count_items SET physical_quantity=?,notes=? WHERE count_id=? AND id=?");
+    items.forEach(function(item){update.run(item.physicalQuantity===null?null:Math.max(0,Number(item.physicalQuantity)||0),safeText(item.notes,500),id,Number(item.id));});
+    if(request.body.close)database.prepare("UPDATE inventory_counts SET status='closed',closed_at=? WHERE id=?").run(nowIso(),id);
+    addAudit(request.user.id,"update","inventory_count",String(id),"Conferência atualizada");
+    response.json({sucesso:true});
+  });
+
   router.post("/change-password", requireAuth, function (request, response) {
     const currentPassword = String(request.body.currentPassword || "");
     const newPassword = String(request.body.newPassword || "");
@@ -690,7 +797,7 @@ function createAuth(options) {
 
   router.get("/users", requireAuth, requireMaster, function (request, response) {
     const users = database.prepare(
-      "SELECT id,username,role,active,created_at,updated_at FROM users ORDER BY username"
+      "SELECT id,username,role,active,permissions_json,created_at,updated_at FROM users ORDER BY username"
     ).all().map(publicUser);
     response.json({ sucesso: true, users: users });
   });
@@ -756,11 +863,16 @@ function createAuth(options) {
       passwordSalt = created.salt;
       database.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
     }
+    const permissions = defaultPermissions(role);
+    const requestedPermissions = request.body.permissions && typeof request.body.permissions === "object" ? request.body.permissions : {};
+    PERMISSION_KEYS.forEach(function (key) {
+      if (typeof requestedPermissions[key] === "boolean") permissions[key] = requestedPermissions[key];
+    });
     database.prepare(
-      "UPDATE users SET role=?,active=?,password_hash=?,password_salt=?,updated_at=? WHERE id=?"
-    ).run(role, active, passwordHash, passwordSalt, nowIso(), id);
+      "UPDATE users SET role=?,active=?,password_hash=?,password_salt=?,permissions_json=?,updated_at=? WHERE id=?"
+    ).run(role, active, passwordHash, passwordSalt, JSON.stringify(permissions), nowIso(), id);
     const updated = database.prepare(
-      "SELECT id,username,role,active,created_at,updated_at FROM users WHERE id=?"
+      "SELECT id,username,role,active,permissions_json,created_at,updated_at FROM users WHERE id=?"
     ).get(id);
     response.json({ sucesso: true, user: publicUser(updated) });
   });
@@ -1089,11 +1201,31 @@ function createAuth(options) {
     return Number(result.changes) > 0;
   }
 
+  function recordTonerSnapshot(report) {
+    const insert=database.prepare("INSERT INTO toner_history (printer_ip,printer_model,supply_name,supply_color,level,status,recorded_at) VALUES (?,?,?,?,?,?,?)");
+    const timestamp=report && report.updatedAt ? report.updatedAt : nowIso();
+    database.exec("BEGIN");
+    try {
+      (report && Array.isArray(report.printers) ? report.printers : []).forEach(function(printer) {
+        (Array.isArray(printer.supplies)?printer.supplies:[]).forEach(function(supply) {
+          const level=Number(supply.level);
+          if(Number.isFinite(level))insert.run(safeText(printer.ip,80),safeText(printer.model,160),safeText(supply.name||supply.description,160),safeText(supply.color,80),Math.max(0,Math.min(100,Math.round(level))),safeText(printer.status,60),timestamp);
+        });
+      });
+      database.exec("DELETE FROM toner_history WHERE recorded_at < datetime('now','-400 days')");
+      database.exec("COMMIT");
+    } catch(error) { database.exec("ROLLBACK"); throw error; }
+  }
+
   return {
     router: router,
     requireAuth: requireAuth,
     requireMaster: requireMaster,
     requireUpdatePermission: requireUpdatePermission,
+    requirePermission: requirePermission,
+    userPermissions: userPermissions,
+    database: database,
+    databasePath: databasePath,
     getMinimums: getMinimums,
     getSetting: getSetting,
     setSetting: setSetting,
@@ -1106,6 +1238,7 @@ function createAuth(options) {
     createRestockRequest: createRestockRequest,
     updateRestockRequest: updateRestockRequest,
     deleteRestockRequest: deleteRestockRequest,
+    recordTonerSnapshot: recordTonerSnapshot,
     addAudit: addAudit,
     setupRequired: setupRequired
   };
