@@ -215,7 +215,7 @@
       + '<button class="btn btn-soft" type="button" id="stockDetailClose">Fechar</button></div></div>'
       + '<div class="table-scroll"><table><thead><tr>'
       + '<th>Código</th><th>Modelo</th><th>Marca</th><th>Fabricante</th>'
-      + '<th>Status</th><th>Alocado para</th><th>Proprietário / empresa</th><th>Qtd.</th>'
+      + '<th>Status</th><th>Alocado para</th><th>Proprietário / empresa</th><th>Qtd.</th><th>QR Code</th>'
       + '</tr></thead><tbody id="stockDetailBody"></tbody></table></div>';
     if (panel) panel.insertAdjacentElement("afterend", detailPanel);
 
@@ -295,6 +295,7 @@
           + "<td>" + esc(allocated || "—") + "</td>"
           + "<td>" + esc(owner || "—") + "</td>"
           + "<td><strong>" + qty(asset) + "</strong></td>"
+          + '<td><button class="btn btn-soft asset-qr" type="button" data-asset-code="' + esc(code) + '" data-asset-model="' + esc(model) + '">Gerar etiqueta</button></td>'
           + "</tr>";
       }).join("");
       detailPanel.hidden = false;
@@ -1083,4 +1084,14 @@
   }
 
   initialize();
+  document.addEventListener("click",function(event){
+    const button=event.target.closest(".asset-qr");if(!button)return;
+    const code=button.dataset.assetCode||"",model=button.dataset.assetModel||"",target=location.origin+"/?asset="+encodeURIComponent(code);
+    const qr="https://api.qrserver.com/v1/create-qr-code/?size=240x240&data="+encodeURIComponent(target);
+    const popup=window.open("","_blank","width=460,height=620");if(!popup)return;
+    popup.document.write('<!doctype html><html><head><title>Etiqueta '+esc(code)+'</title><style>body{font-family:Segoe UI,Arial;text-align:center;padding:32px;color:#102a43}.label{border:2px solid #102a43;border-radius:18px;padding:24px}img{width:240px;height:240px}.code{font-size:24px;font-weight:900;margin:12px}.model{color:#61758a;margin-bottom:16px}@media print{button{display:none}}</style></head><body><div class="label"><h2>Central de Operações de TI</h2><img src="'+qr+'" alt="QR Code"><div class="code">'+esc(code||"Sem código")+'</div><div class="model">'+esc(model)+'</div><small>Leia para abrir o cadastro do ativo</small></div><p><button onclick="print()">Imprimir etiqueta</button></p></body></html>');popup.document.close();
+  });
+  const requestedAsset=new URLSearchParams(location.search).get("asset");
+  if(requestedAsset){setTimeout(function(){const input=document.getElementById("searchInput");if(input){input.value=requestedAsset;input.dispatchEvent(new Event("input",{bubbles:true}));input.scrollIntoView({behavior:"smooth",block:"center"});}},1200);}
+
 })();
