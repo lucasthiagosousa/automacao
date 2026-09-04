@@ -592,8 +592,7 @@ async function sendStartupDigest(force) {
   }catch{}
   try{const toner=lerTonerAtual();critical=Number(toner.summary&&toner.summary.critical)||0;}catch{}
   try{openRequests=auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length;}catch{}
-  const date=new Date().toISOString().slice(0,10);
-  return dispatchNotification((force?"manual-digest:"+Date.now():"startup-digest:"+date),"startup","Servidor ativo · resumo operacional",
+  return dispatchNotification((force?"manual-digest:":"startup-digest:")+Date.now(),"startup","Servidor ativo · resumo operacional",
     shortages.length?"Existem itens abaixo do estoque mínimo que precisam de compra.":"O servidor foi iniciado e não existem faltas de estoque monitoradas.",false,{
       "Itens para comprar":shortages.length?shortages.join(" · "):"Nenhum",
       "Toners críticos":critical,"Solicitações abertas":openRequests,
