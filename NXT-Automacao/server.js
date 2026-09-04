@@ -57,10 +57,12 @@ auth.seedPrinters(tonerMonitor.printers);
 auth.database.exec(
   "CREATE TABLE IF NOT EXISTS stock_snapshots ("
   + "id INTEGER PRIMARY KEY AUTOINCREMENT,snapshot_date TEXT NOT NULL,captured_at TEXT NOT NULL,"
-  + "categories_json TEXT NOT NULL,source TEXT NOT NULL DEFAULT 'manual'"
+  + "categories_json TEXT NOT NULL,assets_json TEXT NOT NULL DEFAULT '[]',source TEXT NOT NULL DEFAULT 'manual'"
   + ");"
   + "CREATE INDEX IF NOT EXISTS idx_stock_snapshots_date ON stock_snapshots(snapshot_date,captured_at);"
 );
+const stockSnapshotColumns=auth.database.prepare("PRAGMA table_info(stock_snapshots)").all().map(function(column){return column.name;});
+if(!stockSnapshotColumns.includes("assets_json"))auth.database.exec("ALTER TABLE stock_snapshots ADD COLUMN assets_json TEXT NOT NULL DEFAULT '[]'");
 
 app.get(["/login", "/login.html"], (req, res) => {
   res.sendFile(path.join(pastaPublica, "login.html"));
@@ -1150,8 +1152,9 @@ app.post(
 function localDateKey(value){const d=value||new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 async function captureStockSnapshot(source) {
   const stock=await lerPlanilha(),categories=(stock.categorias||[]).map(function(item){return{name:String(item.nome||""),quantity:Number(item.atual)||0};}).filter(function(item){return item.name;});
+  const assets=(stock.ativos||[]).map(function(item){return{code:String(item.codigo||""),category:String(item.categoria||""),owner:String(item.proprietario||""),allocatedTo:String(item.alocadoPara||""),model:String(item.modelo||"")};});
   const now=new Date(),date=localDateKey(now);
-  auth.database.prepare("INSERT INTO stock_snapshots (snapshot_date,captured_at,categories_json,source) VALUES (?,?,?,?)").run(date,now.toISOString(),JSON.stringify(categories),source||"manual");
+  auth.database.prepare("INSERT INTO stock_snapshots (snapshot_date,captured_at,categories_json,assets_json,source) VALUES (?,?,?,?,?)").run(date,now.toISOString(),JSON.stringify(categories),JSON.stringify(assets),source||"manual");
   auth.database.prepare("DELETE FROM stock_snapshots WHERE captured_at < datetime('now','-60 days')").run();
   return categories;
 }
@@ -1173,15 +1176,20 @@ function scheduledNxtUpdate() {
 }
 async function sendDailyStockMovementReport() {
   if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
-  const date=localDateKey(),rows=auth.database.prepare("SELECT categories_json AS categoriesJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? ORDER BY captured_at").all(date);
+  const date=localDateKey(),rows=auth.database.prepare("SELECT categories_json AS categoriesJson,assets_json AS assetsJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? ORDER BY captured_at").all(date);
   if(!rows.length)return false;
   function parse(row){try{return JSON.parse(row.categoriesJson||"[]");}catch{return[];}}
   const first=parse(rows[0]),last=parse(rows[rows.length-1]),names=new Set(first.concat(last).map(function(item){return item.name;})),changed=[],unchanged=[];
   names.forEach(function(name){const before=(first.find(function(item){return item.name===name;})||{quantity:0}).quantity,after=(last.find(function(item){return item.name===name;})||{quantity:0}).quantity,difference=after-before;const item={name:name,before:before,after:after,difference:difference};(difference?changed:unchanged).push(item);});
-  const details={"Período":new Date(rows[0].capturedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+" até "+new Date(rows[rows.length-1].capturedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),"Categorias movimentadas":changed.length,"Sem movimentação":unchanged.length};
-  changed.slice(0,15).forEach(function(item){details[item.name]=item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")";});
-  const message=changed.length?changed.map(function(item){return "• "+item.name+": "+item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")";}).join("\n"):"Nenhuma variação de quantidade foi identificada no estoque hoje.";
-  if(unchanged.length)details["Itens sem alteração"]=unchanged.slice(0,20).map(function(item){return item.name+" ("+item.after+")";}).join(", ");
+  function parseAssets(row){try{return JSON.parse(row.assetsJson||"[]");}catch{return[];}}
+  const firstAssets=parseAssets(rows[0]),lastAssets=parseAssets(rows[rows.length-1]),assetKey=function(item,index){return item.code||[item.category,item.model,index].join("|");},beforeMap=new Map(firstAssets.map(function(item,index){return[assetKey(item,index),item];})),afterMap=new Map(lastAssets.map(function(item,index){return[assetKey(item,index),item];})),movements=[];
+  afterMap.forEach(function(item,key){const previous=beforeMap.get(key);if(!previous)movements.push("Entrada · "+(item.code||item.model)+" · "+item.category);else if(previous.allocatedTo!==item.allocatedTo||previous.owner!==item.owner||previous.category!==item.category)movements.push("Movimentação · "+(item.code||item.model)+" · "+(previous.allocatedTo||previous.owner||previous.category||"Estoque")+" → "+(item.allocatedTo||item.owner||item.category||"Estoque"));});
+  beforeMap.forEach(function(item,key){if(!afterMap.has(key))movements.push("Saída · "+(item.code||item.model)+" · "+item.category);});
+  const details={"Período":new Date(rows[0].capturedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+" até "+new Date(rows[rows.length-1].capturedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),"Ativos movimentados":movements.length,"Categorias com variação":changed.length,"Categorias sem variação":unchanged.length};
+  movements.slice(0,12).forEach(function(item,index){details["Movimento "+(index+1)]=item;});
+  changed.slice(0,12).forEach(function(item){details[item.name]=item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")";});
+  const message=movements.length?movements.slice(0,15).map(function(item){return "• "+item;}).join("\n"):(changed.length?changed.map(function(item){return "• "+item.name+": "+item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")";}).join("\n"):"Nenhuma movimentação de ativo foi identificada hoje.");
+  if(unchanged.length)details["Sem alteração de quantidade"]=unchanged.slice(0,15).map(function(item){return item.name+" ("+item.after+")";}).join(", ");
   await dispatchNotification("daily-stock:"+date,"daily-stock","Fechamento diário · movimentação do estoque",message,false,details);
   auth.setSetting("daily_stock_report_last_date",date,null);
   return true;
