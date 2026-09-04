@@ -221,10 +221,8 @@
 
     const style = document.createElement("style");
     style.textContent =
-      ".stock-minimum-input{width:70px;min-height:34px;border:1px solid #d5e0ea;"
-      + "border-radius:9px;background:#f8fafc;color:#102a43;font-weight:800;text-align:center;outline:none}"
-      + ".stock-minimum-input:focus{border-color:#1677ff;box-shadow:0 0 0 3px rgba(22,119,255,.1)}"
-      + ".stock-minimum-input:disabled{border-color:transparent;background:transparent;color:#344054;cursor:not-allowed}"
+      ".stock-minimum-value{min-width:70px;min-height:34px;padding:0 10px;border-radius:9px;"
+      + "background:#f2f4f7;color:#344054;font-weight:800;display:inline-flex;align-items:center;justify-content:center}"
       + ".stock-request{min-width:38px;display:inline-flex;justify-content:center;padding:5px 8px;"
       + "border-radius:8px;background:#eaecf0;color:#475467;font-weight:800}"
       + ".stock-request.needed{background:#fee4e2;color:#b42318}"
@@ -322,10 +320,8 @@
             + "<td><button class=\"stock-category-button\" type=\"button\" data-detail-index=\"" + index + "\">"
             + esc(item.type) + "</button></td>"
             + "<td><strong>" + item.current + "</strong></td>"
-            + "<td><input class=\"stock-minimum-input\" type=\"number\" min=\"0\" step=\"1\""
-            + " value=\"" + item.minimum + "\" data-stock-index=\"" + index + "\""
-            + (currentUser && currentUser.canEditMinimum ? "" : " disabled")
-            + " aria-label=\"Estoque mínimo de " + esc(item.type) + "\"></td>"
+            + "<td><span class=\"stock-minimum-value\" aria-label=\"Estoque mínimo de " + esc(item.type) + "\">"
+            + item.minimum + "</span></td>"
             + "<td><span class=\"stock-request " + (item.request > 0 ? "needed" : "") + "\">"
             + item.request + "</span></td>"
             + "<td><span class=\"badge " + item.badge + "\">" + item.status + "</span></td>"
@@ -335,25 +331,6 @@
         : "<tr><td colspan=\"6\"><div class=\"empty\">Nenhuma categoria encontrada para os filtros informados.</div></td></tr>";
       $("resultCount").textContent = summaries.length + " categoria"
         + (summaries.length === 1 ? "" : "s");
-      document.querySelectorAll("[data-stock-index]").forEach(function (input) {
-        input.addEventListener("change", async function () {
-          const currentSummaries = inventorySummaries(filteredData);
-          const item = currentSummaries[Number(input.dataset.stockIndex)];
-          if (!item) return;
-          const previous = item.rule.minimum;
-          item.rule.minimum = Math.max(0, Number.parseInt(input.value, 10) || 0);
-          input.disabled = true;
-          try {
-            await saveMinimums();
-            render();
-            toast("Estoque mínimo de " + item.type + " atualizado.");
-          } catch (error) {
-            item.rule.minimum = previous;
-            render();
-            toast(error.message);
-          }
-        });
-      });
       document.querySelectorAll("[data-detail-index]").forEach(function (button) {
         button.addEventListener("click", function () {
           const currentSummaries = inventorySummaries(filteredData);
