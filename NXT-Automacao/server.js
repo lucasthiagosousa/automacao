@@ -593,7 +593,7 @@ app.put("/api/configuracao/nxt", auth.requireMaster, (req, res) => {
 /*
  * Regras de estoque mínimo persistidas no banco local.
  */
-app.get("/api/minimos", (req, res) => {
+app.get("/api/minimos", auth.requirePermission("stock"), (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json({
     sucesso: true,
@@ -625,7 +625,7 @@ app.put(
 /*
  * Solicitações de reposição e acompanhamento de compra.
  */
-app.get("/api/solicitacoes", (req, res) => {
+app.get("/api/solicitacoes", auth.requirePermission("stock"), (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json({
     sucesso: true,
