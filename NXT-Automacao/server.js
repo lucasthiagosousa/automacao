@@ -578,8 +578,8 @@ async function notifyRestockRequest(request, action) {
     "Previsão":request.expectedAt||"Não definida"
   });
 }
-async function sendStartupDigest() {
-  if(auth.getSetting("notifications_enabled","0")!=="1")return;
+async function sendStartupDigest(force) {
+  if(auth.getSetting("notifications_enabled","0")!=="1"){if(force)throw new Error("Ative e salve as notificações antes de enviar o resumo.");return false;}
   let shortages=[],critical=0,openRequests=0;
   try{
     const stock=await lerPlanilha(),cats=stock.categorias||[];
@@ -593,7 +593,7 @@ async function sendStartupDigest() {
   try{const toner=lerTonerAtual();critical=Number(toner.summary&&toner.summary.critical)||0;}catch{}
   try{openRequests=auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length;}catch{}
   const date=new Date().toISOString().slice(0,10);
-  await dispatchNotification("startup-digest:"+date,"startup","Servidor ativo · resumo operacional",
+  return dispatchNotification((force?"manual-digest:"+Date.now():"startup-digest:"+date),"startup","Servidor ativo · resumo operacional",
     shortages.length?"Existem itens abaixo do estoque mínimo que precisam de compra.":"O servidor foi iniciado e não existem faltas de estoque monitoradas.",false,{
       "Itens para comprar":shortages.length?shortages.join(" · "):"Nenhum",
       "Toners críticos":critical,"Solicitações abertas":openRequests,
@@ -617,8 +617,9 @@ async function evaluateNotifications() {
 }
 app.post("/api/notifications/test", auth.requireMaster, async(req,res)=>{const ok=await dispatchNotification("test:"+Date.now(),"test","Teste de notificações","A Central de Operações de TI está conectada.",true);res.status(ok?200:500).json({sucesso:ok,mensagem:ok?"Notificação enviada.":"Falha no envio. Consulte o histórico."});});
 app.post("/api/notifications/run", auth.requireMaster, async(req,res)=>{const total=await evaluateNotifications();res.json({sucesso:true,total});});
+app.post("/api/notifications/digest", auth.requireMaster, async(req,res)=>{try{await sendStartupDigest(true);res.json({sucesso:true,mensagem:"Resumo operacional enviado ao Teams."});}catch(error){res.status(500).json({sucesso:false,mensagem:error.message});}});
 setTimeout(function(){
-  evaluateNotifications().then(sendStartupDigest).catch(function(error){console.error("Notificações ao iniciar:",error.message);});
+  evaluateNotifications().then(function(){return sendStartupDigest(false);}).catch(function(error){console.error("Notificações ao iniciar:",error.message);});
 },5000).unref();
 setInterval(function(){evaluateNotifications().catch(function(error){console.error("Notificações:",error.message);});},15*60*1000).unref();
 
