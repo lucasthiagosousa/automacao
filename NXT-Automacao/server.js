@@ -63,6 +63,15 @@ auth.database.exec(
 );
 const stockSnapshotColumns=auth.database.prepare("PRAGMA table_info(stock_snapshots)").all().map(function(column){return column.name;});
 if(!stockSnapshotColumns.includes("assets_json"))auth.database.exec("ALTER TABLE stock_snapshots ADD COLUMN assets_json TEXT NOT NULL DEFAULT '[]'");
+auth.database.exec(
+  "CREATE TABLE IF NOT EXISTS stock_movement_events ("
+  +"id INTEGER PRIMARY KEY AUTOINCREMENT,event_key TEXT NOT NULL UNIQUE,movement_type TEXT NOT NULL,"
+  +"asset_code TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',previous_location TEXT NOT NULL DEFAULT '',"
+  +"new_location TEXT NOT NULL DEFAULT '',detected_at TEXT NOT NULL,source TEXT NOT NULL DEFAULT '',"
+  +"reported_slot TEXT NOT NULL DEFAULT '',reported_at TEXT NOT NULL DEFAULT ''"
+  +");"
+  +"CREATE INDEX IF NOT EXISTS idx_stock_movement_pending ON stock_movement_events(reported_at,detected_at);"
+);
 
 app.get(["/login", "/login.html"], (req, res) => {
   res.sendFile(path.join(pastaPublica, "login.html"));
@@ -559,6 +568,15 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
       {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"OFFLINE"},{type:"TextBlock",weight:"Bolder",size:"Large",spacing:"None",text:String(startReport.offline.length)}]},
       {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"COMPRAS ABERTAS"},{type:"TextBlock",weight:"Bolder",size:"Large",spacing:"None",text:String(startReport.openRequests)}]}
     ]});
+    body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"Movimentações após o último fechamento"});
+    if(!startReport.afterHours.length)body.push({type:"TextBlock",wrap:true,color:"Good",text:"Nenhuma movimentação pendente foi detectada."});
+    startReport.afterHours.slice(0,15).forEach(function(item){
+      const label=item.type==="exit"?"🔴 Saída":item.type==="entry"?"🟢 Entrada":"🔵 Transferência";
+      body.push({type:"Container",style:"emphasis",spacing:"Small",items:[
+        {type:"TextBlock",weight:"Bolder",wrap:true,text:label+"  •  "+item.category+"  •  "+item.code},
+        {type:"TextBlock",isSubtle:true,size:"Small",spacing:"None",text:"Detectado na atualização das "+item.detectedAt+(item.extra?"  •  "+item.extra:"")}
+      ]});
+    });
     if(startReport.stockItems.length){body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"📦 Reposição necessária"});body.push({type:"FactSet",facts:startReport.stockItems.slice(0,10).map(function(item){return{title:item.name,value:"Comprar "+item.buy+"  •  atual "+item.current+" / mínimo "+item.minimum};})});}
     if(startReport.printerGroups.length){body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"🖨️ Toners para atenção"});startReport.printerGroups.slice(0,10).forEach(function(item){body.push({type:"TextBlock",wrap:true,spacing:"Small",text:item.printer+"  •  "+item.supplies.map(function(supply){return supply.description+" "+supply.level+"%";}).join("  |  ")});});}
     body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"Rede de impressoras"});
@@ -1271,12 +1289,46 @@ app.post(
 );
 
 function localDateKey(value){const d=value||new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+function stockAssetKey(item,index){return item.code||[item.category,item.model,index].join("|");}
+function stockLocation(item){return item.allocatedTo||item.owner||item.category||"Estoque";}
+function recordStockMovementEvents(previousRow,assets,capturedAt,source){
+  if(!previousRow)return 0;
+  let previous=[];try{previous=JSON.parse(previousRow.assetsJson||"[]");}catch{}
+  const beforeMap=new Map(previous.map(function(item,index){return[stockAssetKey(item,index),item];}));
+  const afterMap=new Map(assets.map(function(item,index){return[stockAssetKey(item,index),item];}));
+  const insert=auth.database.prepare("INSERT OR IGNORE INTO stock_movement_events (event_key,movement_type,asset_code,category,previous_location,new_location,detected_at,source) VALUES (?,?,?,?,?,?,?,?)");
+  let total=0;
+  function save(type,item,key,from,to){
+    const eventKey=[type,key,previousRow.capturedAt,capturedAt].join("|");
+    const result=insert.run(eventKey,type,item.code||item.model||"Ativo sem identificação",item.category||"Sem categoria",from||"",to||"",capturedAt,source||"");
+    total+=Number(result.changes||0);
+  }
+  afterMap.forEach(function(item,key){
+    const before=beforeMap.get(key);
+    if(!before)save("entry",item,key,"",stockLocation(item));
+    else if(stockLocation(before)!==stockLocation(item)||before.category!==item.category)save("transfer",item,key,stockLocation(before),stockLocation(item));
+  });
+  beforeMap.forEach(function(item,key){if(!afterMap.has(key))save("exit",item,key,stockLocation(item),"");});
+  return total;
+}
+function pendingStockMovements(){
+  return auth.database.prepare("SELECT id,movement_type AS type,asset_code AS code,category,previous_location AS previousLocation,new_location AS newLocation,detected_at AS detectedAt FROM stock_movement_events WHERE reported_at='' ORDER BY detected_at,id").all();
+}
+function markStockMovementsReported(items,slot){
+  const ids=(items||[]).map(function(item){return Number(item.id);}).filter(Boolean);if(!ids.length)return;
+  const update=auth.database.prepare("UPDATE stock_movement_events SET reported_slot=?,reported_at=? WHERE id=? AND reported_at=''");
+  const now=new Date().toISOString();ids.forEach(function(id){update.run(slot,now,id);});
+}
 async function captureStockSnapshot(source) {
+  const previous=auth.database.prepare("SELECT assets_json AS assetsJson,captured_at AS capturedAt FROM stock_snapshots ORDER BY captured_at DESC LIMIT 1").get();
   const stock=await lerPlanilha(),categories=(stock.categorias||[]).map(function(item){return{name:String(item.nome||""),quantity:Number(item.atual)||0};}).filter(function(item){return item.name;});
   const assets=(stock.ativos||[]).map(function(item){return{code:String(item.codigo||""),category:String(item.categoria||""),owner:String(item.proprietario||""),allocatedTo:String(item.alocadoPara||""),model:String(item.modelo||"")};});
-  const now=new Date(),date=localDateKey(now);
-  auth.database.prepare("INSERT INTO stock_snapshots (snapshot_date,captured_at,categories_json,assets_json,source) VALUES (?,?,?,?,?)").run(date,now.toISOString(),JSON.stringify(categories),JSON.stringify(assets),source||"manual");
+  const now=new Date(),date=localDateKey(now),capturedAt=now.toISOString();
+  auth.database.prepare("INSERT INTO stock_snapshots (snapshot_date,captured_at,categories_json,assets_json,source) VALUES (?,?,?,?,?)").run(date,capturedAt,JSON.stringify(categories),JSON.stringify(assets),source||"manual");
+  const movements=recordStockMovementEvents(previous,assets,capturedAt,source||"manual");
+  if(movements)console.log("Movimentações de estoque detectadas:",movements);
   auth.database.prepare("DELETE FROM stock_snapshots WHERE captured_at < datetime('now','-60 days')").run();
+  auth.database.prepare("DELETE FROM stock_movement_events WHERE reported_at!='' AND reported_at < datetime('now','-180 days')").run();
   return categories;
 }
 function scheduledNxtUpdate() {
@@ -1297,28 +1349,20 @@ function scheduledNxtUpdate() {
 }
 async function sendDailyStockMovementReport() {
   if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
-  const date=localDateKey();
-  const rows=auth.database.prepare("SELECT categories_json AS categoriesJson,assets_json AS assetsJson,captured_at AS capturedAt,source FROM stock_snapshots WHERE snapshot_date=? AND source!='startup' ORDER BY captured_at").all(date);
-  if(!rows.length)return false;
+  const date=localDateKey(),rows=auth.database.prepare("SELECT categories_json AS categoriesJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? AND source!='startup' ORDER BY captured_at").all(date),pending=pendingStockMovements();
   function parseJson(value){try{return JSON.parse(value||"[]");}catch{return[];}}
   function time(value){return new Date(value).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});}
-  function assetKey(item,index){return item.code||[item.category,item.model,index].join("|");}
-  const movements=[],seen=new Set();
-  function addMovement(type,item,detectedAt,extra){const key=[type,assetKey(item,0),detectedAt].join("|");if(seen.has(key))return;seen.add(key);movements.push({type:type,code:item.code||item.model||"Ativo sem identificação",category:item.category||"Sem categoria",detectedAt:detectedAt,extra:extra||""});}
-  for(let rowIndex=1;rowIndex<rows.length;rowIndex++){
-    const before=parseJson(rows[rowIndex-1].assetsJson),after=parseJson(rows[rowIndex].assetsJson),detectedAt=time(rows[rowIndex].capturedAt);
-    const beforeMap=new Map(before.map(function(item,index){return[assetKey(item,index),item];})),afterMap=new Map(after.map(function(item,index){return[assetKey(item,index),item];}));
-    afterMap.forEach(function(item,key){const previous=beforeMap.get(key);if(!previous)addMovement("entry",item,detectedAt);else if(previous.allocatedTo!==item.allocatedTo||previous.owner!==item.owner||previous.category!==item.category)addMovement("transfer",item,detectedAt,(previous.allocatedTo||previous.owner||previous.category||"Estoque")+" → "+(item.allocatedTo||item.owner||item.category||"Estoque"));});
-    beforeMap.forEach(function(item,key){if(!afterMap.has(key))addMovement("exit",item,detectedAt);});
-  }
-  const firstCategories=parseJson(rows[0].categoriesJson),lastCategories=parseJson(rows[rows.length-1].categoriesJson),names=new Set(firstCategories.concat(lastCategories).map(function(item){return item.name;})),changedCategories=[],unchanged=[];
+  const movements=pending.map(function(item){return{...item,detectedAt:time(item.detectedAt)};});
+  const firstCategories=rows.length?parseJson(rows[0].categoriesJson):[],lastCategories=rows.length?parseJson(rows[rows.length-1].categoriesJson):[],names=new Set(firstCategories.concat(lastCategories).map(function(item){return item.name;})),changedCategories=[],unchanged=[];
   names.forEach(function(name){const before=Number((firstCategories.find(function(item){return item.name===name;})||{quantity:0}).quantity)||0,after=Number((lastCategories.find(function(item){return item.name===name;})||{quantity:0}).quantity)||0,item={name:name,before:before,after:after,difference:after-before};(item.difference?changedCategories:unchanged).push(item);});
   const entries=movements.filter(function(item){return item.type==="entry";}),exits=movements.filter(function(item){return item.type==="exit";}),transfers=movements.filter(function(item){return item.type==="transfer";});
-  const period=time(rows[0].capturedAt)+" até "+time(rows[rows.length-1].capturedAt),balance=entries.length-exits.length;
+  const firstTime=rows.length?rows[0].capturedAt:(pending[0]&&pending[0].detectedAt),lastTime=rows.length?rows[rows.length-1].capturedAt:(pending[pending.length-1]&&pending[pending.length-1].detectedAt),period=firstTime&&lastTime?time(firstTime)+" até "+time(lastTime):"Sem sincronizações concluídas",balance=entries.length-exits.length;
   const operational=await buildOperationalSummaryEvents(true,["stock","toner"]),stockEvent=operational.find(function(item){return item.type==="stock-summary";}),tonerEvent=operational.find(function(item){return item.type==="toner-summary";}),tonerNow=lerTonerAtual();
-  const dailyReport={date:new Date().toLocaleDateString("pt-BR"),period:period,lastSync:time(rows[rows.length-1].capturedAt),entries:entries,exits:exits,transfers:transfers,balance:balance,changedCategories:changedCategories,unchangedCount:unchanged.length,snapshotCount:rows.length,sufficient:rows.length>=2,stockLow:stockEvent?stockEvent.details.stockItems.length:0,criticalToners:tonerEvent?tonerEvent.details.printerGroups.reduce(function(total,item){return total+item.supplies.length;},0):0,offlineCount:(tonerNow.printers||[]).filter(function(item){return item.online===false;}).length,openRequests:auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length};
-  const lines=["Fechamento diário do estoque — "+dailyReport.date,"Período monitorado: "+period,"Entradas detectadas: "+entries.length,"Saídas detectadas: "+exits.length,!dailyReport.sufficient?"Ainda não há duas sincronizações concluídas hoje.":exits.length?exits.map(function(item){return "Saída · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma saída foi detectada hoje.",entries.length?entries.map(function(item){return "Entrada · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma entrada foi detectada hoje."];
-  await dispatchNotification("daily-stock:"+date,"daily-stock","Fechamento diário do estoque",lines.join("\n"),false,{dailyReport:dailyReport});
+  const dailyReport={date:new Date().toLocaleDateString("pt-BR"),period:period,lastSync:lastTime?time(lastTime):"Não realizada",entries:entries,exits:exits,transfers:transfers,balance:balance,changedCategories:changedCategories,unchangedCount:unchanged.length,snapshotCount:rows.length,sufficient:rows.length>=2,stockLow:stockEvent?stockEvent.details.stockItems.length:0,criticalToners:tonerEvent?tonerEvent.details.printerGroups.reduce(function(total,item){return total+item.supplies.length;},0):0,offlineCount:(tonerNow.printers||[]).filter(function(item){return item.online===false;}).length,openRequests:auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length};
+  const lines=["Fechamento diário do estoque — "+dailyReport.date,"Período monitorado: "+period,"Entradas detectadas: "+entries.length,"Saídas detectadas: "+exits.length,exits.length?exits.map(function(item){return "Saída · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma saída foi detectada.",entries.length?entries.map(function(item){return "Entrada · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma entrada foi detectada."];
+  const sent=await dispatchNotification("daily-stock:"+date,"daily-stock","Fechamento diário do estoque",lines.join("\n"),false,{dailyReport:dailyReport});
+  if(!sent)throw new Error("O fechamento diário não foi entregue ao canal.");
+  markStockMovementsReported(pending,"close:"+date);
   auth.setSetting("daily_stock_report_last_date",date,null);
   return true;
 }
@@ -1348,10 +1392,14 @@ async function scheduledTonerScan() {
   }finally{tonerExecutando=false;}
 }
 async function sendStartOfActivitiesReport() {
-  const date=localDateKey(),events=await buildOperationalSummaryEvents(true,["stock","toner"]);
-  const stockEvent=events.find(function(item){return item.type==="stock-summary";}),tonerEvent=events.find(function(item){return item.type==="toner-summary";}),toner=lerTonerAtual();
-  const startReport={date:new Date().toLocaleDateString("pt-BR"),stockItems:stockEvent?stockEvent.details.stockItems:[],printerGroups:tonerEvent?tonerEvent.details.printerGroups:[],criticalToners:tonerEvent?tonerEvent.details.printerGroups.reduce(function(total,item){return total+item.supplies.length;},0):0,offline:(toner.printers||[]).filter(function(item){return item.online===false;}).map(function(item){return item.hostname||item.model||item.ip;}),openRequests:auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length};
-  return dispatchNotification("activity-start:"+date,"activity-start","Início das atividades", "Resumo operacional de abertura.",false,{startReport:startReport});
+  const date=localDateKey(),events=await buildOperationalSummaryEvents(true,["stock","toner"]),pending=pendingStockMovements();
+  const stockEvent=events.find(function(item){return item.type==="stock-summary";}),tonerEvent=events.find(function(item){return item.type==="toner-summary";}),toner=lerTonerAtual(),formatTime=function(value){return new Date(value).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});};
+  const afterHours=pending.map(function(item){return{...item,detectedAt:formatTime(item.detectedAt),extra:item.type==="transfer"?item.previousLocation+" → "+item.newLocation:""};});
+  const startReport={date:new Date().toLocaleDateString("pt-BR"),stockItems:stockEvent?stockEvent.details.stockItems:[],printerGroups:tonerEvent?tonerEvent.details.printerGroups:[],criticalToners:tonerEvent?tonerEvent.details.printerGroups.reduce(function(total,item){return total+item.supplies.length;},0):0,offline:(toner.printers||[]).filter(function(item){return item.online===false;}).map(function(item){return item.hostname||item.model||item.ip;}),openRequests:auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length,afterHours:afterHours};
+  const sent=await dispatchNotification("activity-start:"+date,"activity-start","Início das atividades","Resumo operacional de abertura.",false,{startReport:startReport});
+  if(!sent)throw new Error("O relatório de início das atividades não foi entregue ao canal.");
+  markStockMovementsReported(pending,"open:"+date);
+  return true;
 }
 async function scheduledActivityReport() {
   const now=new Date(),day=now.getDay(),hour=now.getHours();
