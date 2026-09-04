@@ -27,8 +27,12 @@
       .auth-copy{display:flex;flex-direction:column;line-height:1.15;text-align:left}.auth-copy strong{font-size:11px}.auth-copy span{font-size:9px;opacity:.72}.auth-link{cursor:pointer;text-decoration:none}
       body.workspace-operational{font-weight:400!important}
       body.workspace-operational p,body.workspace-operational td,body.workspace-operational input,body.workspace-operational select,body.workspace-operational textarea,body.workspace-operational .meta,body.workspace-operational .muted,body.workspace-operational .panel-desc,body.workspace-operational .kpi-sub{font-weight:400!important}
-      body.workspace-operational label,body.workspace-operational th,body.workspace-operational button,body.workspace-operational .btn{font-weight:600!important}
-      body.workspace-operational h1,body.workspace-operational h2,body.workspace-operational h3,body.workspace-operational strong{font-weight:650}
+      body.workspace-operational label,body.workspace-operational th{font-weight:550!important}
+      body.workspace-operational button,body.workspace-operational .btn{font-weight:550!important}
+      body.workspace-operational .pill,body.workspace-operational .badge,body.workspace-operational .status,body.workspace-operational .pending strong,body.workspace-operational .notice strong,body.workspace-operational .task strong,body.workspace-operational td strong{font-weight:550!important}
+      body.workspace-operational h1,body.workspace-operational h2,body.workspace-operational h3,body.workspace-operational .panel-title{font-weight:600!important}
+      body.workspace-operational .kpi-value,body.workspace-operational .metric-value{font-weight:700!important}
+      body.workspace-operational .brand strong,body.workspace-operational .auth-copy strong{font-weight:600!important}
       body.workspace-operational{--workspace-navy:#00180c;--workspace-navy-2:#04351c;--workspace-teal:#087a45;--workspace-line:#dce5ee;--workspace-blue:#08a85d;background:radial-gradient(1050px 430px at 88% -70px,rgba(0,198,92,.16) 0%,rgba(223,244,233,.48) 39%,transparent 68%),linear-gradient(180deg,#edf6f1 0,#f3f6fa 300px,#f3f6fa 100%)!important;background-attachment:fixed!important;color:#172b3f}
       body.workspace-operational .header{position:relative;isolation:isolate;top:auto;padding:0!important;overflow:hidden!important;background:linear-gradient(112deg,#001109 0%,#042b17 52%,#087a45 100%)!important;color:#fff!important;border:0!important;box-shadow:none!important;backdrop-filter:none!important}
       body.workspace-operational .header:before{content:"";position:absolute;z-index:-1;width:520px;height:520px;right:-130px;top:-390px;border-radius:50%;background:rgba(0,255,119,.18);filter:blur(2px)}
