@@ -2,6 +2,8 @@ const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const os = require("node:os");
+const { DatabaseSync } = require("node:sqlite");
 const { createAuth } = require("./auth");
 const tonerMonitor = require("./toner-monitor");
 
@@ -27,8 +29,25 @@ const arquivoAutomacao = path.join(
 );
 const arquivoBanco = path.join(pastaDados, "controle-estoque.db");
 const arquivoToner = path.join(pastaDados, "toner-atual.json");
+const arquivoRestauracao = path.join(pastaDados, "restauracao-pendente.db");
+if (fs.existsSync(arquivoRestauracao)) {
+  try {
+    const probe = new DatabaseSync(arquivoRestauracao, { readOnly:true });
+    const integrity = probe.prepare("PRAGMA integrity_check").get();
+    probe.close();
+    if (!integrity || String(Object.values(integrity)[0]).toLowerCase() !== "ok") throw new Error("Banco inválido");
+    if (fs.existsSync(arquivoBanco)) {
+      fs.copyFileSync(arquivoBanco, path.join(pastaDados, "controle-estoque-antes-restauracao.db"));
+      fs.rmSync(arquivoBanco);
+      ["-wal","-shm"].forEach(function(suffix){try{fs.rmSync(arquivoBanco+suffix);}catch{}});
+    }
+    fs.renameSync(arquivoRestauracao, arquivoBanco);
+  } catch (error) {
+    console.error("Restauração pendente ignorada:", error.message);
+  }
+}
 
-app.use(express.json({ limit: "8mb" }));
+app.use(express.json({ limit: "80mb" }));
 app.use("/assets", express.static(path.join(pastaPublica, "assets")));
 
 const auth = createAuth({
@@ -456,6 +475,95 @@ function salvarConfiguracaoEnv(changes) {
   Object.assign(process.env, changes);
 }
 
+function formatBytes(value) {
+  const units=["B","KB","MB","GB","TB"];let n=Number(value)||0,index=0;
+  while(n>=1024&&index<units.length-1){n/=1024;index++;}
+  return n.toFixed(index?1:0)+" "+units[index];
+}
+
+app.get("/api/system/health", auth.requireMaster, (req,res) => {
+  let disk={free:"Indisponível",total:"Indisponível"};
+  try { const info=fs.statfsSync(pastaDados);disk={free:formatBytes(info.bavail*info.bsize),total:formatBytes(info.blocks*info.bsize)}; } catch {}
+  let databaseOk=false,databaseMessage="";
+  try { const result=auth.database.prepare("PRAGMA quick_check").get();databaseMessage=String(Object.values(result)[0]);databaseOk=databaseMessage.toLowerCase()==="ok"; } catch(error){databaseMessage=error.message;}
+  let spreadsheet=null;try{spreadsheet=fs.statSync(arquivoPlanilha).mtime.toISOString();}catch{}
+  const toner=lerTonerAtual();
+  const recentErrors=auth.database.prepare("SELECT error,created_at AS createdAt FROM notification_log WHERE status='error' ORDER BY id DESC LIMIT 5").all();
+  res.json({sucesso:true,health:{
+    database:{ok:databaseOk,message:databaseMessage,path:arquivoBanco},
+    lastSpreadsheet:spreadsheet,lastNxtUpdate:estadoAtualizacao.fim,lastSnmp:toner.updatedAt||null,
+    disk:disk,server:{host:HOST,port:PORTA,url:"http://"+(HOST==="0.0.0.0"?os.hostname():HOST)+":"+PORTA},
+    uptimeSeconds:Math.round(process.uptime()),node:process.version,recentErrors:recentErrors
+  }});
+});
+
+app.get("/api/system/backup", auth.requireMaster, (req,res) => {
+  const destination=path.join(pastaDados,"backup-"+Date.now()+".db");
+  try {
+    auth.database.exec("PRAGMA wal_checkpoint(FULL)");
+    auth.database.exec("VACUUM INTO '"+destination.replace(/'/g,"''")+"'");
+    res.download(destination,"central-operacoes-backup-"+new Date().toISOString().slice(0,10)+".db",function(){try{fs.rmSync(destination);}catch{}});
+    auth.addAudit(req.user.id,"export","database","","Backup do banco baixado");
+  } catch(error) { try{fs.rmSync(destination);}catch{} res.status(500).json({sucesso:false,mensagem:"Não foi possível gerar o backup: "+error.message}); }
+});
+
+app.post("/api/system/restore", auth.requireMaster, (req,res) => {
+  try {
+    const buffer=Buffer.from(String(req.body.databaseBase64||""),"base64");
+    if(buffer.length<100||buffer.subarray(0,16).toString("utf8")!=="SQLite format 3\u0000")throw new Error("O arquivo não é um banco SQLite válido.");
+    fs.writeFileSync(arquivoRestauracao,buffer);
+    const probe=new DatabaseSync(arquivoRestauracao,{readOnly:true});
+    const tables=probe.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(function(row){return row.name;});
+    const check=probe.prepare("PRAGMA integrity_check").get();probe.close();
+    if(!tables.includes("users")||String(Object.values(check)[0]).toLowerCase()!=="ok")throw new Error("O backup está incompleto ou corrompido.");
+    auth.addAudit(req.user.id,"restore","database","","Restauração agendada");
+    res.json({sucesso:true,restartRequired:true,mensagem:"Backup validado. Reinicie o servidor para concluir a restauração."});
+  } catch(error){try{fs.rmSync(arquivoRestauracao);}catch{}res.status(400).json({sucesso:false,mensagem:error.message});}
+});
+
+async function sendTeamsNotification(webhook,title,message) {
+  const response=await fetch(webhook,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({type:"message",attachments:[{contentType:"application/vnd.microsoft.card.adaptive",content:{type:"AdaptiveCard",version:"1.4",body:[{type:"TextBlock",weight:"Bolder",size:"Medium",text:title},{type:"TextBlock",wrap:true,text:message}]}}]})});
+  if(!response.ok)throw new Error("Teams respondeu HTTP "+response.status);
+}
+
+function sendEmailNotification(settings,title,message) {
+  return new Promise(function(resolve,reject){
+    const smtp=auth.getSetting("notifications_smtp_host",""),from=auth.getSetting("notifications_email_from",""),to=settings.emailTo;
+    if(!smtp||!from||!to)return reject(new Error("Configure servidor SMTP, remetente e destinatário."));
+    const script='$p=$env:NXT_SMTP_PORT; $c=New-Object Net.Mail.SmtpClient($env:NXT_SMTP_HOST,[int]$p); $c.EnableSsl=$env:NXT_SMTP_SSL -eq "1"; if($env:NXT_SMTP_USER){$c.Credentials=New-Object Net.NetworkCredential($env:NXT_SMTP_USER,$env:NXT_SMTP_PASS)}; $m=New-Object Net.Mail.MailMessage($env:NXT_MAIL_FROM,$env:NXT_MAIL_TO,$env:NXT_MAIL_SUBJECT,$env:NXT_MAIL_BODY); $c.Send($m)';
+    const encoded=Buffer.from(script,"utf16le").toString("base64");
+    const child=spawn("powershell.exe",["-NoProfile","-NonInteractive","-EncodedCommand",encoded],{windowsHide:true,env:{...process.env,NXT_SMTP_HOST:smtp,NXT_SMTP_PORT:auth.getSetting("notifications_smtp_port","587"),NXT_SMTP_SSL:auth.getSetting("notifications_smtp_ssl","1"),NXT_SMTP_USER:auth.getSetting("notifications_smtp_user",""),NXT_SMTP_PASS:auth.getSetting("notifications_smtp_password",""),NXT_MAIL_FROM:from,NXT_MAIL_TO:to,NXT_MAIL_SUBJECT:title,NXT_MAIL_BODY:message}});
+    let error="";child.stderr.on("data",function(d){error+=d.toString();});child.on("error",reject);child.on("close",function(code){code===0?resolve():reject(new Error(error||"Falha SMTP"));});
+  });
+}
+
+async function dispatchNotification(eventKey,eventType,title,message,force) {
+  const db=auth.database;
+  if(!force&&db.prepare("SELECT id FROM notification_log WHERE event_key=?").get(eventKey))return false;
+  const enabled=auth.getSetting("notifications_enabled","0")==="1";if(!enabled&&!force)return false;
+  const channel=auth.getSetting("notifications_channel","teams"),settings={emailTo:auth.getSetting("notifications_email_to","")};
+  let status="sent",error="";
+  try {
+    if(channel==="teams"||channel==="both"){const hook=auth.getSetting("notifications_teams_webhook","");if(!hook)throw new Error("Webhook do Teams não configurado.");await sendTeamsNotification(hook,title,message);}
+    if(channel==="email"||channel==="both")await sendEmailNotification(settings,title,message);
+  } catch(e){status="error";error=e.message;}
+  db.prepare("INSERT OR REPLACE INTO notification_log (event_key,event_type,title,message,channel,status,created_at,sent_at,error) VALUES (?,?,?,?,?,?,?,?,?)").run(eventKey,eventType,title,message,channel,status,new Date().toISOString(),status==="sent"?new Date().toISOString():"",error);
+  return status==="sent";
+}
+
+async function evaluateNotifications() {
+  const events=[],today=new Date(),lead=Math.max(0,Number(auth.getSetting("notifications_task_lead_days","2"))||2),stale=Math.max(1,Number(auth.getSetting("notifications_stale_days","5"))||5);
+  auth.database.prepare("SELECT id,title,due_date AS dueDate FROM operational_tasks WHERE status!='done' AND due_date!=''").all().forEach(function(task){const days=Math.ceil((new Date(task.dueDate+"T23:59:59")-today)/86400000);if(days<=lead)events.push({key:"task:"+task.id+":"+task.dueDate,type:"task",title:"Tarefa próxima do vencimento",message:task.title+" · "+(days<0?"atrasada há "+Math.abs(days)+" dia(s)":"vence em "+days+" dia(s)")});});
+  auth.database.prepare("SELECT id,status,updated_at AS updatedAt FROM restock_requests WHERE status!='received'").all().forEach(function(item){const days=Math.floor((today-new Date(item.updatedAt))/86400000);if(days>=stale)events.push({key:"request:"+item.id+":"+item.updatedAt.slice(0,10),type:"request",title:"Solicitação sem atualização",message:"Solicitação #"+item.id+" está há "+days+" dia(s) sem atualização."});});
+  auth.database.prepare("SELECT employee_key AS employeeKey,employee_name AS employeeName,activation_date AS activationDate FROM vacation_access_plans WHERE completed=0 AND activation_date!=''").all().forEach(function(plan){if(plan.activationDate<=today.toISOString().slice(0,10))events.push({key:"vacation:"+plan.employeeKey+":"+plan.activationDate,type:"vacation",title:"Retorno de férias",message:plan.employeeName+" retorna em "+plan.activationDate+". Confira a reativação dos acessos."});});
+  const toner=lerTonerAtual();(toner.printers||[]).forEach(function(p){(p.supplies||[]).forEach(function(supply){if(Number(supply.level)<=Number(toner.threshold||20))events.push({key:"toner:"+p.ip+":"+String(supply.name||supply.description)+":"+today.toISOString().slice(0,10),type:"toner",title:"Toner em nível crítico",message:(p.model||p.ip)+" · "+(supply.name||"Suprimento")+" em "+supply.level+"%."});});});
+  for(const event of events)await dispatchNotification(event.key,event.type,event.title,event.message,false);
+  return events.length;
+}
+app.post("/api/notifications/test", auth.requireMaster, async(req,res)=>{const ok=await dispatchNotification("test:"+Date.now(),"test","Teste de notificações","A Central de Operações de TI está conectada.",true);res.status(ok?200:500).json({sucesso:ok,mensagem:ok?"Notificação enviada.":"Falha no envio. Consulte o histórico."});});
+app.post("/api/notifications/run", auth.requireMaster, async(req,res)=>{const total=await evaluateNotifications();res.json({sucesso:true,total});});
+setInterval(function(){evaluateNotifications().catch(function(error){console.error("Notificações:",error.message);});},15*60*1000).unref();
+
 app.get("/api/configuracao/nxt", auth.requireMaster, (req, res) => {
   res.json({
     sucesso: true,
@@ -517,13 +625,13 @@ app.get("/api/solicitacoes", (req, res) => {
   res.json({
     sucesso: true,
     solicitacoes: auth.getRestockRequests(),
-    podeEditar: ["master", "operator"].includes(req.user.role),
+    podeEditar: req.user.role === "master" || auth.userPermissions(req.user).create_requests,
   });
 });
 
 app.post(
   "/api/solicitacoes",
-  auth.requireUpdatePermission,
+  auth.requirePermission("create_requests"),
   (req, res) => {
     try {
       const solicitacao = auth.createRestockRequest(
@@ -547,7 +655,7 @@ app.post(
 
 app.patch(
   "/api/solicitacoes/:id",
-  auth.requireUpdatePermission,
+  auth.requirePermission("create_requests"),
   (req, res) => {
     let solicitacao;
 
@@ -609,7 +717,7 @@ app.delete(
 );
 
 
-app.get("/api/impressoras", (req, res) => {
+app.get("/api/impressoras", auth.requirePermission("toner"), (req, res) => {
   res.json({
     sucesso: true,
     impressoras: auth.getPrinters(),
@@ -617,7 +725,7 @@ app.get("/api/impressoras", (req, res) => {
   });
 });
 
-app.post("/api/impressoras", auth.requireUpdatePermission, (req, res) => {
+app.post("/api/impressoras", auth.requirePermission("toner"), (req, res) => {
   try {
     const impressora = auth.savePrinter(req.body, Number(req.user.id));
     auth.addAudit(req.user.id, "create", "printer", String(impressora.id), "Impressora cadastrada: " + impressora.ip);
@@ -627,7 +735,7 @@ app.post("/api/impressoras", auth.requireUpdatePermission, (req, res) => {
   }
 });
 
-app.patch("/api/impressoras/:id", auth.requireUpdatePermission, (req, res) => {
+app.patch("/api/impressoras/:id", auth.requirePermission("toner"), (req, res) => {
   try {
     const impressora = auth.savePrinter(req.body, Number(req.user.id), Number(req.params.id));
     if (!impressora) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
@@ -638,7 +746,7 @@ app.patch("/api/impressoras/:id", auth.requireUpdatePermission, (req, res) => {
   }
 });
 
-app.delete("/api/impressoras/:id", auth.requireUpdatePermission, (req, res) => {
+app.delete("/api/impressoras/:id", auth.requirePermission("toner"), (req, res) => {
   const deleted = auth.deletePrinter(Number(req.params.id));
   if (!deleted) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
   auth.addAudit(req.user.id, "delete", "printer", String(req.params.id), "Impressora removida");
@@ -663,7 +771,7 @@ app.put("/api/configuracao/toner", auth.requireMaster, (req, res) => {
 /*
  * Monitoramento local das impressoras por SNMP.
  */
-app.get("/api/toner", (req, res) => {
+app.get("/api/toner", auth.requirePermission("toner"), (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json({
     sucesso: true,
@@ -674,7 +782,7 @@ app.get("/api/toner", (req, res) => {
 
 app.post(
   "/api/toner/atualizar",
-  auth.requireUpdatePermission,
+  auth.requirePermission("toner"),
   async (req, res) => {
     if (tonerExecutando) {
       return res.status(409).json({
@@ -700,6 +808,7 @@ app.post(
         JSON.stringify(relatorio, null, 2),
         "utf8"
       );
+      auth.recordTonerSnapshot(relatorio);
 
       return res.json({
         sucesso: true,
@@ -720,7 +829,7 @@ app.post(
 /*
  * Retorna os dados da planilha para o dashboard.
  */
-app.get("/api/estoque", async (req, res) => {
+app.get("/api/estoque", auth.requirePermission("stock"), async (req, res) => {
   try {
     const dados = await lerPlanilha();
 
