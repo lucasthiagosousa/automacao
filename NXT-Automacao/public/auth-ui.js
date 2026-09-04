@@ -206,7 +206,7 @@
     if(currentKey&&permissions[currentKey]===false)window.location.replace("/central.html");
     const actions = document.querySelector(".header-actions, .header-right");
     if (actions) {
-      if (user.canManageUsers) actions.appendChild(link("Usuários", "/admin.html"));
+      if (user.canManageUsers) { actions.appendChild(link("Usuários", "/admin.html")); actions.appendChild(link("Configurações", "/configuracoes.html")); }
       actions.appendChild(accountControl(user));
       const logout = link("Sair", "#");
       logout.addEventListener("click", async function (event) {
