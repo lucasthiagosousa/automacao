@@ -574,7 +574,7 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
           }]
         });
       });
-      body.push({type:"Container",separator:true,spacing:"Medium",style:index%2?"emphasis":"default",items:items});
+      body.push({type:"Container",separator:index>0,spacing:index>0?"ExtraLarge":"Medium",style:index%2?"emphasis":"default",items:items});
     });
   } else {
     body.push({type:"TextBlock",wrap:true,text:message});
