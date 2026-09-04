@@ -69,7 +69,7 @@
             <label class="check-item"><input id="smtpSsl" type="checkbox" checked> Usar conexão segura</label>
           </div>
           <div class="inline-grid"><label>Dias sem atualização<input id="staleDays" type="number" min="1" value="5"></label><label>Avisar tarefa com antecedência<input id="taskLeadDays" type="number" min="0" value="2"></label></div>
-          <div class="dialog-actions"><button class="btn" id="testNotification" type="button">Enviar teste</button><button class="btn btn-primary" type="submit">Salvar notificações</button></div>
+          <div class="dialog-actions"><button class="btn" id="testNotification" type="button">Enviar teste</button><button class="btn" id="sendDigest" type="button">Enviar resumo agora</button><button class="btn btn-primary" type="submit">Salvar notificações</button></div>
           <div class="message" id="notificationMessage"></div>
         </form>
       </section>
@@ -335,7 +335,7 @@
       event.preventDefault();const message=document.getElementById("notificationMessage");message.textContent="";
       try{await api("/api/auth/notification-settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:notificationEnabled.checked,channel:notificationChannel.value,emailTo:notificationEmail.value,teamsWebhook:teamsWebhook.value,smtpHost:smtpHost.value,smtpPort:smtpPort.value,smtpFrom:smtpFrom.value,smtpUser:smtpUser.value,smtpPassword:smtpPassword.value,smtpSsl:smtpSsl.checked,staleDays:staleDays.value,taskLeadDays:taskLeadDays.value})});smtpPassword.value="";message.style.color="#027a48";message.textContent="Configurações salvas.";}catch(error){message.style.color="#b42318";message.textContent=error.message;}
     });
-    document.getElementById("testNotification").onclick=async function(){const message=document.getElementById("notificationMessage");try{await api("/api/notifications/test",{method:"POST"});message.style.color="#027a48";message.textContent="Teste enviado com sucesso.";}catch(error){message.style.color="#b42318";message.textContent=error.message;}};
+    document.getElementById("testNotification").onclick=async function(){const message=document.getElementById("notificationMessage");try{await api("/api/notifications/test",{method:"POST"});message.style.color="#027a48";message.textContent="Teste enviado com sucesso.";}catch(error){message.style.color="#b42318";message.textContent=error.message;}};document.getElementById("sendDigest").onclick=async function(){const message=document.getElementById("notificationMessage");try{await api("/api/notifications/digest",{method:"POST"});message.style.color="#027a48";message.textContent="Resumo operacional enviado ao canal.";}catch(error){message.style.color="#b42318";message.textContent=error.message;}};
 
     document.getElementById("restoreButton").onclick=async function(){
       const file=document.getElementById("restoreFile").files[0],message=document.getElementById("backupMessage");if(!file){message.textContent="Selecione um arquivo de backup.";return;}
