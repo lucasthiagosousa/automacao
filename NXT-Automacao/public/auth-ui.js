@@ -155,6 +155,12 @@
   }
 
   function decorate(user) {
+    const permissions=user.permissions||{};
+    [{path:"/",key:"stock"},{path:"/toner.html",key:"toner"},{path:"/colaboradores.html",key:"collaborators"}].forEach(function(item){
+      document.querySelectorAll('.workspace-tab[href^="'+item.path+'"]').forEach(function(tab){if(permissions[item.key]===false)tab.remove();});
+    });
+    const current=window.location.pathname,currentKey=current==="/toner.html"?"toner":current==="/colaboradores.html"?"collaborators":(current==="/"||current==="/index.html")?"stock":"";
+    if(currentKey&&permissions[currentKey]===false)window.location.replace("/central.html");
     const actions = document.querySelector(".header-actions, .header-right");
     if (actions) {
       if (user.canManageUsers) actions.appendChild(link("Usuários", "/admin.html"));
