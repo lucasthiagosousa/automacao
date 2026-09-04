@@ -530,15 +530,22 @@ app.post("/api/system/restore", auth.requireMaster, (req,res) => {
   } catch(error){try{fs.rmSync(arquivoRestauracao);}catch{}res.status(400).json({sucesso:false,mensagem:error.message});}
 });
 
-async function sendTeamsNotification(webhook,title,message,details) {
+async function sendTeamsNotification(webhook,title,message,details,eventType) {
+  const visual={
+    "stock-summary":{icon:"📦",color:"Attention"},"toner-summary":{icon:"🖨️",color:"Attention"},
+    "purchase":{icon:"🛒",color:"Accent"},"daily-stock":{icon:"📊",color:"Good"},
+    "vacation":{icon:"👤",color:"Accent"},"task":{icon:"⏰",color:"Warning"},
+    "request":{icon:"⚠️",color:"Warning"},"startup":{icon:"✅",color:"Good"},"test":{icon:"✅",color:"Good"}
+  }[eventType]||{icon:"ℹ️",color:"Accent"};
   const body=[
-    {type:"TextBlock",weight:"Bolder",size:"Medium",color:"Good",text:title},
+    {type:"TextBlock",weight:"Bolder",size:"Medium",color:visual.color,text:visual.icon+" "+title},
     {type:"TextBlock",wrap:true,text:message}
   ];
   const facts=Object.entries(details||{}).filter(function(entry){return entry[1]!==undefined&&entry[1]!==null&&String(entry[1]).trim();}).map(function(entry){return{title:String(entry[0]),value:String(entry[1])};});
   if(facts.length)body.push({type:"FactSet",facts:facts});
   body.push({type:"TextBlock",wrap:true,isSubtle:true,size:"Small",text:"Central de Operações de TI · "+new Date().toLocaleString("pt-BR")});
-  const payload={type:"message",attachments:[{contentType:"application/vnd.microsoft.card.adaptive",content:{type:"AdaptiveCard",version:"1.4",body:body}}]};
+  const dashboardUrl="http://"+(HOST==="0.0.0.0"?os.hostname():HOST)+":"+PORTA+"/central.html";
+  const payload={type:"message",attachments:[{contentType:"application/vnd.microsoft.card.adaptive",content:{type:"AdaptiveCard",version:"1.4",body:body,actions:[{type:"Action.OpenUrl",title:"Abrir Central de Operações",url:dashboardUrl}]}}]};
   const response=await fetch(webhook,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
   if(!response.ok)throw new Error("Teams respondeu HTTP "+response.status);
 }
@@ -561,7 +568,7 @@ async function dispatchNotification(eventKey,eventType,title,message,force,detai
   const channel=auth.getSetting("notifications_channel","teams"),settings={emailTo:auth.getSetting("notifications_email_to","")};
   let status="sent",error="";
   try {
-    if(channel==="teams"||channel==="both"){const hook=auth.getSetting("notifications_teams_webhook","");if(!hook)throw new Error("Webhook do Teams não configurado.");await sendTeamsNotification(hook,title,message,details);}
+    if(channel==="teams"||channel==="both"){const hook=auth.getSetting("notifications_teams_webhook","");if(!hook)throw new Error("Webhook do Teams não configurado.");await sendTeamsNotification(hook,title,message,details,eventType);}
     if(channel==="email"||channel==="both")await sendEmailNotification(settings,title,message);
   } catch(e){status="error";error=e.message;}
   db.prepare("INSERT OR REPLACE INTO notification_log (event_key,event_type,title,message,channel,status,created_at,sent_at,error) VALUES (?,?,?,?,?,?,?,?,?)").run(eventKey,eventType,title,message,channel,status,new Date().toISOString(),status==="sent"?new Date().toISOString():"",error);
