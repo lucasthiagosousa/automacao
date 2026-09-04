@@ -84,6 +84,12 @@ app.get(["/admin", "/admin.html"], auth.requireAuth, (req, res) => {
   return res.sendFile(path.join(pastaPublica, "admin.html"));
 });
 
+app.get(["/configuracoes", "/configuracoes.html"], auth.requireAuth, (req, res) => {
+  if (req.user.role !== "master") return res.redirect("/");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  return res.sendFile(path.join(pastaPublica, "configuracoes.html"));
+});
+
 app.use(auth.requireAuth);
 app.use((req, res, next) => {
   if (/\.(?:html|js|css)$/i.test(req.path)) {
@@ -1208,6 +1214,28 @@ setInterval(function(){
   const reportEnabled=auth.getSetting("daily_stock_report","0")==="1",reportTime=auth.getSetting("daily_stock_report_time","18:00"),today=localDateKey(now),current=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
   if(reportEnabled&&current>=reportTime&&auth.getSetting("daily_stock_report_last_date","")!==today)sendDailyStockMovementReport().catch(function(error){console.error("Relatório diário:",error.message);});
 },60000).unref();
+
+async function scheduledTonerScan() {
+  if(tonerExecutando)return false;
+  tonerExecutando=true;
+  try{
+    const printers=auth.getPrinters().filter(function(item){return item.active;}).map(function(item){return[item.ip,item.model];});
+    if(!printers.length)return false;
+    const report=await tonerMonitor.scan({threshold:Math.max(1,Math.min(99,Number(auth.getSetting("toner_threshold","20"))||20)),printers:printers});
+    fs.mkdirSync(path.dirname(arquivoToner),{recursive:true});
+    fs.writeFileSync(arquivoToner,JSON.stringify(report,null,2),"utf8");
+    auth.recordTonerSnapshot(report);
+    auth.setSetting("toner_last_automatic_scan",new Date().toISOString(),null);
+    await sendOperationalSummaries(false,["toner"]);
+    console.log("Leitura automática de toners concluída.");
+    return true;
+  }catch(error){
+    console.error("Leitura automática de toners:",error.message);
+    return false;
+  }finally{tonerExecutando=false;}
+}
+setTimeout(function(){scheduledTonerScan();},30000).unref();
+setInterval(function(){scheduledTonerScan();},15*60*1000).unref();
 
 /*
  * Se a pessoa digitar uma rota inexistente,
