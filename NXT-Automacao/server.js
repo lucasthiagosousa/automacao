@@ -559,22 +559,19 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
         const fallback=supply.kind==="Toner"?item.cartridge:"Confirmar pelo código do consumível";
         const take=supply.code?((brandMatch?brandMatch[1].toUpperCase()+" ":"")+supply.code):fallback;
         items.push({
-          type:"Container",style:"emphasis",spacing:"Small",bleed:true,
-          items:[{
-            type:"ColumnSet",columns:[
-              {type:"Column",width:"stretch",items:[
-                {type:"TextBlock",wrap:true,weight:"Bolder",text:supply.description},
-                {type:"TextBlock",wrap:true,spacing:"Small",color:"Good",weight:"Bolder",text:"Levar: 1 × "+take}
-              ]},
-              {type:"Column",width:"auto",verticalContentAlignment:"Center",items:[
-                {type:"TextBlock",horizontalAlignment:"Right",weight:"Bolder",size:"Large",color:"Attention",text:String(supply.level)+"%"},
-                {type:"TextBlock",horizontalAlignment:"Right",isSubtle:true,size:"Small",spacing:"None",text:"nível atual"}
-              ]}
-            ]
-          }]
+          type:"ColumnSet",spacing:"Medium",separator:true,columns:[
+            {type:"Column",width:"stretch",items:[
+              {type:"TextBlock",wrap:true,weight:"Bolder",text:supply.description},
+              {type:"TextBlock",wrap:true,spacing:"Small",color:"Good",weight:"Bolder",text:"LEVAR  →  1 × "+take}
+            ]},
+            {type:"Column",width:"auto",verticalContentAlignment:"Center",items:[
+              {type:"TextBlock",horizontalAlignment:"Right",weight:"Bolder",size:"Large",color:"Attention",text:String(supply.level)+"%"},
+              {type:"TextBlock",horizontalAlignment:"Right",isSubtle:true,size:"Small",spacing:"None",text:"nível atual"}
+            ]}
+          ]
         });
       });
-      body.push({type:"Container",separator:index>0,spacing:index>0?"ExtraLarge":"Medium",style:index%2?"emphasis":"default",items:items});
+      body.push({type:"Container",separator:index>0,spacing:index>0?"ExtraLarge":"Medium",style:"emphasis",items:items});
     });
   } else {
     body.push({type:"TextBlock",wrap:true,text:message});
