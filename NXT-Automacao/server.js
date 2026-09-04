@@ -791,8 +791,6 @@ async function evaluateNotifications() {
   auth.database.prepare("SELECT employee_key AS employeeKey,employee_name AS employeeName,activation_date AS activationDate FROM vacation_access_plans WHERE completed=0 AND activation_date!=''").all().forEach(function(plan){
     if(plan.activationDate<=today.toISOString().slice(0,10))events.push({key:"vacation:"+plan.employeeKey+":"+plan.activationDate,type:"vacation",title:"Retorno de férias",message:plan.employeeName+" retorna em "+plan.activationDate+". Confira a reativação dos acessos."});
   });
-  const summaries=await buildOperationalSummaryEvents(false,[auth.getSetting("notifications_stock","1")==="1"?"stock":""].filter(Boolean));
-  events.push.apply(events,summaries);
   for(const event of events)await dispatchNotification(event.key,event.type,event.title,event.message,false,event.details);
   return events.length;
 }
@@ -1305,8 +1303,8 @@ async function sendDailyStockMovementReport() {
 }
 setTimeout(function(){captureStockSnapshot("startup").catch(function(error){console.error("Snapshot inicial:",error.message);});},10000).unref();
 setInterval(function(){
-  const now=new Date(),enabled=auth.getSetting("nxt_auto_update","0")==="1",hours=Math.max(1,Number(auth.getSetting("nxt_auto_update_hours","1"))||1),last=Date.parse(auth.getSetting("nxt_auto_update_last_attempt",""))||0;
-  if(enabled&&Date.now()-last>=hours*3600000)scheduledNxtUpdate();
+  const now=new Date(),enabled=auth.getSetting("nxt_auto_update","0")==="1",last=Date.parse(auth.getSetting("nxt_auto_update_last_attempt",""))||0;
+  if(enabled&&Date.now()-last>=15*60*1000)scheduledNxtUpdate();
   const reportEnabled=auth.getSetting("daily_stock_report","0")==="1",reportTime=auth.getSetting("daily_stock_report_time","18:00"),today=localDateKey(now),current=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
   if(reportEnabled&&current>=reportTime&&auth.getSetting("daily_stock_report_last_date","")!==today)sendDailyStockMovementReport().catch(function(error){console.error("Relatório diário:",error.message);});
 },60000).unref();
