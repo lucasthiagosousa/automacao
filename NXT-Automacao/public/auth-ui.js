@@ -63,7 +63,8 @@
       body.workspace-page-colaboradores .workspace-tabs-shell{width:100%;margin:0 0 26px}
       body.workspace-page-colaboradores .wrap>#dropzone,body.workspace-page-colaboradores .wrap>#app,body.workspace-page-colaboradores .wrap>footer{width:min(calc(100% - 48px),1280px);margin-left:auto;margin-right:auto}
       body.workspace-operational a[data-old-workspace-link]{display:none!important}
-      @media(max-width:1328px){body.workspace-page-colaboradores .wrap>header{padding-left:24px;padding-right:24px}}
+      @media(min-width:901px){body.workspace-operational{zoom:1.06}}
+            @media(max-width:1328px){body.workspace-page-colaboradores .wrap>header{padding-left:24px;padding-right:24px}}
       @media(max-width:900px){body.workspace-operational .header-inner,body.workspace-page-colaboradores .wrap>header{align-items:flex-start!important;flex-direction:column!important}.header-actions,.header-right{width:100%;justify-content:flex-start!important}.workspace-tabs{width:calc(100% - 24px);height:55px}.workspace-tab{padding:0 12px}.workspace-tab-copy small{display:none}.workspace-page-heading{align-items:flex-start;flex-direction:column;gap:7px}.workspace-page-heading p{text-align:left}}
       /* Identidade verde global: ações e estados interativos */
       body.workspace-operational{--blue:#0aad63!important;--accent:#0aad63!important;--accent-dim:#e4f8ee!important}
@@ -224,10 +225,11 @@
       });
       actions.appendChild(logout);
     }
-    const updateButton = document.getElementById("nxtUpdateButton");
-    if (updateButton && !user.canUpdateNxt) updateButton.hidden = true;
-    const uploadButton = document.getElementById("uploadButton");
-    if (uploadButton && user.role === "viewer") uploadButton.hidden = true;
+    document.body.classList.add("role-" + user.role);
+    ["nxtUpdateButton","uploadButton","tonerThresholdButton","refreshButton"].forEach(function(id){
+      const element=document.getElementById(id);
+      if(element)element.hidden=user.role!=="master";
+    });
   }
 
   /*
