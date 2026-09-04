@@ -701,6 +701,7 @@ async function buildOperationalSummaryEvents(force, selectedTypes) {
       const description=String(supply.name||supply.description||"Toner");
       const code=String(supply.partNumber||supply.model||supplyCode(description));
       const collection=/(coleta|collection|waste|residu)/i.test(description);
+      if(collection)return;
       criticalSupplies.push({
         description:description,level:level,code:code,
         kind:collection?"Unidade de coleta":"Toner"
