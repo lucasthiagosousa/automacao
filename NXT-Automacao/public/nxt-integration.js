@@ -475,12 +475,12 @@
       + ".restock-form-row .restock-product-url{grid-column:1/-1;padding:7px 9px;text-align:left;font-weight:500}"
       + ".restock-note-label{display:block;margin-top:13px;color:#66768c;font-size:9px;font-weight:700}.restock-note{width:100%;height:65px;margin-top:6px;padding:9px;resize:vertical}"
       + ".restock-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:13px}"
-      + ".restock-status-pending{background:#eaecf0;color:#475467}.restock-status-requested{background:#eaf3ff;color:#0b63ce}.restock-status-purchasing{background:#fef0c7;color:#b54708}.restock-status-received{background:#dcfae6;color:#027a48}"
+      + ".restock-status-draft{background:#eaecf0;color:#475467}.restock-status-awaiting_approval{background:#fff4cc;color:#8a5b00}.restock-status-approved{background:#e8f8ef;color:#027a48}.restock-status-sc_open{background:#eaf3ff;color:#0b63ce}.restock-status-purchasing{background:#fef0c7;color:#b54708}.restock-status-partial_received{background:#f3edff;color:#6941c6}.restock-status-finished{background:#dcfae6;color:#027a48}"
       + "@media(max-width:760px){.restock-summary{grid-template-columns:1fr auto}.restock-summary .restock-meta{grid-column:1/-1}.restock-item{grid-template-columns:1fr repeat(3,60px)}.restock-sc-grid,.restock-edit{grid-template-columns:1fr}.restock-form-row{grid-template-columns:1fr 55px 55px 70px}}";
     document.head.appendChild(style);
 
     function statusLabel(status) {
-      return ({ pending: "Pendente", requested: "Solicitado", purchasing: "Em compra", received: "Recebido" })[status] || status;
+      return ({ draft:"Rascunho",awaiting_approval:"Aguardando aprovação",approved:"Aprovada",sc_open:"SC aberta",purchasing:"Em compra",partial_received:"Recebimento parcial",finished:"Finalizada" })[status] || status;
     }
 
     function requestCode(id) {
@@ -570,7 +570,7 @@
             + (request.expectedAt ? ' · previsão: ' + formatDay(request.expectedAt) : '') + '</div>';
         const edit = currentUser.canUpdateNxt
           ? scFields + '<div class="restock-edit"><label>Status<select data-restock-status="' + request.id + '">'
-            + ["pending", "requested", "purchasing", "received"].map(function (status) {
+            + ["draft","awaiting_approval","approved","sc_open","purchasing","partial_received","finished"].map(function (status) {
               return '<option value="' + status + '"' + (request.status === status ? " selected" : "") + '>' + statusLabel(status) + '</option>';
             }).join("") + '</select></label><label>Observação<textarea data-restock-notes="' + request.id + '">' + esc(request.notes) + '</textarea></label>'
             + '<button class="btn btn-primary" type="button" data-restock-update="' + request.id + '">Salvar</button></div>'
