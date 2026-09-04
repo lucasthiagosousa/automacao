@@ -728,6 +728,8 @@ function createAuth(options) {
     response.json({ sucesso:true, settings:{
       enabled:getSetting("notifications_enabled","0")==="1", channel:getSetting("notifications_channel","teams"),
       teamsWebhook:getSetting("notifications_teams_webhook",""), emailTo:getSetting("notifications_email_to",""),
+      smtpHost:getSetting("notifications_smtp_host",""),smtpPort:Number(getSetting("notifications_smtp_port","587"))||587,
+      smtpFrom:getSetting("notifications_email_from",""),smtpUser:getSetting("notifications_smtp_user",""),smtpSsl:getSetting("notifications_smtp_ssl","1")==="1",smtpPasswordConfigured:Boolean(getSetting("notifications_smtp_password","")),
       staleDays:Number(getSetting("notifications_stale_days","5"))||5, taskLeadDays:Number(getSetting("notifications_task_lead_days","2"))||2
     }});
   });
@@ -737,6 +739,12 @@ function createAuth(options) {
     setSetting("notifications_channel",channel,request.user.id);
     setSetting("notifications_teams_webhook",safeText(request.body.teamsWebhook,2000),request.user.id);
     setSetting("notifications_email_to",safeText(request.body.emailTo,500),request.user.id);
+    setSetting("notifications_smtp_host",safeText(request.body.smtpHost,300),request.user.id);
+    setSetting("notifications_smtp_port",String(Math.max(1,Number(request.body.smtpPort)||587)),request.user.id);
+    setSetting("notifications_email_from",safeText(request.body.smtpFrom,300),request.user.id);
+    setSetting("notifications_smtp_user",safeText(request.body.smtpUser,300),request.user.id);
+    if(request.body.smtpPassword)setSetting("notifications_smtp_password",safeText(request.body.smtpPassword,1000),request.user.id);
+    setSetting("notifications_smtp_ssl",request.body.smtpSsl===false?"0":"1",request.user.id);
     setSetting("notifications_stale_days",String(Math.max(1,Number(request.body.staleDays)||5)),request.user.id);
     setSetting("notifications_task_lead_days",String(Math.max(0,Number(request.body.taskLeadDays)||2)),request.user.id);
     addAudit(request.user.id,"update","notifications","","Configurações de notificações atualizadas");
