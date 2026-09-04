@@ -542,15 +542,28 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
     "stock-summary":{icon:"📦",color:"Attention"},"toner-summary":{icon:"🖨️",color:"Attention"},
     "purchase":{icon:"🛒",color:"Accent"},"daily-stock":{icon:"📊",color:"Good"},
     "vacation":{icon:"👤",color:"Accent"},"task":{icon:"⏰",color:"Warning"},
-    "request":{icon:"⚠️",color:"Warning"},"startup":{icon:"✅",color:"Good"},"test":{icon:"✅",color:"Good"}
+    "request":{icon:"⚠️",color:"Warning"},"startup":{icon:"✅",color:"Good"},"activity-start":{icon:"🌅",color:"Good"},"test":{icon:"✅",color:"Good"}
   }[eventType]||{icon:"ℹ️",color:"Accent"};
   const body=[
     {type:"TextBlock",weight:"Bolder",size:"Medium",color:visual.color,text:visual.icon+" "+title}
   ];
   const printerGroups=eventType==="toner-summary"&&details&&Array.isArray(details.printerGroups)?details.printerGroups:null;
   const stockItems=eventType==="stock-summary"&&details&&Array.isArray(details.stockItems)?details.stockItems:null;
+  const startReport=eventType==="activity-start"&&details&&details.startReport?details.startReport:null;
   const dailyReport=eventType==="daily-stock"&&details&&details.dailyReport?details.dailyReport:null;
-  if(stockItems){
+  if(startReport){
+    body.push({type:"TextBlock",wrap:true,isSubtle:true,size:"Small",text:startReport.date+"  •  Primeira visão operacional do dia"});
+    body.push({type:"ColumnSet",spacing:"Medium",columns:[
+      {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"ESTOQUE BAIXO"},{type:"TextBlock",weight:"Bolder",size:"Large",color:"Attention",spacing:"None",text:String(startReport.stockItems.length)}]},
+      {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"TONERS CRÍTICOS"},{type:"TextBlock",weight:"Bolder",size:"Large",color:"Attention",spacing:"None",text:String(startReport.criticalToners)}]},
+      {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"OFFLINE"},{type:"TextBlock",weight:"Bolder",size:"Large",spacing:"None",text:String(startReport.offline.length)}]},
+      {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"COMPRAS ABERTAS"},{type:"TextBlock",weight:"Bolder",size:"Large",spacing:"None",text:String(startReport.openRequests)}]}
+    ]});
+    if(startReport.stockItems.length){body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"📦 Reposição necessária"});body.push({type:"FactSet",facts:startReport.stockItems.slice(0,10).map(function(item){return{title:item.name,value:"Comprar "+item.buy+"  •  atual "+item.current+" / mínimo "+item.minimum};})});}
+    if(startReport.printerGroups.length){body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"🖨️ Toners para atenção"});startReport.printerGroups.slice(0,10).forEach(function(item){body.push({type:"TextBlock",wrap:true,spacing:"Small",text:item.printer+"  •  "+item.supplies.map(function(supply){return supply.description+" "+supply.level+"%";}).join("  |  ")});});}
+    body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"Rede de impressoras"});
+    body.push({type:"TextBlock",wrap:true,color:startReport.offline.length?"Attention":"Good",text:startReport.offline.length?startReport.offline.join("  •  "):"Todas as impressoras monitoradas estão online."});
+  } else if(stockItems){
     const total=stockItems.reduce(function(sum,item){return sum+Number(item.buy||0);},0);
     body.push({type:"TextBlock",wrap:true,isSubtle:true,text:stockItems.length+" categoria(s) abaixo do mínimo  •  "+total+" unidade(s) para reposição"});
     stockItems.forEach(function(item,index){
@@ -611,6 +624,13 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
       body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"Variação por categoria"});
       body.push({type:"FactSet",facts:dailyReport.changedCategories.slice(0,15).map(function(item){return{title:item.name,value:item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")"};})});
     }
+    body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"Situação final da operação"});
+    body.push({type:"FactSet",facts:[
+      {title:"Itens abaixo do mínimo",value:String(dailyReport.stockLow)},
+      {title:"Toners críticos",value:String(dailyReport.criticalToners)},
+      {title:"Impressoras offline",value:String(dailyReport.offlineCount)},
+      {title:"Solicitações abertas",value:String(dailyReport.openRequests)}
+    ]});
     body.push({type:"TextBlock",wrap:true,isSubtle:true,size:"Small",spacing:"Medium",text:dailyReport.unchangedCount+" categoria(s) permaneceram sem alteração. Movimentações calculadas somente entre sincronizações concluídas hoje."});
   } else {
     body.push({type:"TextBlock",wrap:true,text:message});
@@ -1295,7 +1315,8 @@ async function sendDailyStockMovementReport() {
   names.forEach(function(name){const before=Number((firstCategories.find(function(item){return item.name===name;})||{quantity:0}).quantity)||0,after=Number((lastCategories.find(function(item){return item.name===name;})||{quantity:0}).quantity)||0,item={name:name,before:before,after:after,difference:after-before};(item.difference?changedCategories:unchanged).push(item);});
   const entries=movements.filter(function(item){return item.type==="entry";}),exits=movements.filter(function(item){return item.type==="exit";}),transfers=movements.filter(function(item){return item.type==="transfer";});
   const period=time(rows[0].capturedAt)+" até "+time(rows[rows.length-1].capturedAt),balance=entries.length-exits.length;
-  const dailyReport={date:new Date().toLocaleDateString("pt-BR"),period:period,lastSync:time(rows[rows.length-1].capturedAt),entries:entries,exits:exits,transfers:transfers,balance:balance,changedCategories:changedCategories,unchangedCount:unchanged.length,snapshotCount:rows.length,sufficient:rows.length>=2};
+  const operational=await buildOperationalSummaryEvents(true,["stock","toner"]),stockEvent=operational.find(function(item){return item.type==="stock-summary";}),tonerEvent=operational.find(function(item){return item.type==="toner-summary";}),tonerNow=lerTonerAtual();
+  const dailyReport={date:new Date().toLocaleDateString("pt-BR"),period:period,lastSync:time(rows[rows.length-1].capturedAt),entries:entries,exits:exits,transfers:transfers,balance:balance,changedCategories:changedCategories,unchangedCount:unchanged.length,snapshotCount:rows.length,sufficient:rows.length>=2,stockLow:stockEvent?stockEvent.details.stockItems.length:0,criticalToners:tonerEvent?tonerEvent.details.printerGroups.reduce(function(total,item){return total+item.supplies.length;},0):0,offlineCount:(tonerNow.printers||[]).filter(function(item){return item.online===false;}).length,openRequests:auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length};
   const lines=["Fechamento diário do estoque — "+dailyReport.date,"Período monitorado: "+period,"Entradas detectadas: "+entries.length,"Saídas detectadas: "+exits.length,!dailyReport.sufficient?"Ainda não há duas sincronizações concluídas hoje.":exits.length?exits.map(function(item){return "Saída · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma saída foi detectada hoje.",entries.length?entries.map(function(item){return "Entrada · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma entrada foi detectada hoje."];
   await dispatchNotification("daily-stock:"+date,"daily-stock","Fechamento diário do estoque",lines.join("\n"),false,{dailyReport:dailyReport});
   auth.setSetting("daily_stock_report_last_date",date,null);
@@ -1305,8 +1326,7 @@ setTimeout(function(){captureStockSnapshot("startup").catch(function(error){cons
 setInterval(function(){
   const now=new Date(),enabled=auth.getSetting("nxt_auto_update","0")==="1",last=Date.parse(auth.getSetting("nxt_auto_update_last_attempt",""))||0;
   if(enabled&&Date.now()-last>=15*60*1000)scheduledNxtUpdate();
-  const reportEnabled=auth.getSetting("daily_stock_report","0")==="1",reportTime=auth.getSetting("daily_stock_report_time","18:00"),today=localDateKey(now),current=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
-  if(reportEnabled&&current>=reportTime&&auth.getSetting("daily_stock_report_last_date","")!==today)sendDailyStockMovementReport().catch(function(error){console.error("Relatório diário:",error.message);});
+
 },60000).unref();
 
 async function scheduledTonerScan() {
@@ -1327,24 +1347,30 @@ async function scheduledTonerScan() {
     return false;
   }finally{tonerExecutando=false;}
 }
-async function scheduledTonerDigest() {
+async function sendStartOfActivitiesReport() {
+  const date=localDateKey(),events=await buildOperationalSummaryEvents(true,["stock","toner"]);
+  const stockEvent=events.find(function(item){return item.type==="stock-summary";}),tonerEvent=events.find(function(item){return item.type==="toner-summary";}),toner=lerTonerAtual();
+  const startReport={date:new Date().toLocaleDateString("pt-BR"),stockItems:stockEvent?stockEvent.details.stockItems:[],printerGroups:tonerEvent?tonerEvent.details.printerGroups:[],criticalToners:tonerEvent?tonerEvent.details.printerGroups.reduce(function(total,item){return total+item.supplies.length;},0):0,offline:(toner.printers||[]).filter(function(item){return item.online===false;}).map(function(item){return item.hostname||item.model||item.ip;}),openRequests:auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length};
+  return dispatchNotification("activity-start:"+date,"activity-start","Início das atividades", "Resumo operacional de abertura.",false,{startReport:startReport});
+}
+async function scheduledActivityReport() {
   const now=new Date(),day=now.getDay(),hour=now.getHours();
   if(day===0||day===6||(hour!==7&&hour!==17)||tonerDigestExecutando)return false;
   const slot=localDateKey(now)+"-"+String(hour).padStart(2,"0");
-  if(auth.getSetting("toner_digest_last_slot","")===slot)return false;
-  if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("notifications_toner","1")!=="1")return false;
+  if(auth.getSetting("activity_report_last_slot","")===slot)return false;
+  if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
   tonerDigestExecutando=true;
   try{
     await scheduledTonerScan();
-    const total=await sendOperationalSummaries(true,["toner"]);
-    auth.setSetting("toner_digest_last_slot",slot,null);
-    console.log("Resumo programado de toners enviado:",slot,total);
+    if(hour===7)await sendStartOfActivitiesReport();else await sendDailyStockMovementReport();
+    auth.setSetting("activity_report_last_slot",slot,null);
+    console.log(hour===7?"Relatório de início enviado:":"Fechamento diário enviado:",slot);
     return true;
   }finally{tonerDigestExecutando=false;}
 }
-setTimeout(function(){scheduledTonerScan();scheduledTonerDigest().catch(function(error){console.error("Resumo programado de toners:",error.message);});},30000).unref();
+setTimeout(function(){scheduledTonerScan();scheduledActivityReport().catch(function(error){console.error("Relatório operacional programado:",error.message);});},30000).unref();
 setInterval(function(){scheduledTonerScan();},15*60*1000).unref();
-setInterval(function(){scheduledTonerDigest().catch(function(error){console.error("Resumo programado de toners:",error.message);});},60*1000).unref();
+setInterval(function(){scheduledActivityReport().catch(function(error){console.error("Relatório operacional programado:",error.message);});},60*1000).unref();
 
 /*
  * Se a pessoa digitar uma rota inexistente,
