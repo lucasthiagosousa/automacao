@@ -22,6 +22,7 @@
   function addStyles() {
     const style = document.createElement("style");
     style.textContent = `
+      [hidden]{display:none!important}
       .auth-account{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:5px 9px;border:1px solid rgba(255,255,255,.22);border-radius:10px;color:inherit;background:rgba(255,255,255,.1)}
       .auth-avatar{width:27px;height:27px;display:grid;place-items:center;border-radius:8px;background:#fff;color:#087a45;font-size:11px;font-weight:900}
       .auth-copy{display:flex;flex-direction:column;line-height:1.15;text-align:left}.auth-copy strong{font-size:11px}.auth-copy span{font-size:9px;opacity:.72}.auth-link{cursor:pointer;text-decoration:none}
