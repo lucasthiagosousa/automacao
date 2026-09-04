@@ -655,23 +655,46 @@ async function buildOperationalSummaryEvents(force, selectedTypes) {
   }
 
   const tonerAlerts=[],toner=types.includes("toner")?lerTonerAtual():{printers:[],threshold:20},threshold=Number(toner.threshold||20);
+  function supplyCode(description) {
+    const matches=String(description||"").toUpperCase().match(/\b(?=[A-Z0-9-]{5,14}\b)(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*\d)[A-Z0-9-]+\b/g)||[];
+    return matches.length?matches[matches.length-1]:"";
+  }
   (toner.printers||[]).forEach(function(printer){
     if(printer.online===false)return;
+    const criticalSupplies=[];
     (printer.supplies||[]).forEach(function(supply){
       if(supply.isToner===false)return;
       const level=Number(supply.level??supply.percent);
-      if(Number.isFinite(level)&&level<=threshold){
-        tonerAlerts.push({printer:printer.hostname||printer.model||printer.ip,ip:printer.ip,toner:supply.name||supply.description||"Toner",level:level});
-      }
+      if(!Number.isFinite(level)||level>threshold)return;
+      const description=String(supply.name||supply.description||"Toner");
+      const code=String(supply.partNumber||supply.model||supplyCode(description));
+      const collection=/(coleta|collection|waste|residu)/i.test(description);
+      criticalSupplies.push({
+        description:description,level:level,code:code,
+        kind:collection?"Unidade de coleta":"Toner"
+      });
+    });
+    if(criticalSupplies.length)tonerAlerts.push({
+      printer:printer.hostname||printer.model||printer.ip,
+      ip:printer.ip||"",model:printer.model||"",cartridge:printer.cartridge||"",
+      supplies:criticalSupplies
     });
   });
   if(tonerAlerts.length){
-    const details={};
-    tonerAlerts.forEach(function(item,index){details["Impressora "+(index+1)]=item.printer+" · "+item.toner+" em "+item.level+"%";});
+    const message=tonerAlerts.map(function(item,index){
+      const identity="Impressora "+(index+1)+" — "+item.printer+(item.ip?" ("+item.ip+")":"");
+      const lines=item.supplies.map(function(supply){
+        const fallback=supply.kind==="Toner"?item.cartridge:"Confirmar pelo código do consumível";
+        const brandMatch=supply.description.match(/\b(HP|Samsung|Epson|Brother|Lexmark|Xerox|Canon)\b/i);
+        const take=supply.code?((brandMatch?brandMatch[1].toUpperCase()+" ":"")+supply.code):fallback;
+        return "• "+supply.description+": "+supply.level+"%\n  LEVAR PARA TROCA: "+take;
+      });
+      if(item.model)lines.push("  Modelo da impressora: "+item.model);
+      return identity+"\n"+lines.join("\n");
+    }).join("\n\n");
     events.push({
-      key:"toner-summary:"+keySuffix,type:"toner-summary",title:"Impressoras · toners em nível crítico",
-      message:tonerAlerts.map(function(item,index){return "Impressora "+(index+1)+" — "+item.printer+"\n"+item.toner+": "+item.level+"%";}).join("\n\n"),
-      details:details
+      key:"toner-summary:"+keySuffix,type:"toner-summary",title:"Impressoras · consumíveis em nível crítico",
+      message:message
     });
   }
   return events;
