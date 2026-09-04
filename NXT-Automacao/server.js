@@ -521,8 +521,16 @@ app.post("/api/system/restore", auth.requireMaster, (req,res) => {
   } catch(error){try{fs.rmSync(arquivoRestauracao);}catch{}res.status(400).json({sucesso:false,mensagem:error.message});}
 });
 
-async function sendTeamsNotification(webhook,title,message) {
-  const response=await fetch(webhook,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({type:"message",attachments:[{contentType:"application/vnd.microsoft.card.adaptive",content:{type:"AdaptiveCard",version:"1.4",body:[{type:"TextBlock",weight:"Bolder",size:"Medium",text:title},{type:"TextBlock",wrap:true,text:message}]}}]})});
+async function sendTeamsNotification(webhook,title,message,details) {
+  const body=[
+    {type:"TextBlock",weight:"Bolder",size:"Medium",color:"Good",text:title},
+    {type:"TextBlock",wrap:true,text:message}
+  ];
+  const facts=Object.entries(details||{}).filter(function(entry){return entry[1]!==undefined&&entry[1]!==null&&String(entry[1]).trim();}).map(function(entry){return{title:String(entry[0]),value:String(entry[1])};});
+  if(facts.length)body.push({type:"FactSet",facts:facts});
+  body.push({type:"TextBlock",wrap:true,isSubtle:true,size:"Small",text:"Central de Operações de TI · "+new Date().toLocaleString("pt-BR")});
+  const payload={type:"message",attachments:[{contentType:"application/vnd.microsoft.card.adaptive",content:{type:"AdaptiveCard",version:"1.4",body:body}}]};
+  const response=await fetch(webhook,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
   if(!response.ok)throw new Error("Teams respondeu HTTP "+response.status);
 }
 
@@ -537,18 +545,60 @@ function sendEmailNotification(settings,title,message) {
   });
 }
 
-async function dispatchNotification(eventKey,eventType,title,message,force) {
+async function dispatchNotification(eventKey,eventType,title,message,force,details) {
   const db=auth.database;
-  if(!force&&db.prepare("SELECT id FROM notification_log WHERE event_key=?").get(eventKey))return false;
+  if(!force&&db.prepare("SELECT id FROM notification_log WHERE event_key=? AND status=\'sent\'").get(eventKey))return false;
   const enabled=auth.getSetting("notifications_enabled","0")==="1";if(!enabled&&!force)return false;
   const channel=auth.getSetting("notifications_channel","teams"),settings={emailTo:auth.getSetting("notifications_email_to","")};
   let status="sent",error="";
   try {
-    if(channel==="teams"||channel==="both"){const hook=auth.getSetting("notifications_teams_webhook","");if(!hook)throw new Error("Webhook do Teams não configurado.");await sendTeamsNotification(hook,title,message);}
+    if(channel==="teams"||channel==="both"){const hook=auth.getSetting("notifications_teams_webhook","");if(!hook)throw new Error("Webhook do Teams não configurado.");await sendTeamsNotification(hook,title,message,details);}
     if(channel==="email"||channel==="both")await sendEmailNotification(settings,title,message);
   } catch(e){status="error";error=e.message;}
   db.prepare("INSERT OR REPLACE INTO notification_log (event_key,event_type,title,message,channel,status,created_at,sent_at,error) VALUES (?,?,?,?,?,?,?,?,?)").run(eventKey,eventType,title,message,channel,status,new Date().toISOString(),status==="sent"?new Date().toISOString():"",error);
   return status==="sent";
+}
+
+function requestStatusLabel(status) {
+  return ({draft:"Rascunho",awaiting_approval:"Aguardando aprovação",approved:"Aprovada",sc_open:"SC aberta",purchasing:"Em compra",partial_received:"Recebimento parcial",finished:"Finalizada"})[status]||status;
+}
+async function notifyRestockRequest(request, action) {
+  if(!request)return false;
+  const total=(request.items||[]).reduce(function(sum,item){return sum+Number(item.quantity||0);},0);
+  const received=(request.items||[]).reduce(function(sum,item){return sum+Number(item.receivedQuantity||0);},0);
+  const products=(request.items||[]).map(function(item){return item.categoryName+" ("+item.quantity+")";}).join(", ");
+  const title=action==="created"?"Nova solicitação de compra":"Solicitação de compra atualizada";
+  const message=action==="created"
+    ?"Uma nova necessidade de reposição foi registrada e precisa de acompanhamento."
+    :"O andamento da compra foi alterado. O canal está sendo atualizado automaticamente.";
+  return dispatchNotification("purchase:"+request.id+":"+request.status+":"+String(request.updatedAt||Date.now()),"purchase",title,message,false,{
+    "Solicitação":"#"+request.id,"Status":requestStatusLabel(request.status),"Itens":products||"Não informado",
+    "Solicitado":total+" unidade(s)","Recebido":received+" unidade(s)","Pendente":Math.max(0,total-received)+" unidade(s)",
+    "Número da SC":request.scNumber||"Ainda não informado","Responsável":request.buyer||request.updatedBy||"Não definido",
+    "Previsão":request.expectedAt||"Não definida"
+  });
+}
+async function sendStartupDigest() {
+  if(auth.getSetting("notifications_enabled","0")!=="1")return;
+  let shortages=[],critical=0,openRequests=0;
+  try{
+    const stock=await lerPlanilha(),cats=stock.categorias||[];
+    auth.getMinimums().filter(function(item){return item.monitored&&Number(item.minimum)>0;}).forEach(function(rule){
+      const normalized=String(rule.categoryName||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+      const found=cats.find(function(cat){const name=String(cat.nome||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();return name===normalized||name.includes(normalized)||normalized.includes(name);});
+      const current=found?Number(found.atual)||0:0,missing=Math.max(0,Number(rule.minimum)-current);
+      if(missing)shortages.push(rule.categoryName+": comprar "+missing);
+    });
+  }catch{}
+  try{const toner=lerTonerAtual();critical=Number(toner.summary&&toner.summary.critical)||0;}catch{}
+  try{openRequests=auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length;}catch{}
+  const date=new Date().toISOString().slice(0,10);
+  await dispatchNotification("startup-digest:"+date,"startup","Servidor ativo · resumo operacional",
+    shortages.length?"Existem itens abaixo do estoque mínimo que precisam de compra.":"O servidor foi iniciado e não existem faltas de estoque monitoradas.",false,{
+      "Itens para comprar":shortages.length?shortages.join(" · "):"Nenhum",
+      "Toners críticos":critical,"Solicitações abertas":openRequests,
+      "Endereço":"http://"+(HOST==="0.0.0.0"?os.hostname():HOST)+":"+PORTA
+    });
 }
 
 async function evaluateNotifications() {
@@ -559,14 +609,17 @@ async function evaluateNotifications() {
   try {
     const stock=await lerPlanilha(),rows=Array.isArray(stock.ativos)?stock.ativos:[],counts={};
     rows.forEach(function(item){const name=String(item.tipoAtivo||item.tipo||item.categoria||item.category||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().trim();if(name)counts[name]=(counts[name]||0)+1;});
-    auth.getMinimums().filter(function(item){return item.monitored&&item.minimum>0;}).forEach(function(item){const current=counts[item.categoryKey]||0;if(current<item.minimum)events.push({key:"stock:"+item.categoryKey+":"+today.toISOString().slice(0,10),type:"stock",title:"Estoque abaixo do mínimo",message:item.categoryName+" possui "+current+" unidade(s); mínimo definido: "+item.minimum+"."});});
+    auth.getMinimums().filter(function(item){return item.monitored&&item.minimum>0;}).forEach(function(item){const current=counts[item.categoryKey]||0;if(current<item.minimum)events.push({key:"stock:"+item.categoryKey+":"+today.toISOString().slice(0,10),type:"stock",title:"Estoque abaixo do mínimo",message:item.categoryName+" possui "+current+" unidade(s); mínimo definido: "+item.minimum+".",details:{"Item":item.categoryName,"Estoque atual":current,"Estoque mínimo":item.minimum,"Comprar":item.minimum-current}});});
   } catch {}
   const toner=lerTonerAtual();(toner.printers||[]).forEach(function(p){(p.supplies||[]).forEach(function(supply){if(Number(supply.level ?? supply.percent)<=Number(toner.threshold||20))events.push({key:"toner:"+p.ip+":"+String(supply.name||supply.description)+":"+today.toISOString().slice(0,10),type:"toner",title:"Toner em nível crítico",message:(p.model||p.ip)+" · "+(supply.name||"Suprimento")+" em "+supply.level+"%."});});});
-  for(const event of events)await dispatchNotification(event.key,event.type,event.title,event.message,false);
+  for(const event of events)await dispatchNotification(event.key,event.type,event.title,event.message,false,event.details);
   return events.length;
 }
 app.post("/api/notifications/test", auth.requireMaster, async(req,res)=>{const ok=await dispatchNotification("test:"+Date.now(),"test","Teste de notificações","A Central de Operações de TI está conectada.",true);res.status(ok?200:500).json({sucesso:ok,mensagem:ok?"Notificação enviada.":"Falha no envio. Consulte o histórico."});});
 app.post("/api/notifications/run", auth.requireMaster, async(req,res)=>{const total=await evaluateNotifications();res.json({sucesso:true,total});});
+setTimeout(function(){
+  evaluateNotifications().then(sendStartupDigest).catch(function(error){console.error("Notificações ao iniciar:",error.message);});
+},5000).unref();
 setInterval(function(){evaluateNotifications().catch(function(error){console.error("Notificações:",error.message);});},15*60*1000).unref();
 
 app.get("/api/configuracao/nxt", auth.requireMaster, (req, res) => {
@@ -649,6 +702,7 @@ app.post(
         sucesso: true,
         solicitacao,
       });
+      notifyRestockRequest(solicitacao, "created").catch(function(error){ console.error("Teams · solicitação:", error.message); });
     } catch (erro) {
       res.status(400).json({
         sucesso: false,
@@ -692,10 +746,12 @@ app.patch(
       });
     }
 
-    return res.json({
+    res.json({
       sucesso: true,
       solicitacao,
     });
+    notifyRestockRequest(solicitacao, "updated").catch(function(error){ console.error("Teams · solicitação:", error.message); });
+    return;
   }
 );
 
@@ -703,6 +759,7 @@ app.delete(
   "/api/solicitacoes/:id",
   auth.requireMaster,
   (req, res) => {
+    const existingRequest = auth.getRestockRequests().find(function(item){ return item.id === Number(req.params.id); });
     const removida = auth.deleteRestockRequest(
       Number(req.params.id)
     );
@@ -714,10 +771,12 @@ app.delete(
       });
     }
 
-    return res.json({
+    res.json({
       sucesso: true,
       mensagem: "Solicitação excluída.",
     });
+    if(existingRequest)dispatchNotification("purchase-deleted:"+existingRequest.id+":"+Date.now(),"purchase","Solicitação de compra excluída","Uma solicitação foi removida pelo Master Admin.",false,{"Solicitação":"#"+existingRequest.id,"Responsável":req.user.username||"Master Admin"}).catch(function(error){console.error("Teams · exclusão:",error.message);});
+    return;
   }
 );
 
