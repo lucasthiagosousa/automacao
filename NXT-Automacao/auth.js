@@ -735,7 +735,10 @@ function createAuth(options) {
       teamsWebhook:getSetting("notifications_teams_webhook",""), emailTo:getSetting("notifications_email_to",""),
       smtpHost:getSetting("notifications_smtp_host",""),smtpPort:Number(getSetting("notifications_smtp_port","587"))||587,
       smtpFrom:getSetting("notifications_email_from",""),smtpUser:getSetting("notifications_smtp_user",""),smtpSsl:getSetting("notifications_smtp_ssl","1")==="1",smtpPasswordConfigured:Boolean(getSetting("notifications_smtp_password","")),
-      staleDays:Number(getSetting("notifications_stale_days","5"))||5, taskLeadDays:Number(getSetting("notifications_task_lead_days","2"))||2
+      staleDays:Number(getSetting("notifications_stale_days","5"))||5, taskLeadDays:Number(getSetting("notifications_task_lead_days","2"))||2,
+      notifyStock:getSetting("notifications_stock","1")==="1",notifyToner:getSetting("notifications_toner","1")==="1",
+      autoUpdate:getSetting("nxt_auto_update","0")==="1",autoUpdateHours:Number(getSetting("nxt_auto_update_hours","1"))||1,
+      dailyReport:getSetting("daily_stock_report","0")==="1",dailyReportTime:getSetting("daily_stock_report_time","18:00")
     }});
   });
   router.put("/notification-settings", requireAuth, requireMaster, function (request, response) {
@@ -752,6 +755,12 @@ function createAuth(options) {
     setSetting("notifications_smtp_ssl",request.body.smtpSsl===false?"0":"1",request.user.id);
     setSetting("notifications_stale_days",String(Math.max(1,Number(request.body.staleDays)||5)),request.user.id);
     setSetting("notifications_task_lead_days",String(Math.max(0,Number(request.body.taskLeadDays)||2)),request.user.id);
+    setSetting("notifications_stock",request.body.notifyStock===false?"0":"1",request.user.id);
+    setSetting("notifications_toner",request.body.notifyToner===false?"0":"1",request.user.id);
+    setSetting("nxt_auto_update",request.body.autoUpdate?"1":"0",request.user.id);
+    setSetting("nxt_auto_update_hours",String(Math.max(1,Math.min(24,Number(request.body.autoUpdateHours)||1))),request.user.id);
+    setSetting("daily_stock_report",request.body.dailyReport?"1":"0",request.user.id);
+    setSetting("daily_stock_report_time",/^([01]\d|2[0-3]):[0-5]\d$/.test(String(request.body.dailyReportTime||""))?request.body.dailyReportTime:"18:00",request.user.id);
     addAudit(request.user.id,"update","notifications","","Configurações de notificações atualizadas");
     response.json({sucesso:true});
   });
