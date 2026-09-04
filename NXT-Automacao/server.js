@@ -544,11 +544,36 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
     "request":{icon:"⚠️",color:"Warning"},"startup":{icon:"✅",color:"Good"},"test":{icon:"✅",color:"Good"}
   }[eventType]||{icon:"ℹ️",color:"Accent"};
   const body=[
-    {type:"TextBlock",weight:"Bolder",size:"Medium",color:visual.color,text:visual.icon+" "+title},
-    {type:"TextBlock",wrap:true,text:message}
+    {type:"TextBlock",weight:"Bolder",size:"Medium",color:visual.color,text:visual.icon+" "+title}
   ];
-  const facts=Object.entries(details||{}).filter(function(entry){return entry[1]!==undefined&&entry[1]!==null&&String(entry[1]).trim();}).map(function(entry){return{title:String(entry[0]),value:String(entry[1])};});
-  if(facts.length)body.push({type:"FactSet",facts:facts});
+  const printerGroups=eventType==="toner-summary"&&details&&Array.isArray(details.printerGroups)?details.printerGroups:null;
+  if(printerGroups){
+    body.push({type:"TextBlock",wrap:true,isSubtle:true,text:"Leve os consumíveis indicados abaixo para realizar cada troca."});
+    printerGroups.forEach(function(item,index){
+      const items=[
+        {type:"TextBlock",weight:"Bolder",size:"Default",wrap:true,text:"Impressora "+(index+1)+" — "+item.printer},
+        {type:"TextBlock",wrap:true,isSubtle:true,size:"Small",text:(item.ip?"IP: "+item.ip+"  •  ":"")+"Modelo: "+(item.model||"Não identificado")}
+      ];
+      (item.supplies||[]).forEach(function(supply){
+        const brandMatch=String(supply.description||"").match(/\b(HP|Samsung|Epson|Brother|Lexmark|Xerox|Canon)\b/i);
+        const fallback=supply.kind==="Toner"?item.cartridge:"Confirmar pelo código do consumível";
+        const take=supply.code?((brandMatch?brandMatch[1].toUpperCase()+" ":"")+supply.code):fallback;
+        const unitName=supply.kind==="Toner"?"toner":"consumível";
+        items.push(
+          {type:"TextBlock",wrap:true,spacing:"Medium",weight:"Bolder",color:"Attention",text:"• "+supply.description},
+          {type:"FactSet",spacing:"Small",facts:[
+            {title:"Nível",value:String(supply.level)+"%"},
+            {title:"LEVAR PARA TROCA",value:"1 unidade do "+unitName+" "+take}
+          ]}
+        );
+      });
+      body.push({type:"Container",separator:true,spacing:"Medium",style:index%2?"emphasis":"default",items:items});
+    });
+  } else {
+    body.push({type:"TextBlock",wrap:true,text:message});
+    const facts=Object.entries(details||{}).filter(function(entry){return entry[1]!==undefined&&entry[1]!==null&&String(entry[1]).trim();}).map(function(entry){return{title:String(entry[0]),value:String(entry[1])};});
+    if(facts.length)body.push({type:"FactSet",facts:facts});
+  }
   body.push({type:"TextBlock",wrap:true,isSubtle:true,size:"Small",text:"Central de Operações de TI · "+new Date().toLocaleString("pt-BR")});
   const dashboardUrl="http://"+(HOST==="0.0.0.0"?os.hostname():HOST)+":"+PORTA+"/central.html";
   const payload={type:"message",attachments:[{contentType:"application/vnd.microsoft.card.adaptive",content:{type:"AdaptiveCard",version:"1.4",body:body,actions:[{type:"Action.OpenUrl",title:"Abrir Central de Operações",url:dashboardUrl}]}}]};
@@ -694,7 +719,8 @@ async function buildOperationalSummaryEvents(force, selectedTypes) {
     }).join("\n\n");
     events.push({
       key:"toner-summary:"+keySuffix,type:"toner-summary",title:"Impressoras · consumíveis em nível crítico",
-      message:message
+      message:message,
+      details:{printerGroups:tonerAlerts}
     });
   }
   return events;
