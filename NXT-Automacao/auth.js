@@ -602,7 +602,7 @@ function createAuth(options) {
     response.json({ sucesso: true, user: publicUser(request.user) });
   });
 
-  router.get("/vacation-access-plans", requireAuth, function (request, response) {
+  router.get("/vacation-access-plans", requireAuth, requirePermission("collaborators"), function (request, response) {
     const plans = database.prepare(
       "SELECT employee_key AS employeeKey,employee_name AS employeeName,"
       + "employee_code AS employeeCode,accesses_json AS accessesJson,access_items_json AS accessItemsJson,"
@@ -624,7 +624,7 @@ function createAuth(options) {
     response.json({ sucesso: true, plans: plans });
   });
 
-  router.put("/vacation-access-plans/:employeeKey", requireAuth, requireUpdatePermission, function (request, response) {
+  router.put("/vacation-access-plans/:employeeKey", requireAuth, requirePermission("collaborators"), function (request, response) {
     const employeeKey = safeText(request.params.employeeKey, 160);
     const employeeName = safeText(request.body.employeeName, 160);
     const employeeCode = safeText(request.body.employeeCode, 80);
@@ -665,7 +665,7 @@ function createAuth(options) {
   });
 
 
-  router.get("/access-templates", requireAuth, function (request, response) {
+  router.get("/access-templates", requireAuth, requirePermission("collaborators"), function (request, response) {
     const items = database.prepare("SELECT access_key AS accessKey,access_name AS accessName,active,updated_at AS updatedAt FROM access_templates ORDER BY access_name")
       .all().map(function (row) { return { accessKey: row.accessKey, accessName: row.accessName, active: Boolean(row.active), updatedAt: row.updatedAt }; });
     response.json({ sucesso: true, items: items });
@@ -682,7 +682,7 @@ function createAuth(options) {
     response.json({ sucesso:true });
   });
 
-  router.get("/collaborators-snapshot", requireAuth, function (request, response) {
+  router.get("/collaborators-snapshot", requireAuth, requirePermission("collaborators"), function (request, response) {
     const row=database.prepare("SELECT file_name AS fileName,data_json AS dataJson,row_count AS rowCount,updated_at AS updatedAt FROM collaborator_snapshot WHERE id=1").get();
     if(!row)return response.json({sucesso:true,snapshot:null});
     let data=[];try{data=JSON.parse(row.dataJson||"[]");}catch{data=[];}
@@ -690,7 +690,7 @@ function createAuth(options) {
     response.json({sucesso:true,snapshot:{fileName:row.fileName,data:data,rowCount:Number(row.rowCount),updatedAt:row.updatedAt}});
   });
 
-  router.put("/collaborators-snapshot", requireAuth, requireUpdatePermission, function (request, response) {
+  router.put("/collaborators-snapshot", requireAuth, requirePermission("collaborators"), function (request, response) {
     const data=(Array.isArray(request.body.data)?request.body.data:[]).slice(0,10000);
     const fileName=safeText(request.body.fileName,240),timestamp=nowIso();
     database.prepare("INSERT INTO collaborator_snapshot (id,file_name,data_json,row_count,updated_by,updated_at) VALUES (1,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET file_name=excluded.file_name,data_json=excluded.data_json,row_count=excluded.row_count,updated_by=excluded.updated_by,updated_at=excluded.updated_at")
