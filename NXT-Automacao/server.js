@@ -561,7 +561,7 @@ async function evaluateNotifications() {
     rows.forEach(function(item){const name=String(item.tipoAtivo||item.tipo||item.categoria||item.category||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().trim();if(name)counts[name]=(counts[name]||0)+1;});
     auth.getMinimums().filter(function(item){return item.monitored&&item.minimum>0;}).forEach(function(item){const current=counts[item.categoryKey]||0;if(current<item.minimum)events.push({key:"stock:"+item.categoryKey+":"+today.toISOString().slice(0,10),type:"stock",title:"Estoque abaixo do mínimo",message:item.categoryName+" possui "+current+" unidade(s); mínimo definido: "+item.minimum+"."});});
   } catch {}
-  const toner=lerTonerAtual();(toner.printers||[]).forEach(function(p){(p.supplies||[]).forEach(function(supply){if(Number(supply.level)<=Number(toner.threshold||20))events.push({key:"toner:"+p.ip+":"+String(supply.name||supply.description)+":"+today.toISOString().slice(0,10),type:"toner",title:"Toner em nível crítico",message:(p.model||p.ip)+" · "+(supply.name||"Suprimento")+" em "+supply.level+"%."});});});
+  const toner=lerTonerAtual();(toner.printers||[]).forEach(function(p){(p.supplies||[]).forEach(function(supply){if(Number(supply.level ?? supply.percent)<=Number(toner.threshold||20))events.push({key:"toner:"+p.ip+":"+String(supply.name||supply.description)+":"+today.toISOString().slice(0,10),type:"toner",title:"Toner em nível crítico",message:(p.model||p.ip)+" · "+(supply.name||"Suprimento")+" em "+supply.level+"%."});});});
   for(const event of events)await dispatchNotification(event.key,event.type,event.title,event.message,false);
   return events.length;
 }
