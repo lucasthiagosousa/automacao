@@ -114,6 +114,7 @@ let estadoAtualizacao = {
 };
 
 let tonerExecutando = false;
+let tonerDigestExecutando = false;
 
 function lerTonerAtual() {
   try {
@@ -547,8 +548,26 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
     {type:"TextBlock",weight:"Bolder",size:"Medium",color:visual.color,text:visual.icon+" "+title}
   ];
   const printerGroups=eventType==="toner-summary"&&details&&Array.isArray(details.printerGroups)?details.printerGroups:null;
+  const stockItems=eventType==="stock-summary"&&details&&Array.isArray(details.stockItems)?details.stockItems:null;
   const dailyReport=eventType==="daily-stock"&&details&&details.dailyReport?details.dailyReport:null;
-  if(printerGroups){
+  if(stockItems){
+    const total=stockItems.reduce(function(sum,item){return sum+Number(item.buy||0);},0);
+    body.push({type:"TextBlock",wrap:true,isSubtle:true,text:stockItems.length+" categoria(s) abaixo do mínimo  •  "+total+" unidade(s) para reposição"});
+    stockItems.forEach(function(item,index){
+      body.push({type:"Container",style:"emphasis",separator:index>0,spacing:index>0?"Medium":"Small",items:[{
+        type:"ColumnSet",columns:[
+          {type:"Column",width:"stretch",items:[
+            {type:"TextBlock",weight:"Bolder",wrap:true,text:item.name},
+            {type:"TextBlock",isSubtle:true,size:"Small",spacing:"Small",text:"Estoque atual: "+item.current+"  •  Mínimo: "+item.minimum}
+          ]},
+          {type:"Column",width:"auto",verticalContentAlignment:"Center",items:[
+            {type:"TextBlock",horizontalAlignment:"Right",isSubtle:true,size:"Small",text:"COMPRAR"},
+            {type:"TextBlock",horizontalAlignment:"Right",weight:"Bolder",size:"Large",color:"Attention",spacing:"None",text:String(item.buy)}
+          ]}
+        ]
+      }]});
+    });
+  } else if(printerGroups){
     body.push({type:"TextBlock",wrap:true,isSubtle:true,text:"Leve os consumíveis indicados abaixo para realizar cada troca."});
     printerGroups.forEach(function(item,index){
       const items=[
@@ -694,12 +713,10 @@ async function buildOperationalSummaryEvents(force, selectedTypes) {
     });
   } catch(error) { console.error("Resumo de estoque:",error.message); }
   if(stockAlerts.length){
-    const details={};
-    stockAlerts.forEach(function(item){details[item.name]="Atual: "+item.current+" · mínimo: "+item.minimum+" · comprar: "+item.buy;});
     events.push({
       key:"stock-summary:"+keySuffix,type:"stock-summary",title:"Estoque mínimo · compra necessária",
-      message:stockAlerts.map(function(item){return "• "+item.name+": solicitar "+item.buy+" unidade(s)";}).join("\n"),
-      details:details
+      message:stockAlerts.map(function(item){return item.name+": comprar "+item.buy+" unidade(s) · atual "+item.current+" · mínimo "+item.minimum;}).join("\n"),
+      details:{stockItems:stockAlerts}
     });
   }
 
@@ -774,7 +791,7 @@ async function evaluateNotifications() {
   auth.database.prepare("SELECT employee_key AS employeeKey,employee_name AS employeeName,activation_date AS activationDate FROM vacation_access_plans WHERE completed=0 AND activation_date!=''").all().forEach(function(plan){
     if(plan.activationDate<=today.toISOString().slice(0,10))events.push({key:"vacation:"+plan.employeeKey+":"+plan.activationDate,type:"vacation",title:"Retorno de férias",message:plan.employeeName+" retorna em "+plan.activationDate+". Confira a reativação dos acessos."});
   });
-  const summaries=await buildOperationalSummaryEvents(false,[auth.getSetting("notifications_stock","1")==="1"?"stock":"",auth.getSetting("notifications_toner","1")==="1"?"toner":""].filter(Boolean));
+  const summaries=await buildOperationalSummaryEvents(false,[auth.getSetting("notifications_stock","1")==="1"?"stock":""].filter(Boolean));
   events.push.apply(events,summaries);
   for(const event of events)await dispatchNotification(event.key,event.type,event.title,event.message,false,event.details);
   return events.length;
@@ -782,7 +799,6 @@ async function evaluateNotifications() {
 app.post("/api/notifications/test", auth.requireMaster, async(req,res)=>{const ok=await dispatchNotification("test:"+Date.now(),"test","Teste de notificações","A Central de Operações de TI está conectada.",true);res.status(ok?200:500).json({sucesso:ok,mensagem:ok?"Notificação enviada.":"Falha no envio. Consulte o histórico."});});
 app.post("/api/notifications/run", auth.requireMaster, async(req,res)=>{const total=await evaluateNotifications();res.json({sucesso:true,total});});
 app.post("/api/notifications/digest", auth.requireMaster, async(req,res)=>{try{const types=(Array.isArray(req.body&&req.body.types)?req.body.types:[]).filter(function(type){return type==="stock"||type==="toner";});const total=await sendOperationalSummaries(true,types);res.json({sucesso:true,total:total,mensagem:total?"Resumos de estoque e impressoras enviados ao Teams.":"Não há itens abaixo do mínimo nem toners críticos."});}catch(error){res.status(500).json({sucesso:false,mensagem:error.message});}});
-setTimeout(function(){sendOperationalSummaries(true,[auth.getSetting("notifications_stock","1")==="1"?"stock":"",auth.getSetting("notifications_toner","1")==="1"?"toner":""].filter(Boolean)).then(function(total){console.log("Resumos operacionais enviados:",total);}).catch(function(error){console.error("Notificações ao iniciar:",error.message);});},5000).unref();
 setInterval(function(){evaluateNotifications().catch(function(error){console.error("Notificações:",error.message);});},15*60*1000).unref();
 
 app.get("/api/configuracao/nxt", auth.requireMaster, (req, res) => {
@@ -1306,7 +1322,6 @@ async function scheduledTonerScan() {
     fs.writeFileSync(arquivoToner,JSON.stringify(report,null,2),"utf8");
     auth.recordTonerSnapshot(report);
     auth.setSetting("toner_last_automatic_scan",new Date().toISOString(),null);
-    await sendOperationalSummaries(false,["toner"]);
     console.log("Leitura automática de toners concluída.");
     return true;
   }catch(error){
@@ -1314,8 +1329,24 @@ async function scheduledTonerScan() {
     return false;
   }finally{tonerExecutando=false;}
 }
-setTimeout(function(){scheduledTonerScan();},30000).unref();
+async function scheduledTonerDigest() {
+  const now=new Date(),day=now.getDay(),hour=now.getHours();
+  if(day===0||day===6||(hour!==7&&hour!==17)||tonerDigestExecutando)return false;
+  const slot=localDateKey(now)+"-"+String(hour).padStart(2,"0");
+  if(auth.getSetting("toner_digest_last_slot","")===slot)return false;
+  if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("notifications_toner","1")!=="1")return false;
+  tonerDigestExecutando=true;
+  try{
+    await scheduledTonerScan();
+    const total=await sendOperationalSummaries(true,["toner"]);
+    auth.setSetting("toner_digest_last_slot",slot,null);
+    console.log("Resumo programado de toners enviado:",slot,total);
+    return true;
+  }finally{tonerDigestExecutando=false;}
+}
+setTimeout(function(){scheduledTonerScan();scheduledTonerDigest().catch(function(error){console.error("Resumo programado de toners:",error.message);});},30000).unref();
 setInterval(function(){scheduledTonerScan();},15*60*1000).unref();
+setInterval(function(){scheduledTonerDigest().catch(function(error){console.error("Resumo programado de toners:",error.message);});},60*1000).unref();
 
 /*
  * Se a pessoa digitar uma rota inexistente,
