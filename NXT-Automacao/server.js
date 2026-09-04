@@ -54,6 +54,13 @@ const auth = createAuth({
   databasePath: arquivoBanco,
 });
 auth.seedPrinters(tonerMonitor.printers);
+auth.database.exec(
+  "CREATE TABLE IF NOT EXISTS stock_snapshots ("
+  + "id INTEGER PRIMARY KEY AUTOINCREMENT,snapshot_date TEXT NOT NULL,captured_at TEXT NOT NULL,"
+  + "categories_json TEXT NOT NULL,source TEXT NOT NULL DEFAULT 'manual'"
+  + ");"
+  + "CREATE INDEX IF NOT EXISTS idx_stock_snapshots_date ON stock_snapshots(snapshot_date,captured_at);"
+);
 
 app.get(["/login", "/login.html"], (req, res) => {
   res.sendFile(path.join(pastaPublica, "login.html"));
@@ -600,11 +607,12 @@ async function sendStartupDigest(force) {
     });
 }
 
-async function buildOperationalSummaryEvents(force) {
+async function buildOperationalSummaryEvents(force, selectedTypes) {
+  const types=Array.isArray(selectedTypes)&&selectedTypes.length?selectedTypes:["stock","toner"];
   const events=[],timestamp=Date.now(),day=new Date().toISOString().slice(0,10);
   const keySuffix=force?String(timestamp):day;
   const stockAlerts=[];
-  try {
+  if(types.includes("stock"))try {
     const stock=await lerPlanilha(),categories=Array.isArray(stock.categorias)?stock.categorias:[],rows=Array.isArray(stock.ativos)?stock.ativos:[],counts={};
     rows.forEach(function(item){
       const name=String(item.tipoAtivo||item.tipo||item.categoria||item.category||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().trim();
@@ -631,7 +639,7 @@ async function buildOperationalSummaryEvents(force) {
     });
   }
 
-  const tonerAlerts=[],toner=lerTonerAtual(),threshold=Number(toner.threshold||20);
+  const tonerAlerts=[],toner=types.includes("toner")?lerTonerAtual():{printers:[],threshold:20},threshold=Number(toner.threshold||20);
   (toner.printers||[]).forEach(function(printer){
     if(printer.online===false)return;
     (printer.supplies||[]).forEach(function(supply){
@@ -654,12 +662,12 @@ async function buildOperationalSummaryEvents(force) {
   return events;
 }
 
-async function sendOperationalSummaries(force) {
+async function sendOperationalSummaries(force, selectedTypes) {
   if(auth.getSetting("notifications_enabled","0")!=="1"){
     if(force)throw new Error("Ative e salve as notificações antes de enviar o resumo.");
     return 0;
   }
-  const events=await buildOperationalSummaryEvents(Boolean(force));
+  const events=await buildOperationalSummaryEvents(Boolean(force),selectedTypes);
   for(const event of events)await dispatchNotification(event.key,event.type,event.title,event.message,false,event.details);
   return events.length;
 }
@@ -677,15 +685,15 @@ async function evaluateNotifications() {
   auth.database.prepare("SELECT employee_key AS employeeKey,employee_name AS employeeName,activation_date AS activationDate FROM vacation_access_plans WHERE completed=0 AND activation_date!=''").all().forEach(function(plan){
     if(plan.activationDate<=today.toISOString().slice(0,10))events.push({key:"vacation:"+plan.employeeKey+":"+plan.activationDate,type:"vacation",title:"Retorno de férias",message:plan.employeeName+" retorna em "+plan.activationDate+". Confira a reativação dos acessos."});
   });
-  const summaries=await buildOperationalSummaryEvents(false);
+  const summaries=await buildOperationalSummaryEvents(false,[auth.getSetting("notifications_stock","1")==="1"?"stock":"",auth.getSetting("notifications_toner","1")==="1"?"toner":""].filter(Boolean));
   events.push.apply(events,summaries);
   for(const event of events)await dispatchNotification(event.key,event.type,event.title,event.message,false,event.details);
   return events.length;
 }
 app.post("/api/notifications/test", auth.requireMaster, async(req,res)=>{const ok=await dispatchNotification("test:"+Date.now(),"test","Teste de notificações","A Central de Operações de TI está conectada.",true);res.status(ok?200:500).json({sucesso:ok,mensagem:ok?"Notificação enviada.":"Falha no envio. Consulte o histórico."});});
 app.post("/api/notifications/run", auth.requireMaster, async(req,res)=>{const total=await evaluateNotifications();res.json({sucesso:true,total});});
-app.post("/api/notifications/digest", auth.requireMaster, async(req,res)=>{try{const total=await sendOperationalSummaries(true);res.json({sucesso:true,total:total,mensagem:total?"Resumos de estoque e impressoras enviados ao Teams.":"Não há itens abaixo do mínimo nem toners críticos."});}catch(error){res.status(500).json({sucesso:false,mensagem:error.message});}});
-setTimeout(function(){sendOperationalSummaries(true).then(function(total){console.log("Resumos operacionais enviados:",total);}).catch(function(error){console.error("Notificações ao iniciar:",error.message);});},5000).unref();
+app.post("/api/notifications/digest", auth.requireMaster, async(req,res)=>{try{const types=(Array.isArray(req.body&&req.body.types)?req.body.types:[]).filter(function(type){return type==="stock"||type==="toner";});const total=await sendOperationalSummaries(true,types);res.json({sucesso:true,total:total,mensagem:total?"Resumos de estoque e impressoras enviados ao Teams.":"Não há itens abaixo do mínimo nem toners críticos."});}catch(error){res.status(500).json({sucesso:false,mensagem:error.message});}});
+setTimeout(function(){sendOperationalSummaries(true,[auth.getSetting("notifications_stock","1")==="1"?"stock":"",auth.getSetting("notifications_toner","1")==="1"?"toner":""].filter(Boolean)).then(function(total){console.log("Resumos operacionais enviados:",total);}).catch(function(error){console.error("Notificações ao iniciar:",error.message);});},5000).unref();
 setInterval(function(){evaluateNotifications().catch(function(error){console.error("Notificações:",error.message);});},15*60*1000).unref();
 
 app.get("/api/configuracao/nxt", auth.requireMaster, (req, res) => {
@@ -1115,6 +1123,7 @@ app.post(
       console.log(
         "Atualização finalizada com sucesso."
       );
+      captureStockSnapshot("manual").catch(function(error){console.error("Snapshot:",error.message);});
     } else {
       estadoAtualizacao = {
         ...estadoAtualizacao,
@@ -1137,6 +1146,53 @@ app.post(
   });
   }
 );
+
+function localDateKey(value){const d=value||new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+async function captureStockSnapshot(source) {
+  const stock=await lerPlanilha(),categories=(stock.categorias||[]).map(function(item){return{name:String(item.nome||""),quantity:Number(item.atual)||0};}).filter(function(item){return item.name;});
+  const now=new Date(),date=localDateKey(now);
+  auth.database.prepare("INSERT INTO stock_snapshots (snapshot_date,captured_at,categories_json,source) VALUES (?,?,?,?)").run(date,now.toISOString(),JSON.stringify(categories),source||"manual");
+  auth.database.prepare("DELETE FROM stock_snapshots WHERE captured_at < datetime('now','-60 days')").run();
+  return categories;
+}
+function scheduledNxtUpdate() {
+  if(estadoAtualizacao.executando||!fs.existsSync(arquivoAutomacao)||!process.env.NXT_EMAIL||!process.env.NXT_PASSWORD)return false;
+  estadoAtualizacao={executando:true,sucesso:null,mensagem:"Atualização automática do NXT em andamento...",inicio:new Date().toISOString(),fim:null,log:[]};
+  auth.setSetting("nxt_auto_update_last_attempt",new Date().toISOString(),null);
+  const child=spawn(process.execPath,[arquivoAutomacao],{cwd:pastaProjeto,env:{...process.env,ELECTRON_RUN_AS_NODE:process.versions.electron?"1":process.env.ELECTRON_RUN_AS_NODE,NXT_AUTOMATION_HEADLESS:"1"},windowsHide:true,shell:false});
+  const timeout=setTimeout(function(){child.kill();},15*60*1000);
+  child.stdout.on("data",function(data){adicionarLog(data.toString());});
+  child.stderr.on("data",function(data){adicionarLog(data.toString());});
+  child.on("error",function(error){clearTimeout(timeout);estadoAtualizacao={...estadoAtualizacao,executando:false,sucesso:false,mensagem:"Falha na atualização automática: "+error.message,fim:new Date().toISOString()};});
+  child.on("close",function(code){
+    clearTimeout(timeout);
+    estadoAtualizacao={...estadoAtualizacao,executando:false,sucesso:code===0,mensagem:code===0?"Atualização automática concluída.":"A atualização automática não foi concluída.",fim:new Date().toISOString()};
+    if(code===0){auth.setSetting("nxt_auto_update_last_success",new Date().toISOString(),null);captureStockSnapshot("automatic").catch(function(error){console.error("Snapshot automático:",error.message);});}
+  });
+  return true;
+}
+async function sendDailyStockMovementReport() {
+  if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
+  const date=localDateKey(),rows=auth.database.prepare("SELECT categories_json AS categoriesJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? ORDER BY captured_at").all(date);
+  if(!rows.length)return false;
+  function parse(row){try{return JSON.parse(row.categoriesJson||"[]");}catch{return[];}}
+  const first=parse(rows[0]),last=parse(rows[rows.length-1]),names=new Set(first.concat(last).map(function(item){return item.name;})),changed=[],unchanged=[];
+  names.forEach(function(name){const before=(first.find(function(item){return item.name===name;})||{quantity:0}).quantity,after=(last.find(function(item){return item.name===name;})||{quantity:0}).quantity,difference=after-before;const item={name:name,before:before,after:after,difference:difference};(difference?changed:unchanged).push(item);});
+  const details={"Período":new Date(rows[0].capturedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+" até "+new Date(rows[rows.length-1].capturedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),"Categorias movimentadas":changed.length,"Sem movimentação":unchanged.length};
+  changed.slice(0,15).forEach(function(item){details[item.name]=item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")";});
+  const message=changed.length?changed.map(function(item){return "• "+item.name+": "+item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")";}).join("\n"):"Nenhuma variação de quantidade foi identificada no estoque hoje.";
+  if(unchanged.length)details["Itens sem alteração"]=unchanged.slice(0,20).map(function(item){return item.name+" ("+item.after+")";}).join(", ");
+  await dispatchNotification("daily-stock:"+date,"daily-stock","Fechamento diário · movimentação do estoque",message,false,details);
+  auth.setSetting("daily_stock_report_last_date",date,null);
+  return true;
+}
+setTimeout(function(){captureStockSnapshot("startup").catch(function(error){console.error("Snapshot inicial:",error.message);});},10000).unref();
+setInterval(function(){
+  const now=new Date(),enabled=auth.getSetting("nxt_auto_update","0")==="1",hours=Math.max(1,Number(auth.getSetting("nxt_auto_update_hours","1"))||1),last=Date.parse(auth.getSetting("nxt_auto_update_last_attempt",""))||0;
+  if(enabled&&Date.now()-last>=hours*3600000)scheduledNxtUpdate();
+  const reportEnabled=auth.getSetting("daily_stock_report","0")==="1",reportTime=auth.getSetting("daily_stock_report_time","18:00"),today=localDateKey(now),current=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+  if(reportEnabled&&current>=reportTime&&auth.getSetting("daily_stock_report_last_date","")!==today)sendDailyStockMovementReport().catch(function(error){console.error("Relatório diário:",error.message);});
+},60000).unref();
 
 /*
  * Se a pessoa digitar uma rota inexistente,
