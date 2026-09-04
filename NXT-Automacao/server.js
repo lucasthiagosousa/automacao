@@ -558,14 +558,21 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
         const brandMatch=String(supply.description||"").match(/\b(HP|Samsung|Epson|Brother|Lexmark|Xerox|Canon)\b/i);
         const fallback=supply.kind==="Toner"?item.cartridge:"Confirmar pelo código do consumível";
         const take=supply.code?((brandMatch?brandMatch[1].toUpperCase()+" ":"")+supply.code):fallback;
-        const unitName=supply.kind==="Toner"?"toner":"consumível";
-        items.push(
-          {type:"TextBlock",wrap:true,spacing:"Medium",weight:"Bolder",color:"Attention",text:"• "+supply.description},
-          {type:"FactSet",spacing:"Small",facts:[
-            {title:"Nível",value:String(supply.level)+"%"},
-            {title:"LEVAR PARA TROCA",value:"1 unidade do "+unitName+" "+take}
-          ]}
-        );
+        items.push({
+          type:"Container",style:"emphasis",spacing:"Small",bleed:true,
+          items:[{
+            type:"ColumnSet",columns:[
+              {type:"Column",width:"stretch",items:[
+                {type:"TextBlock",wrap:true,weight:"Bolder",text:supply.description},
+                {type:"TextBlock",wrap:true,spacing:"Small",color:"Good",weight:"Bolder",text:"Levar: 1 × "+take}
+              ]},
+              {type:"Column",width:"auto",verticalContentAlignment:"Center",items:[
+                {type:"TextBlock",horizontalAlignment:"Right",weight:"Bolder",size:"Large",color:"Attention",text:String(supply.level)+"%"},
+                {type:"TextBlock",horizontalAlignment:"Right",isSubtle:true,size:"Small",spacing:"None",text:"nível atual"}
+              ]}
+            ]
+          }]
+        });
       });
       body.push({type:"Container",separator:true,spacing:"Medium",style:index%2?"emphasis":"default",items:items});
     });
