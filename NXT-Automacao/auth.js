@@ -704,7 +704,7 @@ function createAuth(options) {
     response.json({sucesso:true,tasks:tasks.map(function(t){return {...t,id:Number(t.id)};})});
   });
 
-  router.post("/tasks", requireAuth, requireUpdatePermission, function (request, response) {
+  router.post("/tasks", requireAuth, requirePermission("edit_tasks"), function (request, response) {
     const title=safeText(request.body.title,200);if(!title)return response.status(400).json({sucesso:false,mensagem:"Informe o título da tarefa."});
     const timestamp=nowIso(),status=["pending","in_progress","done"].includes(request.body.status)?request.body.status:"pending";
     const result=database.prepare("INSERT INTO operational_tasks (title,category,source_type,source_id,responsible,due_date,status,comments,created_by,created_at,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
@@ -713,7 +713,7 @@ function createAuth(options) {
     response.status(201).json({sucesso:true,id:Number(result.lastInsertRowid)});
   });
 
-  router.patch("/tasks/:id", requireAuth, requireUpdatePermission, function (request, response) {
+  router.patch("/tasks/:id", requireAuth, requirePermission("edit_tasks"), function (request, response) {
     const id=Number(request.params.id),existing=database.prepare("SELECT * FROM operational_tasks WHERE id=?").get(id);
     if(!existing)return response.status(404).json({sucesso:false,mensagem:"Tarefa não encontrada."});
     const status=["pending","in_progress","done"].includes(request.body.status)?request.body.status:existing.status;
@@ -723,7 +723,7 @@ function createAuth(options) {
     response.json({sucesso:true});
   });
 
-  router.get("/audit", requireAuth, requireMaster, function (request, response) {
+  router.get("/audit", requireAuth, requirePermission("view_audit"), function (request, response) {
     const items=database.prepare("SELECT audit.id,audit.action,audit.entity_type AS entityType,audit.entity_id AS entityId,audit.description,audit.created_at AS createdAt,users.username FROM audit_log audit LEFT JOIN users ON users.id=audit.user_id ORDER BY audit.id DESC LIMIT 500").all();
     response.json({sucesso:true,items:items.map(function(item){return {...item,id:Number(item.id)};})});
   });
