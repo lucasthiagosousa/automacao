@@ -547,6 +547,7 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
     {type:"TextBlock",weight:"Bolder",size:"Medium",color:visual.color,text:visual.icon+" "+title}
   ];
   const printerGroups=eventType==="toner-summary"&&details&&Array.isArray(details.printerGroups)?details.printerGroups:null;
+  const dailyReport=eventType==="daily-stock"&&details&&details.dailyReport?details.dailyReport:null;
   if(printerGroups){
     body.push({type:"TextBlock",wrap:true,isSubtle:true,text:"Leve os consumíveis indicados abaixo para realizar cada troca."});
     printerGroups.forEach(function(item,index){
@@ -573,6 +574,25 @@ async function sendTeamsNotification(webhook,title,message,details,eventType) {
       });
       body.push({type:"Container",separator:index>0,spacing:index>0?"ExtraLarge":"Medium",style:"emphasis",items:items});
     });
+  } else if(dailyReport){
+    body.push({type:"TextBlock",wrap:true,isSubtle:true,size:"Small",text:dailyReport.date+"  •  Período monitorado: "+dailyReport.period+"  •  Última sincronização: "+dailyReport.lastSync});
+    body.push({type:"ColumnSet",spacing:"Medium",columns:[
+      {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"ENTRADAS"},{type:"TextBlock",weight:"Bolder",size:"Large",color:"Good",spacing:"None",text:String(dailyReport.entries.length)}]},
+      {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"SAÍDAS"},{type:"TextBlock",weight:"Bolder",size:"Large",color:"Attention",spacing:"None",text:String(dailyReport.exits.length)}]},
+      {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"SALDO"},{type:"TextBlock",weight:"Bolder",size:"Large",spacing:"None",text:(dailyReport.balance>0?"+":"")+String(dailyReport.balance)}]},
+      {type:"Column",width:"stretch",items:[{type:"TextBlock",isSubtle:true,size:"Small",text:"CATEGORIAS"},{type:"TextBlock",weight:"Bolder",size:"Large",spacing:"None",text:String(dailyReport.changedCategories.length)}]}
+    ]});
+    body.push({type:"TextBlock",weight:"Bolder",color:"Attention",spacing:"Large",separator:true,text:"🔴 Saídas do estoque"});
+    if(!dailyReport.exits.length)body.push({type:"TextBlock",wrap:true,color:dailyReport.sufficient?"Good":"Warning",text:dailyReport.sufficient?"Nenhuma saída foi detectada hoje.":"Ainda não há duas sincronizações concluídas hoje para confirmar as saídas."});
+    dailyReport.exits.slice(0,15).forEach(function(item){body.push({type:"Container",style:"emphasis",spacing:"Small",items:[{type:"TextBlock",weight:"Bolder",wrap:true,text:item.category+"  •  "+item.code},{type:"TextBlock",isSubtle:true,size:"Small",spacing:"None",text:"Detectado na atualização das "+item.detectedAt}]});});
+    body.push({type:"TextBlock",weight:"Bolder",color:"Good",spacing:"Large",separator:true,text:"🟢 Entradas no estoque"});
+    if(!dailyReport.entries.length)body.push({type:"TextBlock",wrap:true,isSubtle:true,text:dailyReport.sufficient?"Nenhuma entrada foi detectada hoje.":"A primeira sincronização do dia foi registrada como referência."});
+    dailyReport.entries.slice(0,15).forEach(function(item){body.push({type:"Container",style:"emphasis",spacing:"Small",items:[{type:"TextBlock",weight:"Bolder",wrap:true,text:item.category+"  •  "+item.code},{type:"TextBlock",isSubtle:true,size:"Small",spacing:"None",text:"Detectado na atualização das "+item.detectedAt}]});});
+    if(dailyReport.changedCategories.length){
+      body.push({type:"TextBlock",weight:"Bolder",spacing:"Large",separator:true,text:"Variação por categoria"});
+      body.push({type:"FactSet",facts:dailyReport.changedCategories.slice(0,15).map(function(item){return{title:item.name,value:item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")"};})});
+    }
+    body.push({type:"TextBlock",wrap:true,isSubtle:true,size:"Small",spacing:"Medium",text:dailyReport.unchangedCount+" categoria(s) permaneceram sem alteração. Movimentações calculadas somente entre sincronizações concluídas hoje."});
   } else {
     body.push({type:"TextBlock",wrap:true,text:message});
     const facts=Object.entries(details||{}).filter(function(entry){return entry[1]!==undefined&&entry[1]!==null&&String(entry[1]).trim();}).map(function(entry){return{title:String(entry[0]),value:String(entry[1])};});
@@ -1243,21 +1263,27 @@ function scheduledNxtUpdate() {
 }
 async function sendDailyStockMovementReport() {
   if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
-  const date=localDateKey(),rows=auth.database.prepare("SELECT categories_json AS categoriesJson,assets_json AS assetsJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? ORDER BY captured_at").all(date);
+  const date=localDateKey();
+  const rows=auth.database.prepare("SELECT categories_json AS categoriesJson,assets_json AS assetsJson,captured_at AS capturedAt,source FROM stock_snapshots WHERE snapshot_date=? AND source!='startup' ORDER BY captured_at").all(date);
   if(!rows.length)return false;
-  function parse(row){try{return JSON.parse(row.categoriesJson||"[]");}catch{return[];}}
-  const first=parse(rows[0]),last=parse(rows[rows.length-1]),names=new Set(first.concat(last).map(function(item){return item.name;})),changed=[],unchanged=[];
-  names.forEach(function(name){const before=(first.find(function(item){return item.name===name;})||{quantity:0}).quantity,after=(last.find(function(item){return item.name===name;})||{quantity:0}).quantity,difference=after-before;const item={name:name,before:before,after:after,difference:difference};(difference?changed:unchanged).push(item);});
-  function parseAssets(row){try{return JSON.parse(row.assetsJson||"[]");}catch{return[];}}
-  const firstAssets=parseAssets(rows[0]),lastAssets=parseAssets(rows[rows.length-1]),assetKey=function(item,index){return item.code||[item.category,item.model,index].join("|");},beforeMap=new Map(firstAssets.map(function(item,index){return[assetKey(item,index),item];})),afterMap=new Map(lastAssets.map(function(item,index){return[assetKey(item,index),item];})),movements=[];
-  afterMap.forEach(function(item,key){const previous=beforeMap.get(key);if(!previous)movements.push("Entrada · "+(item.code||item.model)+" · "+item.category);else if(previous.allocatedTo!==item.allocatedTo||previous.owner!==item.owner||previous.category!==item.category)movements.push("Movimentação · "+(item.code||item.model)+" · "+(previous.allocatedTo||previous.owner||previous.category||"Estoque")+" → "+(item.allocatedTo||item.owner||item.category||"Estoque"));});
-  beforeMap.forEach(function(item,key){if(!afterMap.has(key))movements.push("Saída · "+(item.code||item.model)+" · "+item.category);});
-  const details={"Período":new Date(rows[0].capturedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+" até "+new Date(rows[rows.length-1].capturedAt).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),"Ativos movimentados":movements.length,"Categorias com variação":changed.length,"Categorias sem variação":unchanged.length};
-  movements.slice(0,12).forEach(function(item,index){details["Movimento "+(index+1)]=item;});
-  changed.slice(0,12).forEach(function(item){details[item.name]=item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")";});
-  const message=movements.length?movements.slice(0,15).map(function(item){return "• "+item;}).join("\n"):(changed.length?changed.map(function(item){return "• "+item.name+": "+item.before+" → "+item.after+" ("+(item.difference>0?"+":"")+item.difference+")";}).join("\n"):"Nenhuma movimentação de ativo foi identificada hoje.");
-  if(unchanged.length)details["Sem alteração de quantidade"]=unchanged.slice(0,15).map(function(item){return item.name+" ("+item.after+")";}).join(", ");
-  await dispatchNotification("daily-stock:"+date,"daily-stock","Fechamento diário · movimentação do estoque",message,false,details);
+  function parseJson(value){try{return JSON.parse(value||"[]");}catch{return[];}}
+  function time(value){return new Date(value).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});}
+  function assetKey(item,index){return item.code||[item.category,item.model,index].join("|");}
+  const movements=[],seen=new Set();
+  function addMovement(type,item,detectedAt,extra){const key=[type,assetKey(item,0),detectedAt].join("|");if(seen.has(key))return;seen.add(key);movements.push({type:type,code:item.code||item.model||"Ativo sem identificação",category:item.category||"Sem categoria",detectedAt:detectedAt,extra:extra||""});}
+  for(let rowIndex=1;rowIndex<rows.length;rowIndex++){
+    const before=parseJson(rows[rowIndex-1].assetsJson),after=parseJson(rows[rowIndex].assetsJson),detectedAt=time(rows[rowIndex].capturedAt);
+    const beforeMap=new Map(before.map(function(item,index){return[assetKey(item,index),item];})),afterMap=new Map(after.map(function(item,index){return[assetKey(item,index),item];}));
+    afterMap.forEach(function(item,key){const previous=beforeMap.get(key);if(!previous)addMovement("entry",item,detectedAt);else if(previous.allocatedTo!==item.allocatedTo||previous.owner!==item.owner||previous.category!==item.category)addMovement("transfer",item,detectedAt,(previous.allocatedTo||previous.owner||previous.category||"Estoque")+" → "+(item.allocatedTo||item.owner||item.category||"Estoque"));});
+    beforeMap.forEach(function(item,key){if(!afterMap.has(key))addMovement("exit",item,detectedAt);});
+  }
+  const firstCategories=parseJson(rows[0].categoriesJson),lastCategories=parseJson(rows[rows.length-1].categoriesJson),names=new Set(firstCategories.concat(lastCategories).map(function(item){return item.name;})),changedCategories=[],unchanged=[];
+  names.forEach(function(name){const before=Number((firstCategories.find(function(item){return item.name===name;})||{quantity:0}).quantity)||0,after=Number((lastCategories.find(function(item){return item.name===name;})||{quantity:0}).quantity)||0,item={name:name,before:before,after:after,difference:after-before};(item.difference?changedCategories:unchanged).push(item);});
+  const entries=movements.filter(function(item){return item.type==="entry";}),exits=movements.filter(function(item){return item.type==="exit";}),transfers=movements.filter(function(item){return item.type==="transfer";});
+  const period=time(rows[0].capturedAt)+" até "+time(rows[rows.length-1].capturedAt),balance=entries.length-exits.length;
+  const dailyReport={date:new Date().toLocaleDateString("pt-BR"),period:period,lastSync:time(rows[rows.length-1].capturedAt),entries:entries,exits:exits,transfers:transfers,balance:balance,changedCategories:changedCategories,unchangedCount:unchanged.length,snapshotCount:rows.length,sufficient:rows.length>=2};
+  const lines=["Fechamento diário do estoque — "+dailyReport.date,"Período monitorado: "+period,"Entradas detectadas: "+entries.length,"Saídas detectadas: "+exits.length,!dailyReport.sufficient?"Ainda não há duas sincronizações concluídas hoje.":exits.length?exits.map(function(item){return "Saída · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma saída foi detectada hoje.",entries.length?entries.map(function(item){return "Entrada · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma entrada foi detectada hoje."];
+  await dispatchNotification("daily-stock:"+date,"daily-stock","Fechamento diário do estoque",lines.join("\n"),false,{dailyReport:dailyReport});
   auth.setSetting("daily_stock_report_last_date",date,null);
   return true;
 }
