@@ -226,6 +226,11 @@ function createAuth(options) {
   const requestColumns = database.prepare(
     "PRAGMA table_info(restock_requests)"
   ).all().map(function (column) { return column.name; });
+  if (!requestColumns.includes("workflow_status")) {
+    database.exec("ALTER TABLE restock_requests ADD COLUMN workflow_status TEXT NOT NULL DEFAULT 'draft'");
+    database.exec("UPDATE restock_requests SET workflow_status=CASE status WHEN 'pending' THEN 'draft' WHEN 'requested' THEN 'sc_open' WHEN 'purchasing' THEN 'purchasing' WHEN 'received' THEN 'finished' ELSE 'draft' END");
+  }
+  
   [
     ["sc_number", "TEXT NOT NULL DEFAULT ''"],
     ["opened_at", "TEXT NOT NULL DEFAULT ''"],
@@ -1033,7 +1038,7 @@ function createAuth(options) {
 
   function getRestockRequests() {
     const requests = database.prepare(
-      "SELECT requests.id,requests.status,requests.notes,requests.sc_number AS scNumber,"
+      "SELECT requests.id,requests.workflow_status AS status,requests.notes,requests.sc_number AS scNumber,"
       + "requests.opened_at AS openedAt,requests.buyer,requests.expected_at AS expectedAt,requests.created_at AS createdAt,"
       + "requests.updated_at AS updatedAt,creator.username AS createdBy,editor.username AS updatedBy "
       + "FROM restock_requests requests "
@@ -1128,8 +1133,8 @@ function createAuth(options) {
     database.exec("BEGIN");
     try {
       const result = database.prepare(
-        "INSERT INTO restock_requests (status,notes,created_by,created_at,updated_by,updated_at) "
-        + "VALUES ('pending',?,?,?,?,?)"
+        "INSERT INTO restock_requests (status,workflow_status,notes,created_by,created_at,updated_by,updated_at) "
+        + "VALUES ('pending','draft',?,?,?,?,?)"
       ).run(safeNotes, userId, timestamp, userId, timestamp);
       const requestId = Number(result.lastInsertRowid);
       const insertItem = database.prepare(
@@ -1159,8 +1164,10 @@ function createAuth(options) {
   function updateRestockRequest(id, values, userId) {
     const existing = database.prepare("SELECT * FROM restock_requests WHERE id=?").get(id);
     if (!existing) return null;
-    const allowedStatus = ["pending", "requested", "purchasing", "received"];
-    const status = allowedStatus.includes(values.status) ? values.status : existing.status;
+    const allowedStatus = ["draft","awaiting_approval","approved","sc_open","purchasing","partial_received","finished"];
+    const currentWorkflow = existing.workflow_status || "draft";
+    const status = allowedStatus.includes(values.status) ? values.status : currentWorkflow;
+    const legacyStatus = status === "finished" ? "received" : status === "purchasing" || status === "partial_received" ? "purchasing" : status === "sc_open" ? "requested" : "pending";
     const notes = typeof values.notes === "string"
       ? values.notes.trim().slice(0, 2000)
       : existing.notes;
@@ -1179,9 +1186,9 @@ function createAuth(options) {
     database.exec("BEGIN");
     try {
       database.prepare(
-        "UPDATE restock_requests SET status=?,notes=?,sc_number=?,opened_at=?,buyer=?,expected_at=?,"
+        "UPDATE restock_requests SET status=?,workflow_status=?,notes=?,sc_number=?,opened_at=?,buyer=?,expected_at=?,"
         + "updated_by=?,updated_at=? WHERE id=?"
-      ).run(status, notes, scNumber, openedAt, buyer, expectedAt, userId, timestamp, id);
+      ).run(legacyStatus, status, notes, scNumber, openedAt, buyer, expectedAt, userId, timestamp, id);
       const updateProduct = database.prepare(
         "UPDATE restock_request_items SET product_url=?,received_quantity=MIN(quantity,?) "
         + "WHERE request_id=? AND category_key=?"
