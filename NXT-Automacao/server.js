@@ -1173,6 +1173,63 @@ app.post("/api/toner/inventory/use", auth.requirePermission("toner"), (req, res)
 /*
  * Monitoramento local das impressoras por SNMP.
  */
+app.get("/api/timeline", auth.requirePermission("view_audit"), (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.from || "")) ? String(req.query.from) : today;
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.to || "")) ? String(req.query.to) : from;
+  const start = new Date(from + "T00:00:00").toISOString();
+  const end = new Date(to + "T23:59:59.999").toISOString();
+  const auditRows = auth.database.prepare(
+    "SELECT audit.id,audit.action,audit.entity_type AS entityType,audit.entity_id AS entityId,"
+    + "audit.description,audit.created_at AS createdAt,COALESCE(users.username,'Sistema') AS username "
+    + "FROM audit_log audit LEFT JOIN users ON users.id=audit.user_id "
+    + "WHERE audit.created_at>=? AND audit.created_at<=? ORDER BY audit.created_at DESC LIMIT 1500"
+  ).all(start, end);
+  const movementRows = auth.database.prepare(
+    "SELECT id,movement_type AS action,asset_code AS assetCode,category,previous_location AS previousLocation,"
+    + "new_location AS newLocation,detected_at AS createdAt,source FROM stock_movement_events "
+    + "WHERE detected_at>=? AND detected_at<=? ORDER BY detected_at DESC LIMIT 1500"
+  ).all(start, end);
+  function moduleFor(entityType) {
+    const type = String(entityType || "").toLowerCase();
+    if (/toner|printer/.test(type)) return "toner";
+    if (/employee|collaborator|vacation|access/.test(type)) return "collaborators";
+    if (/task/.test(type)) return "tasks";
+    if (/user|setting|notification|backup|restore|permission/.test(type)) return "admin";
+    if (/stock|asset|minimum|restock|inventory|nxt|import/.test(type)) return "stock";
+    return "system";
+  }
+  const auditEvents = auditRows.map((row) => ({
+    id: "audit-" + row.id,
+    createdAt: row.createdAt,
+    username: row.username || "Sistema",
+    module: moduleFor(row.entityType),
+    action: row.action,
+    title: row.description || "Alteração registrada",
+    detail: row.entityType + (row.entityId ? " · " + row.entityId : ""),
+    source: "audit"
+  }));
+  const movementLabels = { entry: "Entrada de ativo", exit: "Saída de ativo", transfer: "Movimentação de ativo" };
+  const movementEvents = movementRows.map((row) => ({
+    id: "movement-" + row.id,
+    createdAt: row.createdAt,
+    username: "Sistema",
+    module: "stock",
+    action: row.action,
+    title: (movementLabels[row.action] || "Movimentação de ativo") + " · " + row.assetCode,
+    detail: [
+      row.category,
+      row.previousLocation && "Origem: " + row.previousLocation,
+      row.newLocation && "Destino: " + row.newLocation
+    ].filter(Boolean).join(" · "),
+    source: row.source || "inventory"
+  }));
+  const events = auditEvents.concat(movementEvents)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 2000);
+  return res.json({ sucesso: true, from, to, events });
+});
+
 app.get("/api/toner", auth.requirePermission("toner"), (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.json({
