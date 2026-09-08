@@ -1198,6 +1198,16 @@ app.post("/api/toner/inventory/use", auth.requirePermission("toner"), (req, res)
 /*
  * Central operacional de toners.
  */
+function requireTonerOperator(req, res, next) {
+  if (!req.user) {
+    const user = auth.currentUser ? auth.currentUser(req) : null;
+    if (user) req.user = user;
+  }
+  if (!req.user || !["master", "operator"].includes(req.user.role)) {
+    return res.status(403).json({ sucesso:false, mensagem:"Apenas operadores e o Master Admin podem movimentar toners." });
+  }
+  return next();
+}
 function tonerKey(model, color) {
   return String(model || "").trim().toLocaleLowerCase("pt-BR") + "|" + String(color || "").trim().toLocaleLowerCase("pt-BR");
 }
@@ -1299,7 +1309,7 @@ app.get("/api/toner/exchanges", auth.requirePermission("toner"), function(req,re
   ).all(limit);
   return res.json({sucesso:true,itens:items});
 });
-app.post("/api/toner/reservations", auth.requirePermission("toner"), function(req,res) {
+app.post("/api/toner/reservations", auth.requirePermission("toner"), requireTonerOperator, function(req,res) {
   const ip=String(req.body?.ip||"").trim(),model=String(req.body?.tonerModel||"").trim(),color=String(req.body?.color||"").trim();
   const printer=activePrinterByIp(ip);
   if(!printer)return res.status(404).json({sucesso:false,mensagem:"Impressora não encontrada no cadastro ativo."});
@@ -1314,14 +1324,14 @@ app.post("/api/toner/reservations", auth.requirePermission("toner"), function(re
   auth.addAudit(req.user.id,"create","toner_reservation",String(result.lastInsertRowid),"Toner reservado: "+model+" para "+ip);
   return res.status(201).json({sucesso:true,id:Number(result.lastInsertRowid),mensagem:"Toner reservado. O saldo ficou protegido para esta troca."});
 });
-app.delete("/api/toner/reservations/:id", auth.requirePermission("toner"), function(req,res) {
+app.delete("/api/toner/reservations/:id", auth.requirePermission("toner"), requireTonerOperator, function(req,res) {
   const result=auth.database.prepare("UPDATE toner_reservations SET status='cancelled',completed_at=? WHERE id=? AND status='reserved'")
     .run(new Date().toISOString(),Number(req.params.id));
   if(!result.changes)return res.status(404).json({sucesso:false,mensagem:"Reserva não encontrada."});
   auth.addAudit(req.user.id,"delete","toner_reservation",String(req.params.id),"Reserva de toner cancelada");
   return res.json({sucesso:true});
 });
-app.post("/api/toner/exchanges", auth.requirePermission("toner"), function(req,res) {
+app.post("/api/toner/exchanges", auth.requirePermission("toner"), requireTonerOperator, function(req,res) {
   const ip=String(req.body?.ip||"").trim(),model=String(req.body?.tonerModel||"").trim(),color=String(req.body?.color||"").trim();
   const printer=activePrinterByIp(ip);
   if(!printer||!model||!color)return res.status(400).json({sucesso:false,mensagem:"Informe impressora, modelo e cor do toner."});
@@ -1332,7 +1342,11 @@ app.post("/api/toner/exchanges", auth.requirePermission("toner"), function(req,r
     return res.status(409).json({sucesso:false,mensagem:"O toner escolhido não está marcado como compatível com este modelo de impressora."});
   const inventory=lerEstoqueToners();
   const stock=inventory.find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(model,color);});
-  if(!stock||Number(stock.quantidade)<1)return res.status(409).json({sucesso:false,mensagem:"Este toner está sem saldo disponível."});
+  const ownReservation=auth.database.prepare("SELECT id FROM toner_reservations WHERE printer_ip=? AND toner_model=? AND color=? AND status='reserved' ORDER BY reserved_at LIMIT 1").get(ip,model,color);
+  const totalReserved=reservedTonerCounts().get(tonerKey(model,color))||0;
+  const freeQuantity=(Number(stock&&stock.quantidade)||0)-totalReserved;
+  if(!stock||Number(stock.quantidade)<1||(!ownReservation&&freeQuantity<1))
+    return res.status(409).json({sucesso:false,mensagem:"O saldo disponível está reservado para outra troca."});
   const reading=latestPrinterReading(ip);
   const matching=currentTonerSupplies(reading).find(function(supply){
     const code=tonerCode(supply.description);
@@ -1348,8 +1362,8 @@ app.post("/api/toner/exchanges", auth.requirePermission("toner"), function(req,r
   const result=auth.database.prepare(
     "INSERT INTO toner_exchanges (printer_ip,printer_name,printer_model,toner_model,color,previous_level,performed_by,created_at) VALUES (?,?,?,?,?,?,?,?)"
   ).run(ip,(reading&&reading.hostname)||printer.location||printer.model,printer.model,model,color,matching?Number(matching.percent):null,Number(req.user.id),now);
-  auth.database.prepare("UPDATE toner_reservations SET status='used',completed_at=? WHERE printer_ip=? AND toner_model=? AND color=? AND status='reserved'")
-    .run(now,ip,model,color);
+  if(ownReservation)auth.database.prepare("UPDATE toner_reservations SET status='used',completed_at=? WHERE id=?")
+    .run(now,Number(ownReservation.id));
   auth.addAudit(req.user.id,"create","toner_exchange",String(result.lastInsertRowid),"Troca confirmada: "+model+" em "+ip);
   return res.status(201).json({sucesso:true,id:Number(result.lastInsertRowid),mensagem:"Troca confirmada e estoque atualizado.",saldo:stock.quantidade});
 });
@@ -1435,7 +1449,8 @@ app.get("/api/toner/insights", auth.requirePermission("toner"), function(req,res
   const forecast=Array.from(demand.values()).map(function(item){
     const stock=inventory.find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(item.tonerModel,item.color);});
     const quantity=Number(stock&&stock.quantidade)||0,reserved=reservations.get(tonerKey(item.tonerModel,item.color))||0;
-    return {...item,stock:quantity,reserved:reserved,buy:Math.max(0,item.required-quantity)};
+    const available=Math.max(0,quantity-reserved);
+    return {...item,stock:quantity,reserved:reserved,available:available,buy:Math.max(0,item.required-available)};
   }).sort(function(a,b){return b.buy-a.buy||a.tonerModel.localeCompare(b.tonerModel,"pt-BR");});
   return res.json({sucesso:true,anomalies:anomalies.slice(0,100),forecast:forecast,generatedAt:new Date().toISOString()});
 });
