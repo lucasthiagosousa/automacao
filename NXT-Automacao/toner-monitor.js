@@ -156,9 +156,15 @@ async function walk(ip, baseOid, timeout) {
 }
 
 function tonerSupply(description) {
-  const text=String(description||"");
-  if (/(unidade de coleta|coleta de toner|collection unit|waste toner|reservatório de resíduos|recipiente de resíduos)/i.test(text)) return false;
-  return /(toner|cartridge|cartucho|tinta|ink)/i.test(text);
+  const text=String(description||"").trim();
+  /*
+   * Algumas HP não incluem as palavras "toner" ou "cartucho" no
+   * prtMarkerSuppliesDescription. Ex.: "Preto HP W9008MC".
+   * Reconhecemos cores e códigos de suprimento HP, mas continuamos
+   * descartando unidades de coleta e componentes de manutenção.
+   */
+  if (/(unidade de coleta|coleta de toner|collection unit|waste toner|reservat[oó]rio de res[ií]duos|recipiente de res[ií]duos|alimentador de documentos|document feeder|limpar cilindros|clean drums?|fusor|fuser|kit de manuten[cç][aã]o|maintenance kit|unidade de imagem|imaging unit)/i.test(text)) return false;
+  return /(toner|cartridge|cartucho|tinta|ink|black|preto|cyan|ciano|magenta|yellow|amarel|\b(?:CF|W)\d{4}[A-Z]{0,3}\b)/i.test(text);
 }
 
 async function checkPrinter(printer, threshold, timeout) {
