@@ -1094,6 +1094,83 @@ app.put("/api/toner/used", auth.requirePermission("toner"), (req, res) => {
 });
 
 /*
+ * Estoque exclusivo de toners, separado do inventário de ativos.
+ */
+function lerEstoqueToners() {
+  try {
+    const items = JSON.parse(auth.getSetting("toner_inventory", "[]"));
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
+  }
+}
+
+function validarEstoqueToners(source) {
+  if (!Array.isArray(source)) throw new Error("Lista de estoque de toners inválida.");
+  if (source.length > 200) throw new Error("O estoque aceita até 200 modelos.");
+  const grouped = new Map();
+  for (const entry of source) {
+    const modelo = String(entry?.modelo || "").trim().replace(/\s+/g, " ").slice(0, 80);
+    const cor = String(entry?.cor || "").trim().replace(/\s+/g, " ").slice(0, 30);
+    const quantidade = Number.parseInt(entry?.quantidade, 10);
+    if (!modelo || !cor || !Number.isInteger(quantidade) || quantidade < 0 || quantidade > 9999) {
+      throw new Error("Informe modelo, cor e uma quantidade válida.");
+    }
+    const key = modelo.toLocaleLowerCase("pt-BR") + "|" + cor.toLocaleLowerCase("pt-BR");
+    const current = grouped.get(key);
+    if (current) current.quantidade = Math.min(9999, current.quantidade + quantidade);
+    else grouped.set(key, { modelo, cor, quantidade });
+  }
+  return Array.from(grouped.values()).sort((a, b) => a.modelo.localeCompare(b.modelo, "pt-BR"));
+}
+
+app.get("/api/toner/inventory", auth.requirePermission("toner"), (req, res) => {
+  return res.json({ sucesso: true, itens: lerEstoqueToners() });
+});
+
+app.put("/api/toner/inventory", auth.requirePermission("toner"), (req, res) => {
+  try {
+    const itens = validarEstoqueToners(req.body?.itens);
+    auth.setSetting("toner_inventory", JSON.stringify(itens), Number(req.user.id));
+    auth.addAudit(
+      req.user.id,
+      "update",
+      "toner_inventory",
+      "",
+      "Estoque de toners atualizado: " + itens.reduce((total, item) => total + item.quantidade, 0) + " unidade(s)"
+    );
+    return res.json({ sucesso: true, itens });
+  } catch (error) {
+    return res.status(400).json({ sucesso: false, mensagem: error.message });
+  }
+});
+
+app.post("/api/toner/inventory/use", auth.requirePermission("toner"), (req, res) => {
+  const modelo = String(req.body?.modelo || "").trim();
+  const cor = String(req.body?.cor || "").trim();
+  const inventory = lerEstoqueToners();
+  const item = inventory.find((entry) =>
+    entry.modelo.toLocaleLowerCase("pt-BR") === modelo.toLocaleLowerCase("pt-BR")
+    && entry.cor.toLocaleLowerCase("pt-BR") === cor.toLocaleLowerCase("pt-BR")
+  );
+  if (!item || Number(item.quantidade) < 1) {
+    return res.status(400).json({ sucesso: false, mensagem: "Este toner não possui saldo disponível." });
+  }
+  item.quantidade = Number(item.quantidade) - 1;
+  const used = lerTonersUsados();
+  const usedItem = used.find((entry) =>
+    entry.modelo.toLocaleLowerCase("pt-BR") === modelo.toLocaleLowerCase("pt-BR")
+    && entry.cor.toLocaleLowerCase("pt-BR") === cor.toLocaleLowerCase("pt-BR")
+  );
+  if (usedItem) usedItem.quantidade = Number(usedItem.quantidade) + 1;
+  else used.push({ modelo: item.modelo, cor: item.cor, quantidade: 1 });
+  auth.setSetting("toner_inventory", JSON.stringify(inventory), Number(req.user.id));
+  auth.setSetting("used_toners", JSON.stringify(used), Number(req.user.id));
+  auth.addAudit(req.user.id, "update", "toner_inventory", "", "Uso registrado: 1 unidade de " + item.modelo + " (" + item.cor + ")");
+  return res.json({ sucesso: true, itens: inventory, usados: used });
+});
+
+/*
  * Monitoramento local das impressoras por SNMP.
  */
 app.get("/api/toner", auth.requirePermission("toner"), (req, res) => {
