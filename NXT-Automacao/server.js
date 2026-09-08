@@ -125,6 +125,31 @@ let estadoAtualizacao = {
 let tonerExecutando = false;
 let tonerDigestExecutando = false;
 
+/*
+ * Operação de toner: compatibilidade, reservas e trocas.
+ * As tabelas são criadas sem alterar os dados já existentes.
+ */
+auth.database.exec(
+  "CREATE TABLE IF NOT EXISTS toner_compatibility ("
+  + "id INTEGER PRIMARY KEY AUTOINCREMENT,printer_model TEXT NOT NULL,toner_model TEXT NOT NULL,"
+  + "color TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 1,created_by INTEGER,"
+  + "created_at TEXT NOT NULL,updated_at TEXT NOT NULL,"
+  + "UNIQUE(printer_model,toner_model,color)"
+  + ");"
+  + "CREATE TABLE IF NOT EXISTS toner_reservations ("
+  + "id INTEGER PRIMARY KEY AUTOINCREMENT,printer_ip TEXT NOT NULL,toner_model TEXT NOT NULL,"
+  + "color TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'reserved',reserved_by INTEGER,"
+  + "reserved_at TEXT NOT NULL,completed_at TEXT NOT NULL DEFAULT ''"
+  + ");"
+  + "CREATE INDEX IF NOT EXISTS idx_toner_reservations_status ON toner_reservations(status,toner_model,color);"
+  + "CREATE TABLE IF NOT EXISTS toner_exchanges ("
+  + "id INTEGER PRIMARY KEY AUTOINCREMENT,printer_ip TEXT NOT NULL,printer_name TEXT NOT NULL DEFAULT '',"
+  + "printer_model TEXT NOT NULL DEFAULT '',toner_model TEXT NOT NULL,color TEXT NOT NULL DEFAULT '',"
+  + "previous_level INTEGER,performed_by INTEGER,created_at TEXT NOT NULL"
+  + ");"
+  + "CREATE INDEX IF NOT EXISTS idx_toner_exchanges_printer ON toner_exchanges(printer_ip,created_at);"
+);
+
 function lerTonerAtual() {
   try {
     return JSON.parse(fs.readFileSync(arquivoToner, "utf8"));
@@ -1168,6 +1193,251 @@ app.post("/api/toner/inventory/use", auth.requirePermission("toner"), (req, res)
   auth.setSetting("used_toners", JSON.stringify(used), Number(req.user.id));
   auth.addAudit(req.user.id, "update", "toner_inventory", "", "Uso registrado: 1 unidade de " + item.modelo + " (" + item.cor + ")");
   return res.json({ sucesso: true, itens: inventory, usados: used });
+});
+
+/*
+ * Central operacional de toners.
+ */
+function tonerKey(model, color) {
+  return String(model || "").trim().toLocaleLowerCase("pt-BR") + "|" + String(color || "").trim().toLocaleLowerCase("pt-BR");
+}
+function tonerCode(description) {
+  const matches = String(description || "").toUpperCase().match(/\b(?:CF|W|CE|Q|TN|MLT)[A-Z0-9-]{3,12}\b/g) || [];
+  return matches.length ? matches[matches.length - 1] : "";
+}
+function tonerColor(description) {
+  const text = String(description || "").toLowerCase();
+  if (/black|preto/.test(text)) return "Preto";
+  if (/cyan|ciano/.test(text)) return "Ciano";
+  if (/magenta/.test(text)) return "Magenta";
+  if (/yellow|amarel/.test(text)) return "Amarelo";
+  return "Outro";
+}
+function activePrinterByIp(ip) {
+  return auth.getPrinters().find(function(item) { return item.active && item.ip === String(ip || "").trim(); });
+}
+function latestPrinterReading(ip) {
+  return (lerTonerAtual().printers || []).find(function(item) { return item.ip === ip; }) || null;
+}
+function reservedTonerCounts() {
+  const counts = new Map();
+  auth.database.prepare("SELECT toner_model AS model,color,COUNT(*) AS total FROM toner_reservations WHERE status='reserved' GROUP BY toner_model,color").all()
+    .forEach(function(row) { counts.set(tonerKey(row.model, row.color), Number(row.total) || 0); });
+  return counts;
+}
+function compatibilityRows() {
+  return auth.database.prepare(
+    "SELECT id,printer_model AS printerModel,toner_model AS tonerModel,color,active,created_at AS createdAt,updated_at AS updatedAt "
+    + "FROM toner_compatibility ORDER BY printer_model,toner_model,color"
+  ).all().map(function(row) { return { ...row, id:Number(row.id), active:Boolean(row.active) }; });
+}
+function currentTonerSupplies(printer) {
+  return (printer && Array.isArray(printer.supplies) ? printer.supplies : []).filter(function(supply) {
+    return supply.isToner !== false && Number.isFinite(Number(supply.percent));
+  });
+}
+function buildTonerWorklist() {
+  const report = lerTonerAtual();
+  const threshold = Number(report.threshold) || 20;
+  const inventory = lerEstoqueToners();
+  const reserved = reservedTonerCounts();
+  const compatibility = compatibilityRows().filter(function(item) { return item.active; });
+  return (report.printers || []).filter(function(printer) {
+    return printer.online !== false && currentTonerSupplies(printer).some(function(supply) { return Number(supply.percent) <= threshold + 15; });
+  }).map(function(printer) {
+    const rules = compatibility.filter(function(rule) {
+      return rule.printerModel.toLocaleLowerCase("pt-BR") === String(printer.model || "").toLocaleLowerCase("pt-BR");
+    });
+    const supplies = currentTonerSupplies(printer).filter(function(supply) {
+      return Number(supply.percent) <= threshold + 15;
+    }).map(function(supply) {
+      const detected = tonerCode(supply.description);
+      const color = tonerColor(supply.description);
+      const rule = rules.find(function(item) {
+        return detected && String(item.tonerModel).toUpperCase().includes(detected);
+      }) || (rules.length === 1 ? rules[0] : null);
+      const model = rule ? rule.tonerModel : detected || printer.cartridge || "Confirmar modelo";
+      const item = inventory.find(function(entry) {
+        return tonerKey(entry.modelo, entry.cor) === tonerKey(model, rule ? rule.color : color);
+      });
+      const reservedQuantity = reserved.get(tonerKey(model, rule ? rule.color : color)) || 0;
+      return {
+        description:supply.description, level:Number(supply.percent), status:supply.status,
+        tonerModel:model, color:rule ? rule.color : color,
+        stock:Number(item && item.quantidade) || 0,
+        reserved:reservedQuantity,
+        available:Math.max(0, (Number(item && item.quantidade) || 0) - reservedQuantity)
+      };
+    });
+    return {
+      ip:printer.ip, name:printer.hostname || printer.model || printer.ip,
+      model:printer.model || "", location:(activePrinterByIp(printer.ip) || {}).location || "",
+      status:printer.status, supplies:supplies
+    };
+  }).sort(function(a,b) {
+    const al=Math.min(...a.supplies.map(function(item){return item.level;}));
+    const bl=Math.min(...b.supplies.map(function(item){return item.level;}));
+    return al-bl || a.name.localeCompare(b.name,"pt-BR");
+  });
+}
+
+app.get("/api/toner/operations", auth.requirePermission("toner"), function(req,res) {
+  const reservations=auth.database.prepare(
+    "SELECT r.id,r.printer_ip AS printerIp,r.toner_model AS tonerModel,r.color,r.status,r.reserved_at AS reservedAt,"
+    + "COALESCE(u.username,'Sistema') AS reservedBy FROM toner_reservations r LEFT JOIN users u ON u.id=r.reserved_by "
+    + "WHERE r.status='reserved' ORDER BY r.reserved_at DESC"
+  ).all();
+  return res.json({sucesso:true,worklist:buildTonerWorklist(),reservations:reservations,compatibility:compatibilityRows()});
+});
+app.get("/api/toner/exchanges", auth.requirePermission("toner"), function(req,res) {
+  const limit=Math.max(1,Math.min(500,Number(req.query.limit)||100));
+  const items=auth.database.prepare(
+    "SELECT e.id,e.printer_ip AS printerIp,e.printer_name AS printerName,e.printer_model AS printerModel,"
+    + "e.toner_model AS tonerModel,e.color,e.previous_level AS previousLevel,e.created_at AS createdAt,"
+    + "COALESCE(u.username,'Sistema') AS performedBy FROM toner_exchanges e LEFT JOIN users u ON u.id=e.performed_by "
+    + "ORDER BY e.created_at DESC LIMIT ?"
+  ).all(limit);
+  return res.json({sucesso:true,itens:items});
+});
+app.post("/api/toner/reservations", auth.requirePermission("toner"), function(req,res) {
+  const ip=String(req.body?.ip||"").trim(),model=String(req.body?.tonerModel||"").trim(),color=String(req.body?.color||"").trim();
+  const printer=activePrinterByIp(ip);
+  if(!printer)return res.status(404).json({sucesso:false,mensagem:"Impressora não encontrada no cadastro ativo."});
+  const item=lerEstoqueToners().find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(model,color);});
+  const reserved=reservedTonerCounts().get(tonerKey(model,color))||0;
+  if(!item||Number(item.quantidade)-reserved<1)return res.status(409).json({sucesso:false,mensagem:"Não existe saldo livre deste toner para reservar."});
+  const existing=auth.database.prepare("SELECT id FROM toner_reservations WHERE printer_ip=? AND toner_model=? AND color=? AND status='reserved'").get(ip,model,color);
+  if(existing)return res.json({sucesso:true,id:Number(existing.id),mensagem:"Este toner já está reservado para a impressora."});
+  const now=new Date().toISOString();
+  const result=auth.database.prepare("INSERT INTO toner_reservations (printer_ip,toner_model,color,status,reserved_by,reserved_at) VALUES (?,?,?,'reserved',?,?)")
+    .run(ip,model,color,Number(req.user.id),now);
+  auth.addAudit(req.user.id,"create","toner_reservation",String(result.lastInsertRowid),"Toner reservado: "+model+" para "+ip);
+  return res.status(201).json({sucesso:true,id:Number(result.lastInsertRowid),mensagem:"Toner reservado. O saldo ficou protegido para esta troca."});
+});
+app.delete("/api/toner/reservations/:id", auth.requirePermission("toner"), function(req,res) {
+  const result=auth.database.prepare("UPDATE toner_reservations SET status='cancelled',completed_at=? WHERE id=? AND status='reserved'")
+    .run(new Date().toISOString(),Number(req.params.id));
+  if(!result.changes)return res.status(404).json({sucesso:false,mensagem:"Reserva não encontrada."});
+  auth.addAudit(req.user.id,"delete","toner_reservation",String(req.params.id),"Reserva de toner cancelada");
+  return res.json({sucesso:true});
+});
+app.post("/api/toner/exchanges", auth.requirePermission("toner"), function(req,res) {
+  const ip=String(req.body?.ip||"").trim(),model=String(req.body?.tonerModel||"").trim(),color=String(req.body?.color||"").trim();
+  const printer=activePrinterByIp(ip);
+  if(!printer||!model||!color)return res.status(400).json({sucesso:false,mensagem:"Informe impressora, modelo e cor do toner."});
+  const rules=compatibilityRows().filter(function(rule){
+    return rule.active&&rule.printerModel.toLocaleLowerCase("pt-BR")===String(printer.model||"").toLocaleLowerCase("pt-BR");
+  });
+  if(rules.length&&!rules.some(function(rule){return tonerKey(rule.tonerModel,rule.color)===tonerKey(model,color);}))
+    return res.status(409).json({sucesso:false,mensagem:"O toner escolhido não está marcado como compatível com este modelo de impressora."});
+  const inventory=lerEstoqueToners();
+  const stock=inventory.find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(model,color);});
+  if(!stock||Number(stock.quantidade)<1)return res.status(409).json({sucesso:false,mensagem:"Este toner está sem saldo disponível."});
+  const reading=latestPrinterReading(ip);
+  const matching=currentTonerSupplies(reading).find(function(supply){
+    const code=tonerCode(supply.description);
+    return code&&String(model).toUpperCase().includes(code);
+  })||currentTonerSupplies(reading)[0];
+  const now=new Date().toISOString();
+  stock.quantidade=Number(stock.quantidade)-1;
+  const used=lerTonersUsados();
+  const usedItem=used.find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(model,color);});
+  if(usedItem)usedItem.quantidade=Number(usedItem.quantidade)+1;else used.push({modelo:model,cor:color,quantidade:1});
+  auth.setSetting("toner_inventory",JSON.stringify(inventory),Number(req.user.id));
+  auth.setSetting("used_toners",JSON.stringify(used),Number(req.user.id));
+  const result=auth.database.prepare(
+    "INSERT INTO toner_exchanges (printer_ip,printer_name,printer_model,toner_model,color,previous_level,performed_by,created_at) VALUES (?,?,?,?,?,?,?,?)"
+  ).run(ip,(reading&&reading.hostname)||printer.location||printer.model,printer.model,model,color,matching?Number(matching.percent):null,Number(req.user.id),now);
+  auth.database.prepare("UPDATE toner_reservations SET status='used',completed_at=? WHERE printer_ip=? AND toner_model=? AND color=? AND status='reserved'")
+    .run(now,ip,model,color);
+  auth.addAudit(req.user.id,"create","toner_exchange",String(result.lastInsertRowid),"Troca confirmada: "+model+" em "+ip);
+  return res.status(201).json({sucesso:true,id:Number(result.lastInsertRowid),mensagem:"Troca confirmada e estoque atualizado.",saldo:stock.quantidade});
+});
+app.get("/api/toner/compatibility", auth.requirePermission("toner"), function(req,res) {
+  return res.json({sucesso:true,itens:compatibilityRows()});
+});
+app.post("/api/toner/compatibility", auth.requireMaster, function(req,res) {
+  const printerModel=String(req.body?.printerModel||"").trim().slice(0,160);
+  const tonerModel=String(req.body?.tonerModel||"").trim().slice(0,100);
+  const color=String(req.body?.color||"").trim().slice(0,30);
+  if(!printerModel||!tonerModel||!color)return res.status(400).json({sucesso:false,mensagem:"Informe modelo da impressora, toner e cor."});
+  const now=new Date().toISOString();
+  auth.database.prepare(
+    "INSERT INTO toner_compatibility (printer_model,toner_model,color,active,created_by,created_at,updated_at) VALUES (?,?,?,1,?,?,?) "
+    + "ON CONFLICT(printer_model,toner_model,color) DO UPDATE SET active=1,updated_at=excluded.updated_at"
+  ).run(printerModel,tonerModel,color,Number(req.user.id),now,now);
+  auth.addAudit(req.user.id,"create","toner_compatibility","",printerModel+" compatível com "+tonerModel+" ("+color+")");
+  return res.status(201).json({sucesso:true,itens:compatibilityRows()});
+});
+app.delete("/api/toner/compatibility/:id", auth.requireMaster, function(req,res) {
+  const result=auth.database.prepare("DELETE FROM toner_compatibility WHERE id=?").run(Number(req.params.id));
+  if(!result.changes)return res.status(404).json({sucesso:false,mensagem:"Compatibilidade não encontrada."});
+  auth.addAudit(req.user.id,"delete","toner_compatibility",String(req.params.id),"Compatibilidade de toner removida");
+  return res.json({sucesso:true});
+});
+app.get("/api/toner/diagnostics/:ip", auth.requireMaster, function(req,res) {
+  const printer=activePrinterByIp(req.params.ip);
+  if(!printer)return res.status(404).json({sucesso:false,mensagem:"Impressora não encontrada."});
+  const reading=latestPrinterReading(printer.ip);
+  const history=auth.database.prepare(
+    "SELECT supply_name AS supplyName,level,status,recorded_at AS recordedAt FROM toner_history WHERE printer_ip=? ORDER BY recorded_at DESC LIMIT 30"
+  ).all(printer.ip);
+  return res.json({sucesso:true,diagnostic:{
+    ip:printer.ip,model:printer.model,location:printer.location,snmpVersion:"v2c",port:161,readOnly:true,
+    responded:Boolean(reading&&reading.online),status:reading?reading.status:"unknown",
+    lastReading:lerTonerAtual().updatedAt||null,hostname:reading&&reading.hostname||"",
+    supplies:reading&&reading.supplies||[],history:history
+  }});
+});
+app.get("/api/toner/insights", auth.requirePermission("toner"), function(req,res) {
+  const report=lerTonerAtual(),inventory=lerEstoqueToners(),reservations=reservedTonerCounts();
+  const history=auth.database.prepare(
+    "SELECT printer_ip AS printerIp,supply_name AS supplyName,level,recorded_at AS recordedAt FROM toner_history "
+    + "WHERE recorded_at>=datetime('now','-30 days') ORDER BY printer_ip,supply_name,recorded_at"
+  ).all();
+  const exchanges=auth.database.prepare("SELECT printer_ip AS printerIp,toner_model AS tonerModel,created_at AS createdAt FROM toner_exchanges WHERE created_at>=datetime('now','-30 days')").all();
+  const groups=new Map();
+  history.forEach(function(row){
+    const key=row.printerIp+"|"+row.supplyName;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(row);
+  });
+  const anomalies=[];
+  groups.forEach(function(rows,key){
+    if(rows.length<2)return;
+    const first=rows[0],last=rows[rows.length-1],drop=Number(first.level)-Number(last.level);
+    const elapsed=Math.max(1,(new Date(last.recordedAt)-new Date(first.recordedAt))/86400000);
+    const lastStep=Number(rows[rows.length-2].level)-Number(last.level);
+    const increased=Number(last.level)-Number(rows[rows.length-2].level);
+    const ip=last.printerIp,supply=last.supplyName;
+    if(lastStep>=25)anomalies.push({type:"rapid_drop",severity:"warning",ip:ip,supply:supply,title:"Queda incomum de "+lastStep+" pontos",detail:"Confira impressão intensa ou leitura incorreta."});
+    if(increased>=15&&!exchanges.some(function(item){return item.printerIp===ip&&new Date(item.createdAt)>=new Date(rows[rows.length-2].recordedAt);}))
+      anomalies.push({type:"unregistered_change",severity:"warning",ip:ip,supply:supply,title:"Nível aumentou sem troca registrada",detail:"Possível troca realizada fora do fluxo."});
+    groups.get(key).dailyDrop=Math.max(0,drop/elapsed);
+  });
+  (report.printers||[]).filter(function(item){return item.online===false;}).forEach(function(item){
+    anomalies.push({type:"offline",severity:"neutral",ip:item.ip,supply:"",title:(item.hostname||item.model||item.ip)+" está offline",detail:"Sem resposta na última leitura SNMP."});
+  });
+  const demand=new Map();
+  (report.printers||[]).forEach(function(printer){
+    currentTonerSupplies(printer).forEach(function(supply){
+      const code=tonerCode(supply.description)||printer.cartridge||"Confirmar modelo";
+      const color=tonerColor(supply.description);
+      const rows=groups.get(printer.ip+"|"+supply.description);
+      const daily=rows&&Number(rows.dailyDrop)||0;
+      const projected=Math.max(0,Number(supply.percent)-daily*30);
+      const needed=Number(supply.percent)<=Number(report.threshold||20)||projected<=Number(report.threshold||20)?1:0;
+      if(!needed)return;
+      const key=tonerKey(code,color),current=demand.get(key)||{tonerModel:code,color:color,required:0,printers:[]};
+      current.required+=1;current.printers.push(printer.hostname||printer.ip);demand.set(key,current);
+    });
+  });
+  const forecast=Array.from(demand.values()).map(function(item){
+    const stock=inventory.find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(item.tonerModel,item.color);});
+    const quantity=Number(stock&&stock.quantidade)||0,reserved=reservations.get(tonerKey(item.tonerModel,item.color))||0;
+    return {...item,stock:quantity,reserved:reserved,buy:Math.max(0,item.required-quantity)};
+  }).sort(function(a,b){return b.buy-a.buy||a.tonerModel.localeCompare(b.tonerModel,"pt-BR");});
+  return res.json({sucesso:true,anomalies:anomalies.slice(0,100),forecast:forecast,generatedAt:new Date().toISOString()});
 });
 
 /*
