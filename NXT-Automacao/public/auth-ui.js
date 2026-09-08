@@ -164,7 +164,7 @@
     if (path === "/central.html") document.body.classList.add("workspace-page-central");
     if (path === "/atividades.html") document.body.classList.add("workspace-page-activities");
     if (path === "/" || path === "/index.html") document.body.classList.add("workspace-page-stock");
-    if (path === "/toner.html") document.body.classList.add("workspace-page-toner");
+    if (path === "/toner.html" || path === "/toner-operacao.html") document.body.classList.add("workspace-page-toner");
     if (path === "/colaboradores.html") document.body.classList.add("workspace-page-colaboradores");
 
     document.querySelectorAll('a[href="/central.html"],a[href="/"],a[href="/index.html"],a[href="/toner.html"],a[href="/colaboradores.html"]').forEach(function (anchor) {
@@ -180,7 +180,7 @@
       { href: "/central.html", type: "central", title: "Central", subtitle: "Pendências e indicadores", paths: ["/central.html"] },
       { href: "/atividades.html", type: "activity", title: "Atividades", subtitle: "Linha do tempo operacional", paths: ["/atividades.html"] },
       { href: "/", type: "stock", title: "Estoque", subtitle: "Ativos e solicitações", paths: ["/", "/index.html"] },
-      { href: "/toner.html?v=20260828-9", type: "toner", title: "Toners", subtitle: "Impressoras e suprimentos", paths: ["/toner.html"] },
+      { href: "/toner.html?v=20260828-9", type: "toner", title: "Toners", subtitle: "Impressoras e suprimentos", paths: ["/toner.html", "/toner-operacao.html"] },
       { href: "/colaboradores.html", type: "people", title: "Colaboradores", subtitle: "Acessos e movimentações", paths: ["/colaboradores.html"] }
     ].forEach(function (item) {
       const anchor = document.createElement("a");
