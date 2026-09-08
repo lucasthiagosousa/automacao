@@ -145,7 +145,7 @@ function query(ip, targetOid, pduType, timeout, requestId) {
 async function walk(ip, baseOid, timeout) {
   const rows = [];
   let current = baseOid;
-  for (let index = 0; index < 40; index += 1) {
+  for (let index = 0; index < 96; index += 1) {
     const row = await query(ip, current, 0xa1, timeout, index + 10);
     if (!row || row.error || row.tag >= 128 || !row.oid.startsWith(baseOid + ".")) break;
     rows.push(row);
@@ -166,23 +166,48 @@ async function checkPrinter(printer, threshold, timeout) {
   const hostname = await query(ip, OIDS.hostname, 0xa0, timeout, 1);
   if (!hostname) return { ip, model, hostname: "", online: false, supplies: [], status: "offline",
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
-  const [descriptions, levels, maximums] = await Promise.all([
-    walk(ip, OIDS.description, timeout), walk(ip, OIDS.level, timeout), walk(ip, OIDS.maximum, timeout)
-  ]);
-  const levelMap = new Map(levels.map(function (row) { return [row.oid.split(".").pop(), row.value]; }));
-  const maxMap = new Map(maximums.map(function (row) { return [row.oid.split(".").pop(), row.value]; }));
-  const supplies = descriptions.map(function (row) {
-    const key = row.oid.split(".").pop();
-    const level = Number(levelMap.get(key));
-    const maximum = Number(maxMap.get(key));
-    const percent = maximum > 0 && level >= 0 ? Math.max(0, Math.min(100, Math.round(level * 100 / maximum))) : null;
-    return { description: String(row.value || "Consumível"), percent,
-      isToner: tonerSupply(String(row.value || "")), status: percent === null ? "unknown" : percent <= threshold ? "critical" : percent <= threshold + 15 ? "warning" : "ok" };
+  /*
+   * Os índices de prtMarkerSuppliesTable variam entre fabricantes e até
+   * entre firmwares. As três colunas são percorridas por subtree e
+   * relacionadas pelo sufixo completo do OID, nunca por uma posição fixa.
+   * As consultas são sequenciais para evitar descarte de pacotes em
+   * impressoras que limitam requisições SNMP simultâneas.
+   */
+  const descriptions = await walk(ip, OIDS.description, timeout);
+  const maximums = await walk(ip, OIDS.maximum, timeout);
+  const levels = await walk(ip, OIDS.level, timeout);
+  function tableIndex(row, baseOid) {
+    const prefix = baseOid + ".";
+    return row.oid.startsWith(prefix) ? row.oid.slice(prefix.length) : row.oid;
+  }
+  const descriptionMap = new Map(descriptions.map(function (row) {
+    return [tableIndex(row, OIDS.description), row.value];
+  }));
+  const levelMap = new Map(levels.map(function (row) {
+    return [tableIndex(row, OIDS.level), row.value];
+  }));
+  const maxMap = new Map(maximums.map(function (row) {
+    return [tableIndex(row, OIDS.maximum), row.value];
+  }));
+  const indexes = Array.from(new Set([
+    ...descriptionMap.keys(), ...levelMap.keys(), ...maxMap.keys()
+  ]));
+  const supplies = indexes.map(function (key) {
+    const description = String(descriptionMap.get(key) || "Consumível SNMP " + key);
+    const rawLevel = levelMap.get(key);
+    const rawMaximum = maxMap.get(key);
+    const level = rawLevel === undefined || rawLevel === null ? NaN : Number(rawLevel);
+    const maximum = rawMaximum === undefined || rawMaximum === null ? NaN : Number(rawMaximum);
+    const percent = Number.isFinite(maximum) && maximum > 0 && Number.isFinite(level) && level >= 0
+      ? Math.max(0, Math.min(100, Math.round(level * 100 / maximum))) : null;
+    return { index: key, description, percent, level: Number.isFinite(level) ? level : null,
+      maximum: Number.isFinite(maximum) ? maximum : null, isToner: tonerSupply(description),
+      status: percent === null ? "unknown" : percent <= threshold ? "critical" : percent <= threshold + 15 ? "warning" : "ok" };
   });
   const toner = supplies.filter(function (item) { return item.isToner; });
   const statuses = toner.map(function (item) { return item.status; });
   const status = statuses.includes("critical") ? "critical" : statuses.includes("warning") ? "warning"
-    : statuses.includes("ok") ? "ok" : "unknown";
+    : statuses.includes("ok") ? "ok" : "online";
   return { ip, model, hostname: String(hostname.value || ""), online: true, supplies, status,
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
 }
