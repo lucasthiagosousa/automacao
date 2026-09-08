@@ -239,6 +239,7 @@
    */
   addStyles();
   installWorkspaceNavigation();
+  document.documentElement.classList.add("workspace-ready");
 
   window.NXT_AUTH_PROMISE = requestUser().then(function (user) {
     window.NXT_CURRENT_USER = user;
