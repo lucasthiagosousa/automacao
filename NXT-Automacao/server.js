@@ -1048,6 +1048,52 @@ app.put("/api/configuracao/toner", auth.requireMaster, (req, res) => {
 });
 
 /*
+ * Toners usados aguardando reposição.
+ * A lista é compartilhada entre todos os usuários com acesso ao módulo.
+ */
+function lerTonersUsados() {
+  try {
+    const items = JSON.parse(auth.getSetting("used_toners", "[]"));
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
+  }
+}
+
+app.get("/api/toner/used", auth.requirePermission("toner"), (req, res) => {
+  return res.json({ sucesso: true, itens: lerTonersUsados() });
+});
+
+app.put("/api/toner/used", auth.requirePermission("toner"), (req, res) => {
+  const source = Array.isArray(req.body?.itens) ? req.body.itens : null;
+  if (!source) {
+    return res.status(400).json({ sucesso: false, mensagem: "Lista de toners inválida." });
+  }
+  if (source.length > 200) {
+    return res.status(400).json({ sucesso: false, mensagem: "A lista aceita até 200 modelos." });
+  }
+  const itens = [];
+  for (const entry of source) {
+    const modelo = String(entry?.modelo || "").trim().replace(/\s+/g, " ").slice(0, 80);
+    const cor = String(entry?.cor || "").trim().replace(/\s+/g, " ").slice(0, 30);
+    const quantidade = Number.parseInt(entry?.quantidade, 10);
+    if (!modelo || !cor || !Number.isInteger(quantidade) || quantidade < 1 || quantidade > 999) {
+      return res.status(400).json({ sucesso: false, mensagem: "Informe modelo, cor e uma quantidade válida." });
+    }
+    itens.push({ modelo, cor, quantidade });
+  }
+  auth.setSetting("used_toners", JSON.stringify(itens), Number(req.user.id));
+  auth.addAudit(
+    req.user.id,
+    "update",
+    "used_toners",
+    "",
+    "Lista de toners usados atualizada: " + itens.reduce((total, item) => total + item.quantidade, 0) + " unidade(s)"
+  );
+  return res.json({ sucesso: true, itens });
+});
+
+/*
  * Monitoramento local das impressoras por SNMP.
  */
 app.get("/api/toner", auth.requirePermission("toner"), (req, res) => {
