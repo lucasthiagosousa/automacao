@@ -2,7 +2,7 @@ name: Gerar instalador Windows
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, ferias-acessos-local]
     paths: ["NXT-Automacao/**", ".github/workflows/windows-installer.yml"]
 permissions:
   contents: write
@@ -52,7 +52,9 @@ jobs:
             "$app\node_modules\get-proto\index.js",
             "$app\node_modules\express\index.js",
             "$app\server.js",
-            "$app\desktop.js"
+            "$app\desktop.js",
+            "$app\public\toner-operacao.html",
+            "$app\public\vendor\qrcode.min.js"
           )
           foreach ($arquivo in $arquivos) {
             if (-not (Test-Path $arquivo)) { throw "Arquivo obrigatório ausente: $arquivo" }
@@ -66,11 +68,11 @@ jobs:
         run: |
           $arquivo = Get-ChildItem "dist\*Setup*.exe" | Select-Object -First 1
           if (-not $arquivo) { throw "Instalador não encontrado." }
-          gh release view "v1.1.6-server" *> $null
+          gh release view "v1.2.0-server" *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create "v1.1.6-server" --target "${{ github.sha }}" --title "Central de Operações de TI — Servidor v1.1.6" --notes "Instalador Windows em modo servidor, com acesso multiusuário pela rede, banco centralizado e histórico administrativo de solicitações."
+            gh release create "v1.2.0-server" --target "${{ github.sha }}" --title "Central de Operações de TI — Servidor v1.2.0" --notes "Instalador Windows v1.2.0 com operação de toners, QR Code, reservas, histórico, diagnóstico SNMP, previsão de compras, acesso multiusuário e banco centralizado."
           }
-          gh release upload "v1.1.6-server" $arquivo.FullName --clobber
+          gh release upload "v1.2.0-server" $arquivo.FullName --clobber
 
       - name: Publicar instalador temporário
         uses: actions/upload-artifact@v4
