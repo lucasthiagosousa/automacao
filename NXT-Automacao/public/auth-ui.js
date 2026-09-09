@@ -26,6 +26,10 @@
       .auth-account{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:5px 9px;border:1px solid rgba(255,255,255,.22);border-radius:10px;color:inherit;background:rgba(255,255,255,.1)}
       .auth-avatar{width:27px;height:27px;display:grid;place-items:center;border-radius:8px;background:#fff;color:#087a45;font-size:11px;font-weight:900}
       .auth-copy{display:flex;flex-direction:column;line-height:1.15;text-align:left}.auth-copy strong{font-size:11px}.auth-copy span{font-size:9px;opacity:.72}.auth-link{cursor:pointer;text-decoration:none}
+      .workspace-utility-link{min-height:38px!important;padding:7px 11px!important;display:inline-flex!important;align-items:center!important;gap:7px!important;border:1px solid rgba(255,255,255,.25)!important;border-radius:10px!important;background:rgba(255,255,255,.1)!important;color:#fff!important;font-size:10px!important;font-weight:500!important;line-height:1!important;box-shadow:inset 0 1px rgba(255,255,255,.07)!important;transition:background .16s,border-color .16s,transform .16s!important}
+      .workspace-utility-link svg{width:16px!important;height:16px!important;flex:0 0 16px;max-width:none!important}
+      .workspace-utility-link:hover{background:rgba(255,255,255,.18)!important;border-color:rgba(255,255,255,.42)!important;transform:translateY(-1px)}
+      .workspace-utility-link:focus-visible{outline:2px solid #6df0aa!important;outline-offset:2px}
       body.workspace-operational{font-weight:400!important}
       body.workspace-operational p,body.workspace-operational td,body.workspace-operational input,body.workspace-operational select,body.workspace-operational textarea,body.workspace-operational .meta,body.workspace-operational .muted,body.workspace-operational .panel-desc,body.workspace-operational .kpi-sub{font-weight:400!important}
       body.workspace-operational label,body.workspace-operational th{font-weight:500!important}
@@ -141,11 +145,19 @@
     return element;
   }
 
-  function link(label, href) {
+  function utilityIcon(type) {
+    if (type === "users") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>';
+    if (type === "settings") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.09A1.7 1.7 0 0 0 8.97 19.35a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3v-4h.09A1.7 1.7 0 0 0 4.65 8.94a1.7 1.7 0 0 0-.34-1.88L4.25 7l2.83-2.83.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 10.05 3H14v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.8 7l-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.56 1.03H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z"/></svg>';
+    if (type === "logout") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg>';
+    return "";
+  }
+
+  function link(label, href, type) {
     const element = document.createElement("a");
-    element.className = "btn btn-header back-link auth-link";
+    element.className = "btn btn-header back-link auth-link" + (type ? " workspace-utility-link" : "");
     element.href = href;
-    element.textContent = label;
+    element.innerHTML = utilityIcon(type) + "<span></span>";
+    element.querySelector("span").textContent = label;
     return element;
   }
 
@@ -219,9 +231,9 @@
     if(currentKey&&permissions[currentKey]===false)window.location.replace("/central.html");
     const actions = document.querySelector(".header-actions, .header-right");
     if (actions) {
-      if (user.canManageUsers) { actions.appendChild(link("Usuários", "/admin.html")); actions.appendChild(link("Configurações", "/configuracoes.html")); }
+      if (user.canManageUsers) { actions.appendChild(link("Usuários", "/admin.html", "users")); actions.appendChild(link("Configurações", "/configuracoes.html", "settings")); }
       actions.appendChild(accountControl(user));
-      const logout = link("Sair", "#");
+      const logout = link("Sair", "#", "logout");
       logout.addEventListener("click", async function (event) {
         event.preventDefault();
         await fetch("/api/auth/logout", { method: "POST" });
