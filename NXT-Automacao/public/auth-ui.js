@@ -2,7 +2,7 @@
   "use strict";
 
   const ROLE_LABELS = { master: "Master Admin", operator: "Operador", viewer: "Visualizador" };
-  const WORKSPACE_PAGES = ["/central.html", "/atividades.html", "/", "/index.html", "/toner.html", "/colaboradores.html"];
+  const WORKSPACE_PAGES = ["/central.html", "/atividades.html", "/", "/index.html", "/toner.html", "/toner-operacao.html", "/colaboradores.html"];
 
   window.addEventListener("pageshow", function (event) {
     if (event.persisted) window.location.reload();
