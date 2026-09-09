@@ -1232,7 +1232,7 @@ function createAuth(options) {
     try {
       (report && Array.isArray(report.printers) ? report.printers : []).forEach(function(printer) {
         (Array.isArray(printer.supplies)?printer.supplies:[]).forEach(function(supply) {
-          const level=Number(supply.level ?? supply.percent);
+          const level=Number(supply.percent ?? supply.level);
           if(Number.isFinite(level))insert.run(safeText(printer.ip,80),safeText(printer.model,160),safeText(supply.name||supply.description,160),safeText(supply.color,80),Math.max(0,Math.min(100,Math.round(level))),safeText(printer.status,60),timestamp);
         });
       });
