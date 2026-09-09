@@ -57,27 +57,23 @@ jobs:
             "$app\public\vendor\qrcode.min.js"
           )
           foreach ($arquivo in $arquivos) {
-            if (-not (Test-Path $arquivo)) { throw "Arquivo obrigatório ausente: $arquivo" }
+            if (-not (Test-Path $arquivo)) { throw "Arquivo obrigatorio ausente: $arquivo" }
           }
 
-      - name: Publicar versão permanente
-        continue-on-error: true
-        shell: powershell
+      - name: Publicar instalador
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $arquivo = Get-ChildItem "dist\*Setup*.exe" | Select-Object -First 1
-          if (-not $arquivo) { throw "Instalador não encontrado." }
-          gh release view "v1.2.0-server" *> $null
-          if ($LASTEXITCODE -ne 0) {
-            gh release create "v1.2.0-server" --target "${{ github.sha }}" --title "Central de Operações de TI — Servidor v1.2.0" --notes "Instalador Windows v1.2.0 com operação de toners, QR Code, reservas, histórico, diagnóstico SNMP, previsão de compras, acesso multiusuário e banco centralizado."
-          }
-          gh release upload "v1.2.0-server" $arquivo.FullName --clobber
+          $tag = "v1.2.0-server"
+          $arquivo = Get-ChildItem -Path "dist" -Filter "*Setup*.exe" | Select-Object -First 1
+          if (-not $arquivo) { throw "Instalador nao encontrado." }
 
-      - name: Publicar instalador temporário
-        uses: actions/upload-artifact@v4
-        with:
-          name: Central-Operacoes-TI-Windows
-          path: NXT-Automacao/dist/*Setup*.exe
-          if-no-files-found: error
-          retention-days: 30
+          & gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            & gh release create $tag --target "${{ github.sha }}" --title "Central de Operacoes de TI - Servidor v1.2.0" --notes "Instalador Windows v1.2.0 com operacao de toners, QR Code, reservas, historico, diagnostico SNMP, previsao de compras, acesso multiusuario e banco centralizado."
+            if ($LASTEXITCODE -ne 0) { throw "Falha ao criar a release." }
+          }
+
+          & gh release upload $tag "$($arquivo.FullName)" --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Falha ao publicar o instalador." }
