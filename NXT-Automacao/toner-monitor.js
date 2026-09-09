@@ -48,7 +48,8 @@ const OIDS = {
   hostname: "1.3.6.1.2.1.1.5.0",
   description: "1.3.6.1.2.1.43.11.1.1.6.1",
   maximum: "1.3.6.1.2.1.43.11.1.1.8.1",
-  level: "1.3.6.1.2.1.43.11.1.1.9.1"
+  level: "1.3.6.1.2.1.43.11.1.1.9.1",
+  lifetimeCount: "1.3.6.1.2.1.43.10.2.1.4"
 };
 
 function length(value) {
@@ -104,7 +105,8 @@ function decodeOid(buffer) {
 }
 function decodeValue(tag, value) {
   if (tag === 4) return value.toString("utf8").replace(/\0/g, "").trim();
-  if ([2, 65, 66, 67, 70].includes(tag)) return value.readIntBE(0, value.length);
+  if (tag === 2) return value.readIntBE(0, value.length);
+  if ([65, 66, 67, 70].includes(tag)) return value.readUIntBE(0, value.length);
   return null;
 }
 function parsePacket(buffer) {
@@ -170,7 +172,7 @@ function tonerSupply(description) {
 async function checkPrinter(printer, threshold, timeout) {
   const [ip, model] = printer;
   const hostname = await query(ip, OIDS.hostname, 0xa0, timeout, 1);
-  if (!hostname) return { ip, model, hostname: "", online: false, supplies: [], status: "offline",
+  if (!hostname) return { ip, model, hostname: "", online: false, supplies: [], status: "offline", totalPages: null,
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
   /*
    * Os índices de prtMarkerSuppliesTable variam entre fabricantes e até
@@ -182,6 +184,10 @@ async function checkPrinter(printer, threshold, timeout) {
   const descriptions = await walk(ip, OIDS.description, timeout);
   const maximums = await walk(ip, OIDS.maximum, timeout);
   const levels = await walk(ip, OIDS.level, timeout);
+  const lifetimeCounts = await walk(ip, OIDS.lifetimeCount, timeout);
+  const totalPages = lifetimeCounts.map(function (row) { return Number(row.value); })
+    .filter(function (value) { return Number.isFinite(value) && value >= 0; })
+    .reduce(function (highest, value) { return Math.max(highest, value); }, -1);
   function tableIndex(row, baseOid) {
     const prefix = baseOid + ".";
     return row.oid.startsWith(prefix) ? row.oid.slice(prefix.length) : row.oid;
@@ -215,6 +221,7 @@ async function checkPrinter(printer, threshold, timeout) {
   const status = statuses.includes("critical") ? "critical" : statuses.includes("warning") ? "warning"
     : statuses.includes("ok") ? "ok" : "online";
   return { ip, model, hostname: String(hostname.value || ""), online: true, supplies, status,
+    totalPages: totalPages >= 0 ? totalPages : null,
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
 }
 
