@@ -12,7 +12,7 @@
   <script>setTimeout(function(){document.documentElement.classList.add("workspace-ready")},2500)</script>
 </head>
 <body>
-  <header class="header"><div class="head"><div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></div><div><h1>Operação de Toners</h1><p>Separação, troca, diagnóstico e planejamento em um único fluxo</p></div></div><div class="actions"><a class="btn btn-header" href="/toner.html">Painel de toners</a><a class="btn btn-header" href="/">Central</a></div></div></header>
+  <header class="header"><div class="head header-inner"><div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></div><div><h1>Operação de Toners</h1><p>Separação, troca, diagnóstico e planejamento em um único fluxo</p></div></div><div class="actions header-actions"><a class="btn btn-header" href="/toner.html">Painel de toners</a><a class="btn btn-header" href="/">Central</a></div></div></header>
   <main class="page">
     <section class="hero"><div class="hero-main"><span class="eyebrow">Roteiro do técnico</span><h2>Troque o toner certo, na impressora certa</h2><p>Reserve antes de sair, confirme no local e o sistema atualiza estoque, reposição e histórico automaticamente.</p></div><div class="hero-side"><div class="stat"><span>Trocas próximas</span><strong id="statWork">0</strong></div><div class="stat"><span>Reservados</span><strong id="statReserved">0</strong></div><div class="stat"><span>Comprar</span><strong id="statBuy">0</strong></div></div></section>
     <nav class="tabs" aria-label="Seções"><button class="tab active" data-tab="route">Roteiro de trocas</button><button class="tab" data-tab="history">Histórico</button><button class="tab" data-tab="insights">Previsão e alertas</button><button class="tab master-only" data-tab="compatibility">Compatibilidade</button><button class="tab master-only" data-tab="diagnostic">Diagnóstico SNMP</button></nav>
@@ -25,7 +25,7 @@
   <div class="modal" id="labelModal"><div class="dialog"><h2>Etiqueta com QR Code</h2><p>Ao ler pelo celular, o técnico abre diretamente a impressora selecionada no fluxo de troca.</p><div class="label-card"><strong id="labelName"></strong><span id="labelMeta"></span><div class="label-qr" id="labelQr"></div><code id="labelUrl"></code></div><div class="actions"><button class="btn" id="copyLink">Copiar link</button><button class="btn btn-primary" onclick="window.print()">Imprimir etiqueta</button><button class="btn" id="closeLabel">Fechar</button></div></div></div>
   <div class="toast" id="toast"></div>
   <script src="/vendor/qrcode.min.js"></script>
-  <script src="/auth-ui.js?v=20260908-1"></script>
+  <script src="/auth-ui.js?v=20260909-2"></script>
   <script>
   (function(){"use strict";
     var state={user:null,worklist:[],reservations:[],compatibility:[],forecast:[],anomalies:[],printers:[]},$=function(id){return document.getElementById(id)},toastTimer;
