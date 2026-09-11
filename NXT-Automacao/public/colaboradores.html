@@ -31,7 +31,7 @@
       radial-gradient(900px 430px at 88% -12%, #d8f3f7 0%, transparent 62%),
       var(--bg);
     color:var(--text);
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: "Segoe UI",Tahoma,Arial,sans-serif;
     min-height:100vh;
     padding: 28px 24px 60px;
   }
@@ -248,7 +248,14 @@
   footer{margin-top:24px; text-align:center; color:var(--text-faint); font-size:11.5px;}
   footer a{color:var(--text-faint);}
 </style>
-<style id="workspace-boot-style">html.workspace-boot{background:#001109}html.workspace-boot body{opacity:0!important}html.workspace-boot.workspace-ready body{opacity:1!important}</style><script>setTimeout(function(){document.documentElement.classList.add("workspace-ready")},2500)</script></head>
+<style id="workspace-boot-style">html.workspace-boot{background:#001109}html.workspace-boot body{opacity:0!important}html.workspace-boot.workspace-ready body{opacity:1!important}</style><script>setTimeout(function(){document.documentElement.classList.add("workspace-ready")},2500)</script><style id="typography-normalization">
+html,body{font-family:"Segoe UI",Tahoma,Arial,sans-serif!important;font-weight:400!important;text-shadow:none!important;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+body *{text-shadow:none!important}
+body :where(p,span,label,input,select,option,textarea,td,li,small,time,caption,legend){font-weight:400!important}
+body :where(h1,h2,h3,h4,h5,h6){font-weight:600!important;letter-spacing:-.01em}
+body :where(strong,b,th,.eyebrow,.kicker,.badge,.status){font-weight:600!important}
+body :where(button,.btn,[role="button"]){font-weight:500!important}
+</style></head>
 <body>
 <div class="wrap">
 
