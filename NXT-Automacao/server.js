@@ -163,6 +163,14 @@ auth.database.exec(
   + "CREATE TABLE IF NOT EXISTS printer_maintenance (id INTEGER PRIMARY KEY AUTOINCREMENT,printer_ip TEXT NOT NULL,maintenance_type TEXT NOT NULL,interval_pages INTEGER NOT NULL DEFAULT 100000,last_pages INTEGER NOT NULL DEFAULT 0,next_due_pages INTEGER NOT NULL DEFAULT 100000,last_at TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',created_by INTEGER,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);"
   + "CREATE TABLE IF NOT EXISTS toner_change_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT,printer_ip TEXT NOT NULL,printer_name TEXT NOT NULL DEFAULT '',printer_model TEXT NOT NULL DEFAULT '',supply_name TEXT NOT NULL,previous_level INTEGER NOT NULL,current_level INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'pending',detected_at TEXT NOT NULL,resolved_at TEXT NOT NULL DEFAULT '',resolved_by INTEGER);"
 );
+const exchangeColumns=auth.database.prepare("PRAGMA table_info(toner_exchanges)").all().map(function(column){return column.name;});
+if(!exchangeColumns.includes("source"))auth.database.exec("ALTER TABLE toner_exchanges ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'");
+if(!exchangeColumns.includes("current_level"))auth.database.exec("ALTER TABLE toner_exchanges ADD COLUMN current_level INTEGER");
+const candidateColumns=auth.database.prepare("PRAGMA table_info(toner_change_candidates)").all().map(function(column){return column.name;});
+if(!candidateColumns.includes("confirmation_count"))auth.database.exec("ALTER TABLE toner_change_candidates ADD COLUMN confirmation_count INTEGER NOT NULL DEFAULT 1");
+if(!candidateColumns.includes("last_seen_at"))auth.database.exec("ALTER TABLE toner_change_candidates ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''");
+auth.database.exec("CREATE INDEX IF NOT EXISTS idx_toner_candidates_pending ON toner_change_candidates(status,printer_ip,supply_name)");
+auth.database.exec("PRAGMA optimize");
 
 
 auth.database.exec(
@@ -1426,8 +1434,8 @@ app.get("/api/toner/exchanges", auth.requirePermission("toner"), function(req,re
   const limit=Math.max(1,Math.min(500,Number(req.query.limit)||100));
   const items=auth.database.prepare(
     "SELECT e.id,e.printer_ip AS printerIp,e.printer_name AS printerName,e.printer_model AS printerModel,"
-    + "e.toner_model AS tonerModel,e.color,e.previous_level AS previousLevel,e.created_at AS createdAt,"
-    + "COALESCE(u.username,'Sistema') AS performedBy FROM toner_exchanges e LEFT JOIN users u ON u.id=e.performed_by "
+    + "e.toner_model AS tonerModel,e.color,e.previous_level AS previousLevel,e.current_level AS currentLevel,e.created_at AS createdAt,e.source,"
+    + "CASE WHEN e.source='automatic' THEN 'Sistema automático' ELSE COALESCE(u.username,'Sistema') END AS performedBy FROM toner_exchanges e LEFT JOIN users u ON u.id=e.performed_by "
     + "ORDER BY e.created_at DESC LIMIT ?"
   ).all(limit);
   return res.json({sucesso:true,itens:items});
@@ -1645,9 +1653,54 @@ function recordPrinterPages(report){
   const stamp=report?.updatedAt||new Date().toISOString(),insert=auth.database.prepare("INSERT INTO printer_page_history (printer_ip,printer_model,hostname,total_pages,recorded_at) VALUES (?,?,?,?,?)");
   auth.database.exec("BEGIN");try{(report?.printers||[]).forEach(function(p){const pages=Number(p.totalPages);if(Number.isFinite(pages)&&pages>=0)insert.run(p.ip||"",p.model||"",p.hostname||"",Math.round(pages),stamp);});auth.database.exec("DELETE FROM printer_page_history WHERE recorded_at < datetime('now','-800 days')");auth.database.exec("COMMIT");}catch(error){auth.database.exec("ROLLBACK");throw error;}
 }
+function registerAutomaticTonerExchange(item,currentLevel,stamp){
+  const model=tonerCode(item.supply_name)||"Modelo não identificado",color=tonerColor(item.supply_name);
+  const existing=auth.database.prepare("SELECT id FROM toner_exchanges WHERE printer_ip=? AND created_at>=? ORDER BY created_at DESC LIMIT 1").get(item.printer_ip,item.detected_at);
+  if(existing){
+    auth.database.prepare("UPDATE toner_change_candidates SET status='confirmed_manual',current_level=?,confirmation_count=2,last_seen_at=?,resolved_at=? WHERE id=?").run(currentLevel,stamp,stamp,item.id);
+    return{registered:false,reason:"manual"};
+  }
+  const inventory=lerEstoqueToners(),stock=inventory.find(function(x){return tonerKey(x.modelo,x.cor)===tonerKey(model,color);});
+  const reservation=auth.database.prepare("SELECT id FROM toner_reservations WHERE printer_ip=? AND toner_model=? AND color=? AND status='reserved' ORDER BY reserved_at LIMIT 1").get(item.printer_ip,model,color);
+  const reserved=reservedTonerCounts().get(tonerKey(model,color))||0,free=(Number(stock&&stock.quantidade)||0)-reserved;
+  const canDeduct=Boolean(stock&&Number(stock.quantidade)>0&&(reservation||free>=1));
+  if(canDeduct)stock.quantidade=Number(stock.quantidade)-1;
+  const used=lerTonersUsados(),usedItem=used.find(function(x){return tonerKey(x.modelo,x.cor)===tonerKey(model,color);});
+  if(usedItem)usedItem.quantidade=Number(usedItem.quantidade)+1;else used.push({modelo:model,cor:color,quantidade:1});
+  auth.setSetting("toner_inventory",JSON.stringify(inventory),null);
+  auth.setSetting("used_toners",JSON.stringify(used),null);
+  const result=auth.database.prepare("INSERT INTO toner_exchanges (printer_ip,printer_name,printer_model,toner_model,color,previous_level,performed_by,created_at,source,current_level) VALUES (?,?,?,?,?,?,NULL,?,'automatic',?)")
+    .run(item.printer_ip,item.printer_name,item.printer_model,model,color,item.previous_level,stamp,currentLevel);
+  if(reservation)auth.database.prepare("UPDATE toner_reservations SET status='used',completed_at=? WHERE id=?").run(stamp,reservation.id);
+  auth.database.prepare("UPDATE toner_change_candidates SET status='auto_confirmed',current_level=?,confirmation_count=2,last_seen_at=?,resolved_at=? WHERE id=?").run(currentLevel,stamp,stamp,item.id);
+  auth.addAudit(null,"create","toner_exchange",String(result.lastInsertRowid),"Troca identificada automaticamente: "+model+" em "+item.printer_ip);
+  dispatchNotification("toner-auto-exchange:"+result.lastInsertRowid,"toner","Troca de toner identificada automaticamente",(item.printer_name||item.printer_ip)+" · "+model+" · "+color+" · "+item.previous_level+"% → "+currentLevel+"%"+(canDeduct?" · estoque atualizado":" · sem saldo para desconto"),false).catch(function(error){console.error("Notificação de troca automática:",error.message);});
+  return{registered:true,id:Number(result.lastInsertRowid),deducted:canDeduct};
+}
 function detectTonerChanges(report){
-  const stamp=report?.updatedAt||new Date().toISOString(),previous=auth.database.prepare("SELECT level FROM toner_history WHERE printer_ip=? AND supply_name=? AND recorded_at<? ORDER BY recorded_at DESC LIMIT 1"),pending=auth.database.prepare("SELECT id FROM toner_change_candidates WHERE printer_ip=? AND supply_name=? AND status='pending'"),insert=auth.database.prepare("INSERT INTO toner_change_candidates (printer_ip,printer_name,printer_model,supply_name,previous_level,current_level,status,detected_at) VALUES (?,?,?,?,?,?,'pending',?)");
-  (report?.printers||[]).forEach(function(p){(p.supplies||[]).filter(function(s){return s.isToner!==false&&Number.isFinite(Number(s.percent));}).forEach(function(s){const name=String(s.description||s.name||"Toner"),old=previous.get(p.ip,name,stamp),level=Math.round(Number(s.percent));if(old&&level>=70&&level-Number(old.level)>=40&&!pending.get(p.ip,name))insert.run(p.ip,p.hostname||p.model||p.ip,p.model||"",name,Number(old.level),level,stamp);});});
+  const stamp=report?.updatedAt||new Date().toISOString();
+  const previous=auth.database.prepare("SELECT level FROM toner_history WHERE printer_ip=? AND supply_name=? AND recorded_at<? ORDER BY recorded_at DESC LIMIT 1");
+  const pending=auth.database.prepare("SELECT * FROM toner_change_candidates WHERE printer_ip=? AND supply_name=? AND status='pending' ORDER BY id DESC LIMIT 1");
+  const insert=auth.database.prepare("INSERT INTO toner_change_candidates (printer_ip,printer_name,printer_model,supply_name,previous_level,current_level,status,detected_at,confirmation_count,last_seen_at) VALUES (?,?,?,?,?,?,'pending',?,1,?)");
+  (report?.printers||[]).forEach(function(p){
+    if(p.online===false||p.stale)return;
+    (p.supplies||[]).filter(function(s){return s.isToner!==false&&Number.isFinite(Number(s.percent));}).forEach(function(s){
+      const name=String(s.description||s.name||"Toner"),old=previous.get(p.ip,name,stamp),level=Math.round(Number(s.percent)),candidate=pending.get(p.ip,name);
+      if(candidate&&candidate.detected_at<stamp){
+        if(level>=70&&level>=Number(candidate.current_level)-12){
+          registerAutomaticTonerExchange(candidate,level,stamp);
+        }else if(Date.parse(stamp)-Date.parse(candidate.detected_at)>2*60*60*1000){
+          auth.database.prepare("UPDATE toner_change_candidates SET status='expired',current_level=?,last_seen_at=?,resolved_at=? WHERE id=?").run(level,stamp,stamp,candidate.id);
+        }else{
+          auth.database.prepare("UPDATE toner_change_candidates SET current_level=?,last_seen_at=? WHERE id=?").run(level,stamp,candidate.id);
+        }
+        return;
+      }
+      if(old&&level>=70&&level-Number(old.level)>=40){
+        insert.run(p.ip,p.hostname||p.model||p.ip,p.model||"",name,Number(old.level),level,stamp,stamp);
+      }
+    });
+  });
 }
 function pageAnalytics(days){
   const period=Math.max(7,Math.min(365,Number(days)||30)),now=Date.now(),since=new Date(now-period*86400000).toISOString(),rows=auth.database.prepare("SELECT printer_ip ip,printer_model model,hostname,total_pages totalPages,recorded_at recordedAt FROM printer_page_history WHERE recorded_at>=? ORDER BY printer_ip,recorded_at").all(since),groups={};
