@@ -154,6 +154,21 @@ auth.database.exec(
   + "CREATE TABLE IF NOT EXISTS toner_change_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT,printer_ip TEXT NOT NULL,printer_name TEXT NOT NULL DEFAULT '',printer_model TEXT NOT NULL DEFAULT '',supply_name TEXT NOT NULL,previous_level INTEGER NOT NULL,current_level INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'pending',detected_at TEXT NOT NULL,resolved_at TEXT NOT NULL DEFAULT '',resolved_by INTEGER);"
 );
 
+
+auth.database.exec(
+  "CREATE TABLE IF NOT EXISTS automation_runs ("
+  +"id INTEGER PRIMARY KEY AUTOINCREMENT,automation_type TEXT NOT NULL,trigger_type TEXT NOT NULL DEFAULT 'scheduled',"
+  +"status TEXT NOT NULL DEFAULT 'running',started_at TEXT NOT NULL,finished_at TEXT NOT NULL DEFAULT '',"
+  +"duration_ms INTEGER NOT NULL DEFAULT 0,message TEXT NOT NULL DEFAULT '',details TEXT NOT NULL DEFAULT ''"
+  +");"
+  +"CREATE INDEX IF NOT EXISTS idx_automation_runs_date ON automation_runs(started_at DESC);"
+  +"CREATE TABLE IF NOT EXISTS system_backups ("
+  +"id INTEGER PRIMARY KEY AUTOINCREMENT,file_name TEXT NOT NULL,file_path TEXT NOT NULL,size_bytes INTEGER NOT NULL DEFAULT 0,"
+  +"status TEXT NOT NULL DEFAULT 'created',integrity_status TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL,"
+  +"verified_at TEXT NOT NULL DEFAULT '',error TEXT NOT NULL DEFAULT ''"
+  +");"
+);
+
 function lerTonerAtual() {
   try {
     return JSON.parse(fs.readFileSync(arquivoToner, "utf8"));
@@ -535,6 +550,53 @@ function formatBytes(value) {
   return n.toFixed(index?1:0)+" "+units[index];
 }
 
+
+const pastaBackups=path.join(pastaDados,"backups");
+fs.mkdirSync(pastaBackups,{recursive:true});
+function automationStart(type,trigger){
+  const result=auth.database.prepare("INSERT INTO automation_runs (automation_type,trigger_type,status,started_at) VALUES (?,?,\'running\',?)").run(type,trigger||"scheduled",new Date().toISOString());
+  return{ id:Number(result.lastInsertRowid),started:Date.now() };
+}
+function automationFinish(run,ok,message,details){
+  if(!run)return;
+  auth.database.prepare("UPDATE automation_runs SET status=?,finished_at=?,duration_ms=?,message=?,details=? WHERE id=?")
+    .run(ok?"success":"error",new Date().toISOString(),Math.max(0,Date.now()-run.started),String(message||"").slice(0,1000),String(details||"").slice(0,4000),run.id);
+}
+function verifyDatabaseFile(file){
+  const probe=new DatabaseSync(file,{readOnly:true});
+  try{const result=probe.prepare("PRAGMA integrity_check").get(),tables=probe.prepare("SELECT name FROM sqlite_master WHERE type=\'table\'").all().map(r=>r.name);return String(Object.values(result)[0]).toLowerCase()==="ok"&&tables.includes("users");}
+  finally{probe.close();}
+}
+function createAutomaticBackup(trigger){
+  const run=automationStart("backup",trigger||"scheduled"),stamp=new Date().toISOString().replace(/[:.]/g,"-"),name="central-operacoes-"+stamp+".db",destination=path.join(pastaBackups,name);
+  try{
+    auth.database.exec("PRAGMA wal_checkpoint(FULL)");
+    auth.database.exec("VACUUM INTO \'"+destination.replace(/\'/g,"\'\'")+"\'");
+    const valid=verifyDatabaseFile(destination),stat=fs.statSync(destination);
+    auth.database.prepare("INSERT INTO system_backups (file_name,file_path,size_bytes,status,integrity_status,created_at,verified_at,error) VALUES (?,?,?,?,?,?,?,?)")
+      .run(name,destination,stat.size,valid?"created":"error",valid?"ok":"failed",new Date().toISOString(),new Date().toISOString(),valid?"":"Falha na verificação de integridade");
+    if(!valid)throw new Error("O backup foi criado, mas falhou na verificação de integridade.");
+    const retention=Math.max(1,Math.min(365,Number(auth.getSetting("backup_retention_days","30"))||30)),cutoff=Date.now()-retention*86400000;
+    auth.database.prepare("SELECT id,file_path filePath,created_at createdAt FROM system_backups ORDER BY created_at").all().forEach(function(item){if(Date.parse(item.createdAt)<cutoff){try{fs.rmSync(item.filePath);}catch{}auth.database.prepare("DELETE FROM system_backups WHERE id=?").run(item.id);}});
+    auth.setSetting("backup_last_success",new Date().toISOString(),null);automationFinish(run,true,"Backup criado e verificado.",name);return{name,path:destination,size:stat.size};
+  }catch(error){
+    auth.setSetting("backup_last_error",error.message,null);automationFinish(run,false,error.message,"");
+    try{dispatchNotification("backup-failed:"+localDateKey(),"backup","Falha no backup automático",error.message,false);}catch{}
+    throw error;
+  }
+}
+function contingencyTonerReport(next){
+  const previous=lerTonerAtual(),previousMap=new Map((previous.printers||[]).map(p=>[p.ip,p])),now=next.updatedAt||new Date().toISOString();
+  const printers=(next.printers||[]).map(function(current){
+    const old=previousMap.get(current.ip);
+    if(current.online===false&&old&&old.online!==null&&(old.supplies||[]).length){
+      return{...old,online:false,status:"offline",stale:true,lastSuccessfulAt:old.lastSuccessfulAt||previous.updatedAt||null,lastAttemptAt:now,error:"Sem resposta na última tentativa"};
+    }
+    return{...current,stale:false,lastSuccessfulAt:current.online?now:(old&&old.lastSuccessfulAt)||null,lastAttemptAt:now};
+  });
+  return{...next,printers,contingency:{active:printers.some(p=>p.stale),lastAttemptAt:now,preserved:printers.filter(p=>p.stale).length}};
+}
+
 app.get("/api/system/health", auth.requireMaster, (req,res) => {
   let disk={free:"Indisponível",total:"Indisponível"};
   try { const info=fs.statfsSync(pastaDados);disk={free:formatBytes(info.bavail*info.bsize),total:formatBytes(info.blocks*info.bsize)}; } catch {}
@@ -573,6 +635,50 @@ app.post("/api/system/restore", auth.requireMaster, (req,res) => {
     auth.addAudit(req.user.id,"restore","database","","Restauração agendada");
     res.json({sucesso:true,restartRequired:true,mensagem:"Backup validado. Reinicie o servidor para concluir a restauração."});
   } catch(error){try{fs.rmSync(arquivoRestauracao);}catch{}res.status(400).json({sucesso:false,mensagem:error.message});}
+});
+
+
+app.get("/api/system/backup-settings",auth.requireMaster,function(req,res){
+  res.json({sucesso:true,settings:{enabled:auth.getSetting("backup_auto_enabled","1")==="1",time:auth.getSetting("backup_auto_time","02:00"),retentionDays:Number(auth.getSetting("backup_retention_days","30"))||30,lastSuccess:auth.getSetting("backup_last_success",""),lastError:auth.getSetting("backup_last_error","")},items:auth.database.prepare("SELECT id,file_name fileName,size_bytes sizeBytes,status,integrity_status integrityStatus,created_at createdAt,verified_at verifiedAt,error FROM system_backups ORDER BY id DESC LIMIT 100").all()});
+});
+app.put("/api/system/backup-settings",auth.requireMaster,function(req,res){
+  const time=/^([01]\d|2[0-3]):[0-5]\d$/.test(String(req.body?.time||""))?String(req.body.time):"02:00",retention=Math.max(1,Math.min(365,Number(req.body?.retentionDays)||30));
+  auth.setSetting("backup_auto_enabled",req.body?.enabled===false?"0":"1",req.user.id);auth.setSetting("backup_auto_time",time,req.user.id);auth.setSetting("backup_retention_days",String(retention),req.user.id);auth.addAudit(req.user.id,"update","backup_settings","",time+" · "+retention+" dias");res.json({sucesso:true});
+});
+app.post("/api/system/backups/run",auth.requireMaster,function(req,res){try{const item=createAutomaticBackup("manual");res.status(201).json({sucesso:true,item:{fileName:item.name,sizeBytes:item.size},mensagem:"Backup criado e verificado com sucesso."});}catch(error){res.status(500).json({sucesso:false,mensagem:error.message});}});
+app.post("/api/system/backups/:id/test",auth.requireMaster,function(req,res){try{const item=auth.database.prepare("SELECT * FROM system_backups WHERE id=?").get(Number(req.params.id));if(!item||!fs.existsSync(item.file_path))throw new Error("Arquivo de backup não encontrado.");const ok=verifyDatabaseFile(item.file_path);auth.database.prepare("UPDATE system_backups SET integrity_status=?,verified_at=?,error=? WHERE id=?").run(ok?"ok":"failed",new Date().toISOString(),ok?"":"Falha na integridade",item.id);res.json({sucesso:ok,mensagem:ok?"Backup íntegro e apto para restauração.":"O backup está corrompido."});}catch(error){res.status(400).json({sucesso:false,mensagem:error.message});}});
+app.get("/api/system/backups/:id/download",auth.requireMaster,function(req,res){const item=auth.database.prepare("SELECT * FROM system_backups WHERE id=?").get(Number(req.params.id));if(!item||!fs.existsSync(item.file_path))return res.status(404).json({sucesso:false,mensagem:"Backup não encontrado."});res.download(item.file_path,item.file_name);});
+
+app.get("/api/system/automations",auth.requireMaster,function(req,res){res.json({sucesso:true,items:auth.database.prepare("SELECT id,automation_type automationType,trigger_type triggerType,status,started_at startedAt,finished_at finishedAt,duration_ms durationMs,message,details FROM automation_runs ORDER BY id DESC LIMIT 300").all()});});
+app.post("/api/system/automations/:type/run",auth.requireMaster,async function(req,res){
+  const type=String(req.params.type||""),run=automationStart(type,"manual");
+  try{
+    let ok=false,message="";
+    if(type==="snmp"){ok=await scheduledTonerScan("manual");message=ok?"Leitura SNMP concluída.":"A leitura SNMP não foi concluída.";}
+    else if(type==="teams"){const total=await sendOperationalSummaries(true,["stock","toner"]);ok=true;message=total+" resumo(s) enviado(s).";}
+    else if(type==="closing"){ok=await sendDailyStockMovementReport();message=ok?"Fechamento enviado.":"Fechamento não enviado; confira as configurações.";}
+    else if(type==="backup"){const item=createAutomaticBackup("manual");ok=true;message="Backup "+item.name+" criado.";}
+    else if(type==="nxt"){scheduledNxtUpdate("manual");ok=true;message="Atualização do NXT iniciada.";}
+    else throw new Error("Automação desconhecida.");
+    automationFinish(run,ok,message,"");res.status(ok?200:500).json({sucesso:ok,mensagem:message});
+  }catch(error){automationFinish(run,false,error.message,"");res.status(500).json({sucesso:false,mensagem:error.message});}
+});
+
+app.get("/api/reports/:type",auth.requireMaster,async function(req,res){
+  try{
+    const type=String(req.params.type||""),from=String(req.query.from||"0000-01-01")+"T00:00:00.000Z",to=String(req.query.to||"9999-12-31")+"T23:59:59.999Z",query=String(req.query.q||"").toLocaleLowerCase("pt-BR");let columns=[],rows=[];
+    if(type==="stock"){const data=await lerPlanilha();columns=["Categoria","Quantidade atual","Modelos"];rows=data.categorias.map(x=>[x.nome,x.atual,x.modelos.map(m=>m.nome+" ("+m.quantidade+")").join(", ")]);}
+    else if(type==="movements"){columns=["Data","Tipo","Ativo","Categoria","Origem","Destino"];rows=auth.database.prepare("SELECT detected_at,type,asset_code,category,previous_location,new_location FROM stock_movement_events WHERE detected_at BETWEEN ? AND ? ORDER BY detected_at DESC").all(from,to).map(x=>[x.detected_at,x.type,x.asset_code,x.category,x.previous_location,x.new_location]);}
+    else if(type==="purchases"){columns=["Solicitação","Status","Criada em","Atualizada em","Responsável"];rows=auth.getRestockRequests().filter(x=>String(x.createdAt||"")>=from&&String(x.createdAt||"")<=to).map(x=>[x.code||x.id,x.status,x.createdAt,x.updatedAt,x.createdBy||""]);}
+    else if(type==="toners"){columns=["IP","Impressora","Modelo","Consumível","Nível","Status","Leitura"];const report=lerTonerAtual();rows=(report.printers||[]).flatMap(p=>(p.supplies||[]).filter(s=>s.isToner!==false).map(s=>[p.ip,p.hostname,p.model,s.description,s.percent,p.status,report.updatedAt]));}
+    else if(type==="prints"){columns=["IP","Modelo","Hostname","Total de páginas","Data"];rows=auth.database.prepare("SELECT printer_ip,printer_model,hostname,total_pages,recorded_at FROM printer_page_history WHERE recorded_at BETWEEN ? AND ? ORDER BY recorded_at DESC").all(from,to).map(Object.values);}
+    else if(type==="maintenance"){columns=["IP","Tipo","Último contador","Próximo vencimento","Última manutenção","Observações"];rows=auth.database.prepare("SELECT printer_ip,maintenance_type,last_pages,next_due_pages,last_at,notes FROM printer_maintenance ORDER BY next_due_pages").all().map(Object.values);}
+    else if(type==="collaborators"){columns=["Tipo","Nome","Matrícula","Departamento/Situação","Data"];const snap=auth.database.prepare("SELECT data_json FROM collaborator_snapshot WHERE id=1").get(),items=snap?JSON.parse(snap.data_json||"[]"):[];rows=items.map(x=>[x.kind,x.nome,x.mat,x.dept||x.situacao||x.origem+" → "+x.destino,x.data||x.feriasFim||""]);}
+    else if(type==="audit"){columns=["Data","Usuário","Ação","Entidade","Identificador","Detalhes"];rows=auth.database.prepare("SELECT a.created_at,COALESCE(u.username,'Sistema'),a.action,a.entity_type,a.entity_id,a.details FROM audit_log a LEFT JOIN users u ON u.id=a.user_id WHERE a.created_at BETWEEN ? AND ? ORDER BY a.id DESC").all(from,to).map(Object.values);}
+    else return res.status(404).json({sucesso:false,mensagem:"Relatório não encontrado."});
+    if(query)rows=rows.filter(row=>row.join(" ").toLocaleLowerCase("pt-BR").includes(query));
+    res.json({sucesso:true,type,generatedAt:new Date().toISOString(),columns,rows,count:rows.length});
+  }catch(error){res.status(500).json({sucesso:false,mensagem:error.message});}
 });
 
 async function sendTeamsNotification(webhook,title,message,details,eventType) {
