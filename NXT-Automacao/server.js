@@ -689,7 +689,7 @@ app.get("/api/reports/:type",auth.requireMaster,async function(req,res){
   try{
     const type=String(req.params.type||""),from=String(req.query.from||"0000-01-01")+"T00:00:00.000Z",to=String(req.query.to||"9999-12-31")+"T23:59:59.999Z",query=String(req.query.q||"").toLocaleLowerCase("pt-BR");let columns=[],rows=[];
     if(type==="stock"){const data=await lerPlanilha();columns=["Categoria","Quantidade atual","Modelos"];rows=data.categorias.map(x=>[x.nome,x.atual,x.modelos.map(m=>m.nome+" ("+m.quantidade+")").join(", ")]);}
-    else if(type==="movements"){columns=["Data","Tipo","Ativo","Categoria","Origem","Destino"];rows=auth.database.prepare("SELECT detected_at,movement_type,asset_code,category,previous_location,new_location FROM stock_movement_events WHERE detected_at BETWEEN ? AND ? ORDER BY detected_at DESC").all(from,to).map(x=>[x.detected_at,x.movement_type,x.asset_code,x.category,x.previous_location,x.new_location]);}
+    else if(type==="movements"){reconcileStockMovementHistory();columns=["Data","Tipo","Ativo","Categoria","Origem","Destino"];rows=auth.database.prepare("SELECT detected_at,movement_type,asset_code,category,previous_location,new_location FROM stock_movement_events WHERE detected_at BETWEEN ? AND ? ORDER BY detected_at DESC").all(from,to).map(x=>[x.detected_at,x.movement_type,x.asset_code,x.category,x.previous_location,x.new_location]);}
     else if(type==="purchases"){columns=["Solicitação","Status","Criada em","Atualizada em","Responsável"];rows=auth.getRestockRequests().filter(x=>String(x.createdAt||"")>=from&&String(x.createdAt||"")<=to).map(x=>[x.code||x.id,x.status,x.createdAt,x.updatedAt,x.createdBy||""]);}
     else if(type==="toners"){columns=["IP","Impressora","Modelo","Consumível","Nível","Status","Leitura"];const report=lerTonerAtual();rows=(report.printers||[]).flatMap(p=>(p.supplies||[]).filter(s=>s.isToner!==false).map(s=>[p.ip,p.hostname,p.model,s.description,s.percent,p.status,report.updatedAt]));}
     else if(type==="prints"){columns=["IP","Modelo","Hostname","Total de páginas","Data"];rows=auth.database.prepare("SELECT printer_ip,printer_model,hostname,total_pages,recorded_at FROM printer_page_history WHERE recorded_at BETWEEN ? AND ? ORDER BY recorded_at DESC").all(from,to).map(Object.values);}
@@ -1964,13 +1964,22 @@ app.post(
 );
 
 function localDateKey(value){const d=value||new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
-function stockAssetKey(item,index){return item.code||[item.category,item.model,index].join("|");}
+function stockAssetKey(item,index){return String(item.code||[item.category,item.model,index].join("|")).trim().toUpperCase();}
+function stockAssetMap(items){
+  const counters=new Map(),result=new Map();
+  (items||[]).forEach(function(item){
+    const code=String(item.code||"").trim().toUpperCase(),signature=[String(item.category||"").trim().toUpperCase(),String(item.model||"").trim().toUpperCase(),String(item.owner||"").trim().toUpperCase()].join("|");
+    const occurrence=(counters.get(signature)||0)+1;counters.set(signature,occurrence);
+    result.set(code||signature+"#"+occurrence,item);
+  });
+  return result;
+}
 function stockLocation(item){return item.allocatedTo||item.owner||item.category||"Estoque";}
 function recordStockMovementEvents(previousRow,assets,capturedAt,source){
   if(!previousRow)return 0;
   let previous=[];try{previous=JSON.parse(previousRow.assetsJson||"[]");}catch{}
-  const beforeMap=new Map(previous.map(function(item,index){return[stockAssetKey(item,index),item];}));
-  const afterMap=new Map(assets.map(function(item,index){return[stockAssetKey(item,index),item];}));
+  const beforeMap=stockAssetMap(previous);
+  const afterMap=stockAssetMap(assets);
   const insert=auth.database.prepare("INSERT OR IGNORE INTO stock_movement_events (event_key,movement_type,asset_code,category,previous_location,new_location,detected_at,source) VALUES (?,?,?,?,?,?,?,?)");
   let total=0;
   function save(type,item,key,from,to){
@@ -1986,7 +1995,18 @@ function recordStockMovementEvents(previousRow,assets,capturedAt,source){
   beforeMap.forEach(function(item,key){if(!afterMap.has(key))save("exit",item,key,stockLocation(item),"");});
   return total;
 }
+function reconcileStockMovementHistory(){
+  const snapshots=auth.database.prepare("SELECT assets_json AS assetsJson,captured_at AS capturedAt,source FROM stock_snapshots ORDER BY captured_at").all();
+  let recovered=0;
+  for(let index=1;index<snapshots.length;index++){
+    let assets=[];try{assets=JSON.parse(snapshots[index].assetsJson||"[]");}catch{}
+    recovered+=recordStockMovementEvents(snapshots[index-1],assets,snapshots[index].capturedAt,snapshots[index].source||"reconciled");
+  }
+  if(recovered)console.log("Movimentações recuperadas pela reconciliação:",recovered);
+  return recovered;
+}
 function pendingStockMovements(){
+  reconcileStockMovementHistory();
   return auth.database.prepare("SELECT id,movement_type AS type,asset_code AS code,category,previous_location AS previousLocation,new_location AS newLocation,detected_at AS detectedAt FROM stock_movement_events WHERE reported_at='' ORDER BY detected_at,id").all();
 }
 function markStockMovementsReported(items,slot){
