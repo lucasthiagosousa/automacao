@@ -664,17 +664,17 @@ app.get("/api/system/backups/:id/download",auth.requireMaster,function(req,res){
 
 app.get("/api/system/automations",auth.requireMaster,function(req,res){res.json({sucesso:true,items:auth.database.prepare("SELECT id,automation_type automationType,trigger_type triggerType,status,started_at startedAt,finished_at finishedAt,duration_ms durationMs,message,details FROM automation_runs ORDER BY id DESC LIMIT 300").all()});});
 app.post("/api/system/automations/:type/run",auth.requireMaster,async function(req,res){
-  const type=String(req.params.type||""),run=automationStart(type,"manual");
+  const type=String(req.params.type||"");
   try{
-    let ok=false,message="";
-    if(type==="snmp"){ok=await scheduledTonerScan("manual");message=ok?"Leitura SNMP concluída.":"A leitura SNMP não foi concluída.";}
-    else if(type==="teams"){const total=await sendOperationalSummaries(true,["stock","toner"]);ok=true;message=total+" resumo(s) enviado(s).";}
+    if(type==="snmp"){const ok=await scheduledTonerScan("manual");return res.status(ok?200:409).json({sucesso:ok,mensagem:ok?"Leitura SNMP concluída.":"Já existe uma leitura em andamento."});}
+    if(type==="backup"){const item=createAutomaticBackup("manual");return res.json({sucesso:true,mensagem:"Backup "+item.name+" criado."});}
+    if(type==="nxt"){const ok=scheduledNxtUpdate("manual");return res.status(ok?202:409).json({sucesso:ok,mensagem:ok?"Atualização do NXT iniciada.":"A atualização não pôde ser iniciada."});}
+    const run=automationStart(type,"manual");let ok=false,message="";
+    if(type==="teams"){const total=await sendOperationalSummaries(true,["stock","toner"]);ok=true;message=total+" resumo(s) enviado(s).";}
     else if(type==="closing"){ok=await sendDailyStockMovementReport();message=ok?"Fechamento enviado.":"Fechamento não enviado; confira as configurações.";}
-    else if(type==="backup"){const item=createAutomaticBackup("manual");ok=true;message="Backup "+item.name+" criado.";}
-    else if(type==="nxt"){scheduledNxtUpdate("manual");ok=true;message="Atualização do NXT iniciada.";}
     else throw new Error("Automação desconhecida.");
-    automationFinish(run,ok,message,"");res.status(ok?200:500).json({sucesso:ok,mensagem:message});
-  }catch(error){automationFinish(run,false,error.message,"");res.status(500).json({sucesso:false,mensagem:error.message});}
+    automationFinish(run,ok,message,"");return res.status(ok?200:500).json({sucesso:ok,mensagem:message});
+  }catch(error){return res.status(500).json({sucesso:false,mensagem:error.message});}
 });
 
 app.get("/api/reports/:type",auth.requireMaster,async function(req,res){
@@ -1953,18 +1953,20 @@ async function captureStockSnapshot(source) {
   auth.database.prepare("DELETE FROM stock_movement_events WHERE reported_at!='' AND reported_at < datetime('now','-180 days')").run();
   return categories;
 }
-function scheduledNxtUpdate() {
+function scheduledNxtUpdate(trigger) {
   if(estadoAtualizacao.executando||!fs.existsSync(arquivoAutomacao)||!process.env.NXT_EMAIL||!process.env.NXT_PASSWORD)return false;
+  const automationRun=automationStart("nxt",trigger||"scheduled");
   estadoAtualizacao={executando:true,sucesso:null,mensagem:"Atualização automática do NXT em andamento...",inicio:new Date().toISOString(),fim:null,log:[]};
   auth.setSetting("nxt_auto_update_last_attempt",new Date().toISOString(),null);
   const child=spawn(process.execPath,[arquivoAutomacao],{cwd:pastaProjeto,env:{...process.env,ELECTRON_RUN_AS_NODE:process.versions.electron?"1":process.env.ELECTRON_RUN_AS_NODE,NXT_AUTOMATION_HEADLESS:"1"},windowsHide:true,shell:false});
   const timeout=setTimeout(function(){child.kill();},15*60*1000);
   child.stdout.on("data",function(data){adicionarLog(data.toString());});
   child.stderr.on("data",function(data){adicionarLog(data.toString());});
-  child.on("error",function(error){clearTimeout(timeout);estadoAtualizacao={...estadoAtualizacao,executando:false,sucesso:false,mensagem:"Falha na atualização automática: "+error.message,fim:new Date().toISOString()};});
+  child.on("error",function(error){clearTimeout(timeout);estadoAtualizacao={...estadoAtualizacao,executando:false,sucesso:false,mensagem:"Falha na atualização automática: "+error.message,fim:new Date().toISOString()};automationFinish(automationRun,false,error.message,"");});
   child.on("close",function(code){
     clearTimeout(timeout);
     estadoAtualizacao={...estadoAtualizacao,executando:false,sucesso:code===0,mensagem:code===0?"Atualização automática concluída.":"A atualização automática não foi concluída.",fim:new Date().toISOString()};
+    automationFinish(automationRun,code===0,estadoAtualizacao.mensagem,estadoAtualizacao.log.slice(-20).join("\n"));
     if(code===0){auth.setSetting("nxt_auto_update_last_success",new Date().toISOString(),null);captureStockSnapshot("automatic").catch(function(error){console.error("Snapshot automático:",error.message);});}
   });
   return true;
@@ -1995,9 +1997,10 @@ setInterval(function(){
 
 },60000).unref();
 
-async function scheduledTonerScan() {
+async function scheduledTonerScan(trigger) {
   if(tonerExecutando)return false;
   tonerExecutando=true;
+  const automationRun=automationStart("snmp",trigger||"scheduled");
   try{
     const printers=auth.getPrinters().filter(function(item){return item.active;}).map(function(item){return[item.ip,item.model];});
     if(!printers.length)return false;
@@ -2010,9 +2013,11 @@ async function scheduledTonerScan() {
     detectTonerChanges(report);
     auth.setSetting("toner_last_automatic_scan",new Date().toISOString(),null);
     console.log("Leitura automática de toners concluída.");
+    automationFinish(automationRun,true,"Leitura SNMP concluída.",report.contingency&&report.contingency.active?"Dados de "+report.contingency.preserved+" impressora(s) preservados.":"");
     return true;
   }catch(error){
     console.error("Leitura automática de toners:",error.message);
+    automationFinish(automationRun,false,error.message,"Nova tentativa automática em 2 minutos.");
     if(!tonerRetryScheduled){tonerRetryScheduled=true;setTimeout(function(){tonerRetryScheduled=false;scheduledTonerScan();},2*60*1000).unref();}
     return false;
   }finally{tonerExecutando=false;}
@@ -2034,13 +2039,15 @@ async function scheduledActivityReport() {
   if(auth.getSetting("activity_report_last_slot","")===slot)return false;
   if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
   tonerDigestExecutando=true;
+  const automationRun=automationStart(hour===7?"activity_start":"closing","scheduled");
   try{
-    await scheduledTonerScan();
+    await scheduledTonerScan("scheduled");
     if(hour===7)await sendStartOfActivitiesReport();else await sendDailyStockMovementReport();
     auth.setSetting("activity_report_last_slot",slot,null);
     console.log(hour===7?"Relatório de início enviado:":"Fechamento diário enviado:",slot);
+    automationFinish(automationRun,true,hour===7?"Início das atividades enviado.":"Fechamento diário enviado.",slot);
     return true;
-  }finally{tonerDigestExecutando=false;}
+  }catch(error){automationFinish(automationRun,false,error.message,slot);throw error;}finally{tonerDigestExecutando=false;}
 }
 setTimeout(function(){scheduledTonerScan();scheduledActivityReport().catch(function(error){console.error("Relatório operacional programado:",error.message);});},30000).unref();
 setInterval(function(){scheduledTonerScan();},15*60*1000).unref();
