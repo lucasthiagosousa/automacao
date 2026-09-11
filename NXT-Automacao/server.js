@@ -1655,7 +1655,7 @@ function recordPrinterPages(report){
 }
 function registerAutomaticTonerExchange(item,currentLevel,stamp){
   const model=tonerCode(item.supply_name)||"Modelo não identificado",color=tonerColor(item.supply_name);
-  const existing=auth.database.prepare("SELECT id FROM toner_exchanges WHERE printer_ip=? AND created_at>=? ORDER BY created_at DESC LIMIT 1").get(item.printer_ip,item.detected_at);
+  const existing=auth.database.prepare("SELECT id FROM toner_exchanges WHERE printer_ip=? AND toner_model=? AND created_at>=? ORDER BY created_at DESC LIMIT 1").get(item.printer_ip,model,item.detected_at);
   if(existing){
     auth.database.prepare("UPDATE toner_change_candidates SET status='confirmed_manual',current_level=?,confirmation_count=2,last_seen_at=?,resolved_at=? WHERE id=?").run(currentLevel,stamp,stamp,item.id);
     return{registered:false,reason:"manual"};
