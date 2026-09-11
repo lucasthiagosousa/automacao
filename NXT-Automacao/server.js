@@ -99,6 +99,15 @@ app.get(["/configuracoes", "/configuracoes.html"], auth.requireAuth, (req, res) 
   return res.sendFile(path.join(pastaPublica, "configuracoes.html"));
 });
 
+app.get(["/relatorios","/relatorios.html"],auth.requireMaster,function(req,res){
+  res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
+  return res.sendFile(path.join(pastaPublica,"relatorios.html"));
+});
+app.get(["/automacoes","/automacoes.html"],auth.requireMaster,function(req,res){
+  res.setHeader("Cache-Control","no-store, no-cache, must-revalidate, proxy-revalidate");
+  return res.sendFile(path.join(pastaPublica,"automacoes.html"));
+});
+
 app.use(auth.requireAuth);
 app.use((req, res, next) => {
   if (/\.(?:html|js|css)$/i.test(req.path)) {
@@ -124,6 +133,7 @@ let estadoAtualizacao = {
 
 let tonerExecutando = false;
 let tonerDigestExecutando = false;
+let tonerRetryScheduled = false;
 
 /*
  * Operação de toner: compatibilidade, reservas e trocas.
@@ -581,12 +591,15 @@ function createAutomaticBackup(trigger){
     auth.setSetting("backup_last_success",new Date().toISOString(),null);automationFinish(run,true,"Backup criado e verificado.",name);return{name,path:destination,size:stat.size};
   }catch(error){
     auth.setSetting("backup_last_error",error.message,null);automationFinish(run,false,error.message,"");
-    try{dispatchNotification("backup-failed:"+localDateKey(),"backup","Falha no backup automático",error.message,false);}catch{}
+    dispatchNotification("backup-failed:"+localDateKey(),"backup","Falha no backup automático",error.message,false).catch(function(notificationError){console.error("Alerta de falha no backup:",notificationError.message);});
     throw error;
   }
 }
 function contingencyTonerReport(next){
-  const previous=lerTonerAtual(),previousMap=new Map((previous.printers||[]).map(p=>[p.ip,p])),now=next.updatedAt||new Date().toISOString();
+  const previous=lerTonerAtual(),previousPrinters=previous.printers||[],previousMap=new Map(previousPrinters.map(p=>[p.ip,p])),now=next.updatedAt||new Date().toISOString();
+  if(!(next.printers||[]).length&&previousPrinters.length){
+    return{...previous,lastAttemptAt:now,contingency:{active:true,lastAttemptAt:now,preserved:previousPrinters.length,reason:"A leitura não retornou impressoras; os últimos dados válidos foram mantidos."},printers:previousPrinters.map(p=>({...p,stale:true,lastSuccessfulAt:p.lastSuccessfulAt||previous.updatedAt||null,lastAttemptAt:now}))};
+  }
   const printers=(next.printers||[]).map(function(current){
     const old=previousMap.get(current.ip);
     if(current.online===false&&old&&old.online!==null&&(old.supplies||[]).length){
@@ -668,7 +681,7 @@ app.get("/api/reports/:type",auth.requireMaster,async function(req,res){
   try{
     const type=String(req.params.type||""),from=String(req.query.from||"0000-01-01")+"T00:00:00.000Z",to=String(req.query.to||"9999-12-31")+"T23:59:59.999Z",query=String(req.query.q||"").toLocaleLowerCase("pt-BR");let columns=[],rows=[];
     if(type==="stock"){const data=await lerPlanilha();columns=["Categoria","Quantidade atual","Modelos"];rows=data.categorias.map(x=>[x.nome,x.atual,x.modelos.map(m=>m.nome+" ("+m.quantidade+")").join(", ")]);}
-    else if(type==="movements"){columns=["Data","Tipo","Ativo","Categoria","Origem","Destino"];rows=auth.database.prepare("SELECT detected_at,type,asset_code,category,previous_location,new_location FROM stock_movement_events WHERE detected_at BETWEEN ? AND ? ORDER BY detected_at DESC").all(from,to).map(x=>[x.detected_at,x.type,x.asset_code,x.category,x.previous_location,x.new_location]);}
+    else if(type==="movements"){columns=["Data","Tipo","Ativo","Categoria","Origem","Destino"];rows=auth.database.prepare("SELECT detected_at,movement_type,asset_code,category,previous_location,new_location FROM stock_movement_events WHERE detected_at BETWEEN ? AND ? ORDER BY detected_at DESC").all(from,to).map(x=>[x.detected_at,x.movement_type,x.asset_code,x.category,x.previous_location,x.new_location]);}
     else if(type==="purchases"){columns=["Solicitação","Status","Criada em","Atualizada em","Responsável"];rows=auth.getRestockRequests().filter(x=>String(x.createdAt||"")>=from&&String(x.createdAt||"")<=to).map(x=>[x.code||x.id,x.status,x.createdAt,x.updatedAt,x.createdBy||""]);}
     else if(type==="toners"){columns=["IP","Impressora","Modelo","Consumível","Nível","Status","Leitura"];const report=lerTonerAtual();rows=(report.printers||[]).flatMap(p=>(p.supplies||[]).filter(s=>s.isToner!==false).map(s=>[p.ip,p.hostname,p.model,s.description,s.percent,p.status,report.updatedAt]));}
     else if(type==="prints"){columns=["IP","Modelo","Hostname","Total de páginas","Data"];rows=auth.database.prepare("SELECT printer_ip,printer_model,hostname,total_pages,recorded_at FROM printer_page_history WHERE recorded_at BETWEEN ? AND ? ORDER BY recorded_at DESC").all(from,to).map(Object.values);}
@@ -1682,10 +1695,11 @@ app.post(
       const impressoras = auth.getPrinters()
         .filter((item) => item.active)
         .map((item) => [item.ip, item.model]);
-      const relatorio = await tonerMonitor.scan({
+      const relatorioLido = await tonerMonitor.scan({
         threshold: Math.max(1, Math.min(99, Number(auth.getSetting("toner_threshold", "20")) || 20)),
         printers: impressoras,
       });
+      const relatorio = contingencyTonerReport(relatorioLido);
 
       fs.mkdirSync(path.dirname(arquivoToner), { recursive: true });
       fs.writeFileSync(
@@ -1987,7 +2001,8 @@ async function scheduledTonerScan() {
   try{
     const printers=auth.getPrinters().filter(function(item){return item.active;}).map(function(item){return[item.ip,item.model];});
     if(!printers.length)return false;
-    const report=await tonerMonitor.scan({threshold:Math.max(1,Math.min(99,Number(auth.getSetting("toner_threshold","20"))||20)),printers:printers});
+    const scannedReport=await tonerMonitor.scan({threshold:Math.max(1,Math.min(99,Number(auth.getSetting("toner_threshold","20"))||20)),printers:printers});
+    const report=contingencyTonerReport(scannedReport);
     fs.mkdirSync(path.dirname(arquivoToner),{recursive:true});
     fs.writeFileSync(arquivoToner,JSON.stringify(report,null,2),"utf8");
     auth.recordTonerSnapshot(report);
@@ -1998,6 +2013,7 @@ async function scheduledTonerScan() {
     return true;
   }catch(error){
     console.error("Leitura automática de toners:",error.message);
+    if(!tonerRetryScheduled){tonerRetryScheduled=true;setTimeout(function(){tonerRetryScheduled=false;scheduledTonerScan();},2*60*1000).unref();}
     return false;
   }finally{tonerExecutando=false;}
 }
@@ -2029,6 +2045,15 @@ async function scheduledActivityReport() {
 setTimeout(function(){scheduledTonerScan();scheduledActivityReport().catch(function(error){console.error("Relatório operacional programado:",error.message);});},30000).unref();
 setInterval(function(){scheduledTonerScan();},15*60*1000).unref();
 setInterval(function(){scheduledActivityReport().catch(function(error){console.error("Relatório operacional programado:",error.message);});},60*1000).unref();
+
+setInterval(function(){
+  const now=new Date(),enabled=auth.getSetting("backup_auto_enabled","1")==="1",configured=auth.getSetting("backup_auto_time","02:00"),today=localDateKey(now);
+  const current=String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
+  if(enabled&&current>=configured&&auth.getSetting("backup_last_date","")!==today){
+    try{createAutomaticBackup("scheduled");auth.setSetting("backup_last_date",today,null);}
+    catch(error){console.error("Backup automático:",error.message);}
+  }
+},60*1000).unref();
 
 /*
  * Se a pessoa digitar uma rota inexistente,
