@@ -8,7 +8,7 @@
   <style>
     :root{--navy:#102a43;--blue:#1677ff;--ink:#172b4d;--muted:#6b7c93;--line:#dfe7ef;--canvas:#f4f7fb;--red:#b42318;--green:#027a48}
     *{box-sizing:border-box}html,body{min-height:100%;margin:0}
-    body{display:grid;place-items:center;padding:24px;background:radial-gradient(780px 450px at 85% 0,#d9f3f7,transparent 62%),var(--canvas);color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif}
+    body{display:grid;place-items:center;padding:24px;background:radial-gradient(780px 450px at 85% 0,#d9f3f7,transparent 62%),var(--canvas);color:var(--ink);font-family:"Segoe UI",Tahoma,Arial,sans-serif}
     .card{width:min(610px,100%);padding:38px;border:1px solid var(--line);border-radius:22px;background:white;box-shadow:0 24px 70px rgba(16,42,67,.14)}
     .mark{width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(135deg,var(--navy),#087f8c);color:white;font-weight:900}
     .eyebrow{margin-top:24px;color:var(--blue);font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
@@ -21,7 +21,14 @@
     .message{min-height:20px;margin-top:14px;color:var(--red);font-size:11px;font-weight:700;text-align:center}
     @media(max-width:560px){body{padding:12px}.card{padding:28px 20px}.grid{grid-template-columns:1fr}.full{grid-column:auto}}
   </style>
-</head>
+<style id="typography-normalization">
+html,body{font-family:"Segoe UI",Tahoma,Arial,sans-serif!important;font-weight:400!important;text-shadow:none!important;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+body *{text-shadow:none!important}
+body :where(p,span,label,input,select,option,textarea,td,li,small,time,caption,legend){font-weight:400!important}
+body :where(h1,h2,h3,h4,h5,h6){font-weight:600!important;letter-spacing:-.01em}
+body :where(strong,b,th,.eyebrow,.kicker,.badge,.status){font-weight:600!important}
+body :where(button,.btn,[role="button"]){font-weight:500!important}
+</style></head>
 <body>
   <main class="card">
     <div class="mark">TI</div>
