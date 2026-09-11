@@ -25,10 +25,10 @@
   <div class="modal" id="labelModal"><div class="dialog"><h2>Etiqueta com QR Code</h2><p>Ao ler pelo celular, o técnico abre diretamente a impressora selecionada no fluxo de troca.</p><div class="label-card"><strong id="labelName"></strong><span id="labelMeta"></span><div class="label-qr" id="labelQr"></div><code id="labelUrl"></code></div><div class="actions"><button class="btn" id="copyLink">Copiar link</button><button class="btn btn-primary" onclick="window.print()">Imprimir etiqueta</button><button class="btn" id="closeLabel">Fechar</button></div></div></div>
   <div class="toast" id="toast"></div>
   <script src="/vendor/qrcode.min.js"></script>
-  <script src="/auth-ui.js?v=20260909-2"></script>
+  <script src="/auth-ui.js?v=20260911-1"></script>
   <script>
   (function(){"use strict";
-    var state={user:null,worklist:[],reservations:[],compatibility:[],forecast:[],anomalies:[],printers:[]},$=function(id){return document.getElementById(id)},toastTimer;
+    var state={user:null,worklist:[],reservations:[],compatibility:[],forecast:[],anomalies:[],candidates:[],printers:[]},$=function(id){return document.getElementById(id)},toastTimer;
     function esc(v){return String(v==null?"":v).replace(/[&<>"']/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]})}
     function notify(message){$("toast").textContent=message;$("toast").classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(function(){$("toast").classList.remove("show")},3200)}
     async function api(url,options){var response=await fetch(url,Object.assign({headers:{"Content-Type":"application/json"}},options||{})),data=await response.json();if(!response.ok)throw new Error(data.mensagem||"Não foi possível concluir.");return data}
@@ -42,11 +42,60 @@
     function showTab(name){document.querySelector('.tab[data-tab="'+name+'"]').click()}
     async function loadOperations(){var data=await api("/api/toner/operations?t="+Date.now(),{cache:"no-store"});state.worklist=data.worklist||[];state.reservations=data.reservations||[];state.compatibility=data.compatibility||[];$("statWork").textContent=state.worklist.reduce(function(n,p){return n+p.supplies.length},0);$("statReserved").textContent=state.reservations.length;renderWork();renderCompatibility();var requested=new URLSearchParams(location.search).get("ip");if(requested){$("search").value=requested;renderWork()}}
     async function loadHistory(){try{var data=await api("/api/toner/exchanges?limit=150",{cache:"no-store"}),items=data.itens||[];$("historyList").innerHTML=items.length?items.map(function(x){return '<div class="list-row"><div><strong>'+esc(x.printerName||x.printerIp)+' · '+esc(x.tonerModel)+' ('+esc(x.color)+')</strong><small>'+esc(x.printerIp)+' · '+date(x.createdAt)+' · por '+esc(x.performedBy)+(x.previousLevel==null?"":" · nível anterior "+x.previousLevel+"%")+'</small></div><span class="badge">Concluída</span></div>'}).join(""):'<div class="empty">Nenhuma troca foi confirmada ainda.</div>'}catch(error){notify(error.message)}}
-    async function loadInsights(){try{var data=await api("/api/toner/insights?t="+Date.now(),{cache:"no-store"});state.forecast=data.forecast||[];state.anomalies=data.anomalies||[];$("statBuy").textContent=state.forecast.reduce(function(n,x){return n+x.buy},0);$("forecast").innerHTML=state.forecast.length?state.forecast.map(function(x){return '<div class="forecast-card"><h3>'+esc(x.tonerModel)+' · '+esc(x.color)+'</h3><div class="buy">'+x.buy+' <small style="font-size:9px;color:var(--muted)">comprar</small></div><dl><dt>Demanda prevista</dt><dd>'+x.required+'</dd><dt>Estoque físico</dt><dd>'+x.stock+'</dd><dt>Reservados</dt><dd>'+x.reserved+'</dd><dt>Impressoras</dt><dd>'+x.printers.length+'</dd></dl></div>'}).join(""):'<div class="empty">Não há necessidade de compra prevista para os próximos 30 dias.</div>';$("anomalies").innerHTML=state.anomalies.length?state.anomalies.map(function(x){return '<div class="list-row anomaly '+(x.severity==="neutral"?"neutral":"")+'"><div><strong>'+esc(x.title)+'</strong><small>'+esc(x.ip)+(x.supply?" · "+esc(x.supply):"")+'<br>'+esc(x.detail)+'</small></div><span class="badge warn">Conferir</span></div>'}).join(""):'<div class="empty">Nenhum comportamento anormal foi identificado.</div>'}catch(error){notify(error.message)}}
+    async function loadInsights(){
+      try{
+        var results=await Promise.all([
+          api("/api/toner/insights?t="+Date.now(),{cache:"no-store"}),
+          api("/api/toner/analytics?days=30&t="+Date.now(),{cache:"no-store"})
+        ]);
+        var data=results[0],analytics=results[1];
+        state.forecast=data.forecast||[];state.anomalies=data.anomalies||[];state.candidates=analytics.candidates||[];
+        $("statBuy").textContent=state.forecast.reduce(function(n,x){return n+x.buy},0);
+        $("forecast").innerHTML=state.forecast.length?state.forecast.map(function(x){return '<div class="forecast-card"><h3>'+esc(x.tonerModel)+' · '+esc(x.color)+'</h3><div class="buy">'+x.buy+' <small style="font-size:9px;color:var(--muted)">comprar</small></div><dl><dt>Demanda prevista</dt><dd>'+x.required+'</dd><dt>Estoque físico</dt><dd>'+x.stock+'</dd><dt>Reservados</dt><dd>'+x.reserved+'</dd><dt>Impressoras</dt><dd>'+x.printers.length+'</dd></dl></div>'}).join(""):'<div class="empty">Não há necessidade de compra prevista para os próximos 30 dias.</div>';
+        $("anomalies").innerHTML=state.anomalies.length?state.anomalies.map(function(x){
+          var candidate=state.candidates.find(function(item){return item.ip===x.ip&&(!x.supply||item.supplyName===x.supply)});
+          var actions=candidate
+            ?'<div class="row" style="justify-content:flex-end;margin-top:9px"><button class="btn" data-candidate="'+candidate.id+'" data-candidate-action="dismiss">Não foi troca</button><button class="btn btn-primary" data-candidate="'+candidate.id+'" data-candidate-action="confirm">Confirmar troca</button></div>'
+            :'<div class="row" style="justify-content:flex-end;margin-top:9px"><button class="btn" data-check-printer="'+esc(x.ip)+'">Ver impressora</button></div>';
+          return '<div class="list-row anomaly '+(x.severity==="neutral"?"neutral":"")+'" style="grid-template-columns:1fr"><div><strong>'+esc(x.title)+'</strong><small>'+esc(x.ip)+(x.supply?" · "+esc(x.supply):"")+'<br>'+esc(x.detail)+'</small>'+actions+'</div></div>';
+        }).join(""):'<div class="empty">Nenhum comportamento anormal foi identificado.</div>';
+        bindInsightActions();
+      }catch(error){notify(error.message)}
+    }
+    function bindInsightActions(){
+      document.querySelectorAll("[data-candidate]").forEach(function(button){
+        button.onclick=async function(){
+          var original=button.textContent;button.disabled=true;button.textContent="Processando...";
+          try{
+            await api("/api/toner/change-candidates/"+button.dataset.candidate,{method:"PATCH",body:JSON.stringify({action:button.dataset.candidateAction})});
+            notify(button.dataset.candidateAction==="confirm"?"Troca confirmada. Estoque, reposição e histórico foram atualizados.":"Alerta descartado.");
+            await Promise.all([loadOperations(),loadInsights()]);
+          }catch(error){notify(error.message)}
+          finally{button.disabled=false;button.textContent=original}
+        };
+      });
+      document.querySelectorAll("[data-check-printer]").forEach(function(button){
+        button.onclick=async function(){
+          var ip=button.dataset.checkPrinter;
+          if(state.user&&state.user.role==="master"){
+            showTab("diagnostic");$("diagPrinter").value=ip;await loadDiagnostic();
+          }else{
+            showTab("route");$("search").value=ip;await reloadOperations();
+            notify("Filtro aplicado para a impressora "+ip+".");
+          }
+        };
+      });
+    }
     function renderCompatibility(){$("compatList").innerHTML=state.compatibility.length?state.compatibility.map(function(x){return '<div class="list-row"><div><strong>'+esc(x.printerModel)+'</strong><small>'+esc(x.tonerModel)+' · '+esc(x.color)+'</small></div><button class="btn btn-danger" data-remove-compat="'+x.id+'">Remover</button></div>'}).join(""):'<div class="empty">Nenhuma regra cadastrada. Sem regras, o sistema usa o código identificado pelo SNMP.</div>';document.querySelectorAll("[data-remove-compat]").forEach(function(b){b.onclick=async function(){if(!confirm("Remover esta compatibilidade?"))return;try{await api("/api/toner/compatibility/"+b.dataset.removeCompat,{method:"DELETE"});await loadOperations()}catch(error){notify(error.message)}}})}
     async function loadPrinters(){var data=await api("/api/impressoras?t="+Date.now(),{cache:"no-store"});state.printers=data.impressoras||[];$("diagPrinter").innerHTML='<option value="">Selecione a impressora</option>'+state.printers.filter(function(p){return p.active}).map(function(p){return '<option value="'+esc(p.ip)+'">'+esc(p.location||p.model)+' · '+esc(p.ip)+'</option>'}).join("")}
     async function loadDiagnostic(){var ip=$("diagPrinter").value;if(!ip)return;try{var data=await api("/api/toner/diagnostics/"+encodeURIComponent(ip)+"?t="+Date.now(),{cache:"no-store"}),d=data.diagnostic;$("diagResult").className="";$("diagResult").innerHTML='<div class="diag"><div><span>Status</span><strong>'+esc(d.responded?"Online":"Sem resposta")+'</strong></div><div><span>Protocolo</span><strong>SNMP '+esc(d.snmpVersion)+'</strong></div><div><span>Porta</span><strong>'+d.port+' UDP</strong></div><div><span>Última leitura</span><strong>'+date(d.lastReading)+'</strong></div></div><div class="list">'+(d.supplies.length?d.supplies.map(function(s){return '<div class="list-row"><div><strong>'+esc(s.description)+'</strong><small>Índice '+esc(s.index)+' · atual '+esc(s.level)+' · máximo '+esc(s.maximum)+'</small></div><span class="badge">'+(s.percent==null?"N/D":s.percent+"%")+'</span></div>'}).join(""):'<div class="empty">A impressora respondeu, mas não retornou suprimentos nesta leitura.</div>')+'</div>'}catch(error){notify(error.message)}}
-    $("search").oninput=renderWork;$("reload").onclick=loadOperations;$("runDiag").onclick=loadDiagnostic;$("closeLabel").onclick=function(){$("labelModal").classList.remove("show")};$("copyLink").onclick=async function(){await navigator.clipboard.writeText($("labelUrl").textContent);notify("Link copiado.")};$("compatForm").onsubmit=async function(event){event.preventDefault();try{var data=await api("/api/toner/compatibility",{method:"POST",body:JSON.stringify({printerModel:$("printerModel").value,tonerModel:$("tonerModel").value,color:$("tonerColor").value})});state.compatibility=data.itens||[];event.target.reset();renderCompatibility();notify("Compatibilidade adicionada.")}catch(error){notify(error.message)}};
+    async function reloadOperations(){
+      var button=$("reload"),original=button.textContent;button.disabled=true;button.textContent="Atualizando...";
+      try{await Promise.all([loadOperations(),loadInsights()]);notify("Lista atualizada com a leitura mais recente.");}
+      catch(error){notify(error.message)}
+      finally{button.disabled=false;button.textContent=original}
+    }
+    $("search").oninput=renderWork;$("reload").onclick=reloadOperations;$("runDiag").onclick=loadDiagnostic;$("closeLabel").onclick=function(){$("labelModal").classList.remove("show")};$("copyLink").onclick=async function(){await navigator.clipboard.writeText($("labelUrl").textContent);notify("Link copiado.")};$("compatForm").onsubmit=async function(event){event.preventDefault();try{var data=await api("/api/toner/compatibility",{method:"POST",body:JSON.stringify({printerModel:$("printerModel").value,tonerModel:$("tonerModel").value,color:$("tonerColor").value})});state.compatibility=data.itens||[];event.target.reset();renderCompatibility();notify("Compatibilidade adicionada.")}catch(error){notify(error.message)}};
     tabs();window.NXT_AUTH_PROMISE.then(async function(user){state.user=user;document.querySelectorAll(".master-only").forEach(function(item){item.hidden=user.role!=="master"});await Promise.all([loadOperations(),loadPrinters()]);loadInsights()}).catch(function(error){notify(error.message)});
   })();
   </script>
