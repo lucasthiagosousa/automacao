@@ -670,6 +670,22 @@ app.post("/api/system/backups/run",auth.requireMaster,function(req,res){try{cons
 app.post("/api/system/backups/:id/test",auth.requireMaster,function(req,res){try{const item=auth.database.prepare("SELECT * FROM system_backups WHERE id=?").get(Number(req.params.id));if(!item||!fs.existsSync(item.file_path))throw new Error("Arquivo de backup não encontrado.");const ok=verifyDatabaseFile(item.file_path);auth.database.prepare("UPDATE system_backups SET integrity_status=?,verified_at=?,error=? WHERE id=?").run(ok?"ok":"failed",new Date().toISOString(),ok?"":"Falha na integridade",item.id);res.json({sucesso:ok,mensagem:ok?"Backup íntegro e apto para restauração.":"O backup está corrompido."});}catch(error){res.status(400).json({sucesso:false,mensagem:error.message});}});
 app.get("/api/system/backups/:id/download",auth.requireMaster,function(req,res){const item=auth.database.prepare("SELECT * FROM system_backups WHERE id=?").get(Number(req.params.id));if(!item||!fs.existsSync(item.file_path))return res.status(404).json({sucesso:false,mensagem:"Backup não encontrado."});res.download(item.file_path,item.file_name);});
 
+app.get("/api/system/daily-report-settings",auth.requireMaster,function(req,res){
+  res.json({sucesso:true,enabled:auth.getSetting("daily_stock_report","0")==="1",time:auth.getSetting("daily_stock_report_time","17:00"),lastSent:auth.getSetting("daily_stock_report_last_date","")});
+});
+app.put("/api/system/daily-report-settings",auth.requireMaster,function(req,res){
+  const time=/^([01]\d|2[0-3]):[0-5]\d$/.test(String(req.body?.time||""))?String(req.body.time):"17:00";
+  auth.setSetting("daily_stock_report",req.body?.enabled===false?"0":"1",req.user.id);
+  auth.setSetting("daily_stock_report_time",time,req.user.id);
+  auth.addAudit(req.user.id,"update","daily_report_settings","",time);
+  res.json({sucesso:true,enabled:req.body?.enabled!==false,time:time});
+});
+app.post("/api/system/daily-report/send",auth.requireMaster,async function(req,res){
+  const run=automationStart("closing","manual");
+  try{const sent=await sendDailyStockMovementReport(true);automationFinish(run,Boolean(sent),"Relatório diário enviado manualmente.","");res.json({sucesso:true,mensagem:"Relatório diário enviado ao canal."});}
+  catch(error){automationFinish(run,false,error.message,"");res.status(500).json({sucesso:false,mensagem:error.message});}
+});
+
 app.get("/api/system/automations",auth.requireMaster,function(req,res){res.json({sucesso:true,items:auth.database.prepare("SELECT id,automation_type automationType,trigger_type triggerType,status,started_at startedAt,finished_at finishedAt,duration_ms durationMs,message,details FROM automation_runs ORDER BY id DESC LIMIT 300").all()});});
 app.post("/api/system/automations/:type/run",auth.requireMaster,async function(req,res){
   const type=String(req.params.type||"");
@@ -679,7 +695,7 @@ app.post("/api/system/automations/:type/run",auth.requireMaster,async function(r
     if(type==="nxt"){const ok=scheduledNxtUpdate("manual");return res.status(ok?202:409).json({sucesso:ok,mensagem:ok?"Atualização do NXT iniciada.":"A atualização não pôde ser iniciada."});}
     const run=automationStart(type,"manual");let ok=false,message="";
     if(type==="teams"){const total=await sendOperationalSummaries(true,["stock","toner"]);ok=true;message=total+" resumo(s) enviado(s).";}
-    else if(type==="closing"){ok=await sendDailyStockMovementReport();message=ok?"Fechamento enviado.":"Fechamento não enviado; confira as configurações.";}
+    else if(type==="closing"){ok=await sendDailyStockMovementReport(true);message=ok?"Relatório diário enviado manualmente.":"Relatório não enviado; confira as configurações.";}
     else throw new Error("Automação desconhecida.");
     automationFinish(run,ok,message,"");return res.status(ok?200:500).json({sucesso:ok,mensagem:message});
   }catch(error){return res.status(500).json({sucesso:false,mensagem:error.message});}
@@ -2044,9 +2060,9 @@ function scheduledNxtUpdate(trigger) {
   });
   return true;
 }
-async function sendDailyStockMovementReport() {
+async function sendDailyStockMovementReport(forceSend) {
   if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
-  const date=localDateKey(),eventKey="daily-stock:"+date,alreadySent=auth.database.prepare("SELECT id FROM notification_log WHERE event_key=? AND status=\'sent\'").get(eventKey);
+  const date=localDateKey(),eventKey=(forceSend?"daily-stock-manual:"+date+":"+Date.now():"daily-stock:"+date),alreadySent=auth.database.prepare("SELECT id FROM notification_log WHERE event_key=? AND status=\'sent\'").get(eventKey);
   if(alreadySent)return "already_sent";
   const rows=auth.database.prepare("SELECT categories_json AS categoriesJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? AND source!=\'startup\' ORDER BY captured_at").all(date),pending=pendingStockMovements();
   function parseJson(value){try{return JSON.parse(value||"[]");}catch{return[];}}
@@ -2062,7 +2078,7 @@ async function sendDailyStockMovementReport() {
   const sent=await dispatchNotification(eventKey,"daily-stock","Fechamento diário do estoque",lines.join("\n"),false,{dailyReport:dailyReport});
   if(!sent){const failure=auth.database.prepare("SELECT error FROM notification_log WHERE event_key=? ORDER BY id DESC LIMIT 1").get(eventKey);throw new Error(failure&&failure.error?"Falha no Teams: "+failure.error:"O fechamento diário não foi entregue ao canal.");}
   markStockMovementsReported(pending,"close:"+date);
-  auth.setSetting("daily_stock_report_last_date",date,null);
+  if(!forceSend)auth.setSetting("daily_stock_report_last_date",date,null);
   return true;
 }
 setTimeout(function(){captureStockSnapshot("startup").catch(function(error){console.error("Snapshot inicial:",error.message);});},10000).unref();
@@ -2110,18 +2126,22 @@ async function sendStartOfActivitiesReport() {
   return true;
 }
 async function scheduledActivityReport() {
-  const now=new Date(),day=now.getDay(),hour=now.getHours();
-  if(day===0||day===6||(hour!==7&&hour!==17)||tonerDigestExecutando)return false;
-  const slot=localDateKey(now)+"-"+String(hour).padStart(2,"0");
-  if(auth.getSetting("activity_report_last_slot","")===slot)return false;
+  const now=new Date(),day=now.getDay(),date=localDateKey(now);
+  if(day===0||day===6||tonerDigestExecutando)return false;
+  const configured=auth.getSetting("daily_stock_report_time","17:00"),parts=configured.split(":").map(Number),closingMinute=(parts[0]||0)*60+(parts[1]||0),currentMinute=now.getHours()*60+now.getMinutes();
+  const startDue=now.getHours()===7&&auth.getSetting("activity_start_last_date","")!==date;
+  const closingDue=currentMinute>=closingMinute&&auth.getSetting("daily_stock_report_last_date","")!==date;
+  if(!startDue&&!closingDue)return false;
   if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
+  const mode=startDue?"activity_start":"closing",slot=date+"-"+mode;
   tonerDigestExecutando=true;
-  const automationRun=automationStart(hour===7?"activity_start":"closing","scheduled");
+  const automationRun=automationStart(mode,"scheduled");
   try{
     await scheduledTonerScan("scheduled");
-    const delivery=hour===7?await sendStartOfActivitiesReport():await sendDailyStockMovementReport();
+    const delivery=startDue?await sendStartOfActivitiesReport():await sendDailyStockMovementReport(false);
+    if(startDue)auth.setSetting("activity_start_last_date",date,null);
     auth.setSetting("activity_report_last_slot",slot,null);
-    const duplicate=delivery==="already_sent",successMessage=duplicate?(hour===7?"Início das atividades já havia sido enviado hoje.":"Fechamento diário já havia sido enviado hoje."):(hour===7?"Início das atividades enviado.":"Fechamento diário enviado.");
+    const duplicate=delivery==="already_sent",successMessage=duplicate?(startDue?"Início das atividades já havia sido enviado hoje.":"Fechamento diário já havia sido enviado hoje."):(startDue?"Início das atividades enviado.":"Fechamento diário enviado às "+configured+".");
     console.log(successMessage,slot);
     automationFinish(automationRun,true,successMessage,slot);
     return true;
