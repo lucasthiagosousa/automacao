@@ -23,12 +23,12 @@
     const style = document.createElement("style");
     style.textContent = `
       [hidden]{display:none!important}
-      html,body,button,input,select,textarea{font-family:Inter,"Segoe UI",Arial,sans-serif!important;text-shadow:none!important;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+      html,body,button,input,select,textarea{font-family:"Segoe UI Variable Text","Segoe UI",Tahoma,Arial,sans-serif!important;text-shadow:none!important;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
       body{font-weight:400!important}
       p,span,label,input,select,textarea,td,li,small{font-weight:400!important;text-shadow:none!important}
-      h1,h2,h3,h4,h5,h6{font-weight:650!important;text-shadow:none!important;letter-spacing:-.012em}
+      h1,h2,h3,h4,h5,h6{font-weight:600!important;text-shadow:none!important;letter-spacing:-.012em}
       strong,b{font-weight:600!important;text-shadow:none!important}
-      button,.btn,[role="button"],.workspace-utility-link{font-weight:600!important;text-shadow:none!important}
+      button,.btn,[role="button"],.workspace-utility-link{font-weight:500!important;text-shadow:none!important}
       th,.eyebrow,.kicker,.label,.badge,.status{font-weight:600!important;text-shadow:none!important}
       .auth-account{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:5px 9px;border:1px solid rgba(255,255,255,.22);border-radius:10px;color:inherit;background:rgba(255,255,255,.1)}
       .auth-avatar{width:27px;height:27px;display:grid;place-items:center;border-radius:8px;background:#fff;color:#087a45;font-size:11px;font-weight:900}
