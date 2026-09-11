@@ -2027,7 +2027,8 @@ function scheduledNxtUpdate(trigger) {
 async function sendDailyStockMovementReport() {
   if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
   const date=localDateKey(),eventKey="daily-stock:"+date,alreadySent=auth.database.prepare("SELECT id FROM notification_log WHERE event_key=? AND status=\'sent\'").get(eventKey);
-  if(alreadySent)return "already_sent",rows=auth.database.prepare("SELECT categories_json AS categoriesJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? AND source!='startup' ORDER BY captured_at").all(date),pending=pendingStockMovements();
+  if(alreadySent)return "already_sent";
+  const rows=auth.database.prepare("SELECT categories_json AS categoriesJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? AND source!=\'startup\' ORDER BY captured_at").all(date),pending=pendingStockMovements();
   function parseJson(value){try{return JSON.parse(value||"[]");}catch{return[];}}
   function time(value){return new Date(value).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});}
   const movements=pending.map(function(item){return{...item,detectedAt:time(item.detectedAt)};});
@@ -2078,7 +2079,8 @@ async function scheduledTonerScan(trigger) {
 }
 async function sendStartOfActivitiesReport() {
   const date=localDateKey(),eventKey="activity-start:"+localDateKey(),alreadySent=auth.database.prepare("SELECT id FROM notification_log WHERE event_key=? AND status=\'sent\'").get(eventKey);
-  if(alreadySent)return "already_sent",events=await buildOperationalSummaryEvents(true,["stock","toner"]),pending=pendingStockMovements();
+  if(alreadySent)return "already_sent";
+  const events=await buildOperationalSummaryEvents(true,["stock","toner"]),pending=pendingStockMovements();
   const stockEvent=events.find(function(item){return item.type==="stock-summary";}),tonerEvent=events.find(function(item){return item.type==="toner-summary";}),toner=lerTonerAtual(),formatTime=function(value){return new Date(value).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});};
   const afterHours=pending.map(function(item){return{...item,detectedAt:formatTime(item.detectedAt),extra:item.type==="transfer"?item.previousLocation+" → "+item.newLocation:""};});
   const startReport={date:new Date().toLocaleDateString("pt-BR"),stockItems:stockEvent?stockEvent.details.stockItems:[],printerGroups:tonerEvent?tonerEvent.details.printerGroups:[],criticalToners:tonerEvent?tonerEvent.details.printerGroups.reduce(function(total,item){return total+item.supplies.length;},0):0,offline:(toner.printers||[]).filter(function(item){return item.online===false;}).map(function(item){return item.hostname||item.model||item.ip;}),openRequests:auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length,afterHours:afterHours};
