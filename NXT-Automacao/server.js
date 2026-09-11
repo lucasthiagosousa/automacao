@@ -671,19 +671,34 @@ app.post("/api/system/backups/:id/test",auth.requireMaster,function(req,res){try
 app.get("/api/system/backups/:id/download",auth.requireMaster,function(req,res){const item=auth.database.prepare("SELECT * FROM system_backups WHERE id=?").get(Number(req.params.id));if(!item||!fs.existsSync(item.file_path))return res.status(404).json({sucesso:false,mensagem:"Backup não encontrado."});res.download(item.file_path,item.file_name);});
 
 app.get("/api/system/daily-report-settings",auth.requireMaster,function(req,res){
-  res.json({sucesso:true,enabled:auth.getSetting("daily_stock_report","0")==="1",time:auth.getSetting("daily_stock_report_time","17:00"),lastSent:auth.getSetting("daily_stock_report_last_date","")});
+  res.json({
+    sucesso:true,
+    enabled:auth.getSetting("daily_stock_report","0")==="1",
+    startTime:auth.getSetting("activity_start_report_time","07:00"),
+    closingTime:auth.getSetting("daily_stock_report_time","17:00"),
+    lastStartSent:auth.getSetting("activity_start_last_date",""),
+    lastClosingSent:auth.getSetting("daily_stock_report_last_date","")
+  });
 });
 app.put("/api/system/daily-report-settings",auth.requireMaster,function(req,res){
-  const time=/^([01]\d|2[0-3]):[0-5]\d$/.test(String(req.body?.time||""))?String(req.body.time):"17:00";
+  const validTime=function(value,fallback){return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value||""))?String(value):fallback;};
+  const startTime=validTime(req.body?.startTime,"07:00"),closingTime=validTime(req.body?.closingTime,"17:00");
+  if(startTime===closingTime)return res.status(400).json({sucesso:false,mensagem:"Defina horários diferentes para o início e o fechamento do dia."});
   auth.setSetting("daily_stock_report",req.body?.enabled===false?"0":"1",req.user.id);
-  auth.setSetting("daily_stock_report_time",time,req.user.id);
-  auth.addAudit(req.user.id,"update","daily_report_settings","",time);
-  res.json({sucesso:true,enabled:req.body?.enabled!==false,time:time});
+  auth.setSetting("activity_start_report_time",startTime,req.user.id);
+  auth.setSetting("daily_stock_report_time",closingTime,req.user.id);
+  auth.addAudit(req.user.id,"update","daily_report_settings","",startTime+" · "+closingTime);
+  res.json({sucesso:true,enabled:req.body?.enabled!==false,startTime:startTime,closingTime:closingTime});
 });
 app.post("/api/system/daily-report/send",auth.requireMaster,async function(req,res){
-  const run=automationStart("closing","manual");
-  try{const sent=await sendDailyStockMovementReport(true);automationFinish(run,Boolean(sent),"Relatório diário enviado manualmente.","");res.json({sucesso:true,mensagem:"Relatório diário enviado ao canal."});}
-  catch(error){automationFinish(run,false,error.message,"");res.status(500).json({sucesso:false,mensagem:error.message});}
+  const mode=req.body?.mode==="start"?"start":"closing",run=automationStart(mode==="start"?"activity_start":"closing","manual");
+  try{
+    if(auth.getSetting("notifications_enabled","0")!=="1")throw new Error("Ative as notificações e configure o canal do Teams antes de enviar.");
+    const sent=mode==="start"?await sendStartOfActivitiesReport(true):await sendDailyStockMovementReport(true);
+    if(!sent)throw new Error("O relatório não foi entregue; confira as configurações do Teams.");
+    const message=mode==="start"?"Relatório de início do dia enviado ao canal.":"Relatório de fechamento enviado ao canal.";
+    automationFinish(run,true,message,"");res.json({sucesso:true,mensagem:message});
+  }catch(error){automationFinish(run,false,error.message,"");res.status(500).json({sucesso:false,mensagem:error.message});}
 });
 
 app.get("/api/system/automations",auth.requireMaster,function(req,res){res.json({sucesso:true,items:auth.database.prepare("SELECT id,automation_type automationType,trigger_type triggerType,status,started_at startedAt,finished_at finishedAt,duration_ms durationMs,message,details FROM automation_runs ORDER BY id DESC LIMIT 300").all()});});
@@ -2113,8 +2128,8 @@ async function scheduledTonerScan(trigger) {
     return false;
   }finally{tonerExecutando=false;}
 }
-async function sendStartOfActivitiesReport() {
-  const date=localDateKey(),eventKey="activity-start:"+localDateKey(),alreadySent=auth.database.prepare("SELECT id FROM notification_log WHERE event_key=? AND status=\'sent\'").get(eventKey);
+async function sendStartOfActivitiesReport(forceSend) {
+  const date=localDateKey(),eventKey=(forceSend?"activity-start-manual:"+date+":"+Date.now():"activity-start:"+date),alreadySent=auth.database.prepare("SELECT id FROM notification_log WHERE event_key=? AND status=\'sent\'").get(eventKey);
   if(alreadySent)return "already_sent";
   const events=await buildOperationalSummaryEvents(true,["stock","toner"]),pending=pendingStockMovements();
   const stockEvent=events.find(function(item){return item.type==="stock-summary";}),tonerEvent=events.find(function(item){return item.type==="toner-summary";}),toner=lerTonerAtual(),formatTime=function(value){return new Date(value).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});};
@@ -2128,8 +2143,9 @@ async function sendStartOfActivitiesReport() {
 async function scheduledActivityReport() {
   const now=new Date(),day=now.getDay(),date=localDateKey(now);
   if(day===0||day===6||tonerDigestExecutando)return false;
-  const configured=auth.getSetting("daily_stock_report_time","17:00"),parts=configured.split(":").map(Number),closingMinute=(parts[0]||0)*60+(parts[1]||0),currentMinute=now.getHours()*60+now.getMinutes();
-  const startDue=now.getHours()===7&&auth.getSetting("activity_start_last_date","")!==date;
+  const startConfigured=auth.getSetting("activity_start_report_time","07:00"),closingConfigured=auth.getSetting("daily_stock_report_time","17:00");
+  const startParts=startConfigured.split(":").map(Number),closingParts=closingConfigured.split(":").map(Number),startMinute=(startParts[0]||0)*60+(startParts[1]||0),closingMinute=(closingParts[0]||0)*60+(closingParts[1]||0),currentMinute=now.getHours()*60+now.getMinutes();
+  const startDue=currentMinute>=startMinute&&auth.getSetting("activity_start_last_date","")!==date;
   const closingDue=currentMinute>=closingMinute&&auth.getSetting("daily_stock_report_last_date","")!==date;
   if(!startDue&&!closingDue)return false;
   if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
@@ -2141,7 +2157,7 @@ async function scheduledActivityReport() {
     const delivery=startDue?await sendStartOfActivitiesReport():await sendDailyStockMovementReport(false);
     if(startDue)auth.setSetting("activity_start_last_date",date,null);
     auth.setSetting("activity_report_last_slot",slot,null);
-    const duplicate=delivery==="already_sent",successMessage=duplicate?(startDue?"Início das atividades já havia sido enviado hoje.":"Fechamento diário já havia sido enviado hoje."):(startDue?"Início das atividades enviado.":"Fechamento diário enviado às "+configured+".");
+    const duplicate=delivery==="already_sent",successMessage=duplicate?(startDue?"Início das atividades já havia sido enviado hoje.":"Fechamento diário já havia sido enviado hoje."):(startDue?"Início das atividades enviado às "+startConfigured+".":"Fechamento diário enviado às "+closingConfigured+".");
     console.log(successMessage,slot);
     automationFinish(automationRun,true,successMessage,slot);
     return true;
