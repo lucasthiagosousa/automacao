@@ -2003,7 +2003,7 @@ async function scheduledTonerScan(trigger) {
   const automationRun=automationStart("snmp",trigger||"scheduled");
   try{
     const printers=auth.getPrinters().filter(function(item){return item.active;}).map(function(item){return[item.ip,item.model];});
-    if(!printers.length)return false;
+    if(!printers.length){automationFinish(automationRun,true,"Nenhuma impressora ativa para consultar.","");return false;}
     const scannedReport=await tonerMonitor.scan({threshold:Math.max(1,Math.min(99,Number(auth.getSetting("toner_threshold","20"))||20)),printers:printers});
     const report=contingencyTonerReport(scannedReport);
     fs.mkdirSync(path.dirname(arquivoToner),{recursive:true});
