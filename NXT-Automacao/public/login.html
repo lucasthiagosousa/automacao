@@ -8,7 +8,7 @@
   <style>
     :root{--white:#f8fbfa;--muted:rgba(224,239,235,.58);--line:rgba(255,255,255,.17);--green:#13d58b;--error:#ff8f8f}
     *{box-sizing:border-box}html,body{width:100%;min-height:100%;margin:0}button,input{font:inherit}
-    body{overflow:hidden;background:#010706;color:var(--white);font-family:Inter,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+    body{overflow:hidden;background:#010706;color:var(--white);font-family:"Segoe UI",Tahoma,Arial,sans-serif;-webkit-font-smoothing:antialiased}
     .background,.veil{position:fixed;inset:0;width:100%;height:100%}.background{z-index:0;object-fit:cover;filter:none;transform:scale(1.015)}
     .veil{z-index:1;background:linear-gradient(90deg,rgba(0,3,2,.25),rgba(0,5,3,.03) 54%,rgba(0,4,2,.16)),linear-gradient(0deg,rgba(0,0,0,.16),transparent 58%)}
     .page{position:relative;z-index:2;min-height:100svh;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(420px,.8fr);align-items:center;gap:8vw;padding:clamp(48px,7.5vw,108px)}
@@ -28,7 +28,14 @@
     @media(max-width:520px){body{overflow:auto}.login-card{padding:45px 25px;border-radius:24px}.page{padding:15px}}
     @media(prefers-reduced-motion:reduce){.identity,.login-shell{animation:none}.background{transform:none}}
   </style>
-</head>
+<style id="typography-normalization">
+html,body{font-family:"Segoe UI",Tahoma,Arial,sans-serif!important;font-weight:400!important;text-shadow:none!important;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+body *{text-shadow:none!important}
+body :where(p,span,label,input,select,option,textarea,td,li,small,time,caption,legend){font-weight:400!important}
+body :where(h1,h2,h3,h4,h5,h6){font-weight:600!important;letter-spacing:-.01em}
+body :where(strong,b,th,.eyebrow,.kicker,.badge,.status){font-weight:600!important}
+body :where(button,.btn,[role="button"]){font-weight:500!important}
+</style></head>
 <body>
   <video class="background" autoplay muted loop playsinline preload="auto" aria-hidden="true"><source src="/assets/login-background.mp4" type="video/mp4"></video>
   <div class="veil" aria-hidden="true"></div>
