@@ -2026,7 +2026,8 @@ function scheduledNxtUpdate(trigger) {
 }
 async function sendDailyStockMovementReport() {
   if(auth.getSetting("notifications_enabled","0")!=="1"||auth.getSetting("daily_stock_report","0")!=="1")return false;
-  const date=localDateKey(),rows=auth.database.prepare("SELECT categories_json AS categoriesJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? AND source!='startup' ORDER BY captured_at").all(date),pending=pendingStockMovements();
+  const date=localDateKey(),eventKey="daily-stock:"+date,alreadySent=auth.database.prepare("SELECT id FROM notification_log WHERE event_key=? AND status=\'sent\'").get(eventKey);
+  if(alreadySent)return "already_sent",rows=auth.database.prepare("SELECT categories_json AS categoriesJson,captured_at AS capturedAt FROM stock_snapshots WHERE snapshot_date=? AND source!='startup' ORDER BY captured_at").all(date),pending=pendingStockMovements();
   function parseJson(value){try{return JSON.parse(value||"[]");}catch{return[];}}
   function time(value){return new Date(value).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});}
   const movements=pending.map(function(item){return{...item,detectedAt:time(item.detectedAt)};});
@@ -2037,8 +2038,8 @@ async function sendDailyStockMovementReport() {
   const operational=await buildOperationalSummaryEvents(true,["stock","toner"]),stockEvent=operational.find(function(item){return item.type==="stock-summary";}),tonerEvent=operational.find(function(item){return item.type==="toner-summary";}),tonerNow=lerTonerAtual();
   const dailyReport={date:new Date().toLocaleDateString("pt-BR"),period:period,lastSync:lastTime?time(lastTime):"Não realizada",entries:entries,exits:exits,transfers:transfers,balance:balance,changedCategories:changedCategories,unchangedCount:unchanged.length,snapshotCount:rows.length,sufficient:rows.length>=2,stockLow:stockEvent?stockEvent.details.stockItems.length:0,criticalToners:tonerEvent?tonerEvent.details.printerGroups.reduce(function(total,item){return total+item.supplies.length;},0):0,offlineCount:(tonerNow.printers||[]).filter(function(item){return item.online===false;}).length,openRequests:auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length};
   const lines=["Fechamento diário do estoque — "+dailyReport.date,"Período monitorado: "+period,"Entradas detectadas: "+entries.length,"Saídas detectadas: "+exits.length,exits.length?exits.map(function(item){return "Saída · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma saída foi detectada.",entries.length?entries.map(function(item){return "Entrada · "+item.code+" · "+item.category+" · detectada às "+item.detectedAt;}).join("\n"):"Nenhuma entrada foi detectada."];
-  const sent=await dispatchNotification("daily-stock:"+date,"daily-stock","Fechamento diário do estoque",lines.join("\n"),false,{dailyReport:dailyReport});
-  if(!sent)throw new Error("O fechamento diário não foi entregue ao canal.");
+  const sent=await dispatchNotification(eventKey,"daily-stock","Fechamento diário do estoque",lines.join("\n"),false,{dailyReport:dailyReport});
+  if(!sent){const failure=auth.database.prepare("SELECT error FROM notification_log WHERE event_key=? ORDER BY id DESC LIMIT 1").get(eventKey);throw new Error(failure&&failure.error?"Falha no Teams: "+failure.error:"O fechamento diário não foi entregue ao canal.");}
   markStockMovementsReported(pending,"close:"+date);
   auth.setSetting("daily_stock_report_last_date",date,null);
   return true;
@@ -2076,12 +2077,13 @@ async function scheduledTonerScan(trigger) {
   }finally{tonerExecutando=false;}
 }
 async function sendStartOfActivitiesReport() {
-  const date=localDateKey(),events=await buildOperationalSummaryEvents(true,["stock","toner"]),pending=pendingStockMovements();
+  const date=localDateKey(),eventKey="activity-start:"+localDateKey(),alreadySent=auth.database.prepare("SELECT id FROM notification_log WHERE event_key=? AND status=\'sent\'").get(eventKey);
+  if(alreadySent)return "already_sent",events=await buildOperationalSummaryEvents(true,["stock","toner"]),pending=pendingStockMovements();
   const stockEvent=events.find(function(item){return item.type==="stock-summary";}),tonerEvent=events.find(function(item){return item.type==="toner-summary";}),toner=lerTonerAtual(),formatTime=function(value){return new Date(value).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});};
   const afterHours=pending.map(function(item){return{...item,detectedAt:formatTime(item.detectedAt),extra:item.type==="transfer"?item.previousLocation+" → "+item.newLocation:""};});
   const startReport={date:new Date().toLocaleDateString("pt-BR"),stockItems:stockEvent?stockEvent.details.stockItems:[],printerGroups:tonerEvent?tonerEvent.details.printerGroups:[],criticalToners:tonerEvent?tonerEvent.details.printerGroups.reduce(function(total,item){return total+item.supplies.length;},0):0,offline:(toner.printers||[]).filter(function(item){return item.online===false;}).map(function(item){return item.hostname||item.model||item.ip;}),openRequests:auth.getRestockRequests().filter(function(item){return item.status!=="finished";}).length,afterHours:afterHours};
-  const sent=await dispatchNotification("activity-start:"+date,"activity-start","Início das atividades","Resumo operacional de abertura.",false,{startReport:startReport});
-  if(!sent)throw new Error("O relatório de início das atividades não foi entregue ao canal.");
+  const sent=await dispatchNotification(eventKey,"activity-start","Início das atividades","Resumo operacional de abertura.",false,{startReport:startReport});
+  if(!sent){const failure=auth.database.prepare("SELECT error FROM notification_log WHERE event_key=? ORDER BY id DESC LIMIT 1").get(eventKey);throw new Error(failure&&failure.error?"Falha no Teams: "+failure.error:"O relatório de início das atividades não foi entregue ao canal.");}
   markStockMovementsReported(pending,"open:"+date);
   return true;
 }
@@ -2095,10 +2097,11 @@ async function scheduledActivityReport() {
   const automationRun=automationStart(hour===7?"activity_start":"closing","scheduled");
   try{
     await scheduledTonerScan("scheduled");
-    if(hour===7)await sendStartOfActivitiesReport();else await sendDailyStockMovementReport();
+    const delivery=hour===7?await sendStartOfActivitiesReport():await sendDailyStockMovementReport();
     auth.setSetting("activity_report_last_slot",slot,null);
-    console.log(hour===7?"Relatório de início enviado:":"Fechamento diário enviado:",slot);
-    automationFinish(automationRun,true,hour===7?"Início das atividades enviado.":"Fechamento diário enviado.",slot);
+    const duplicate=delivery==="already_sent",successMessage=duplicate?(hour===7?"Início das atividades já havia sido enviado hoje.":"Fechamento diário já havia sido enviado hoje."):(hour===7?"Início das atividades enviado.":"Fechamento diário enviado.");
+    console.log(successMessage,slot);
+    automationFinish(automationRun,true,successMessage,slot);
     return true;
   }catch(error){automationFinish(automationRun,false,error.message,slot);throw error;}finally{tonerDigestExecutando=false;}
 }
