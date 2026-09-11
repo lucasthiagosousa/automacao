@@ -1349,15 +1349,17 @@ app.post("/api/toner/exchanges", auth.requirePermission("toner"), requireTonerOp
   const ownReservation=auth.database.prepare("SELECT id FROM toner_reservations WHERE printer_ip=? AND toner_model=? AND color=? AND status='reserved' ORDER BY reserved_at LIMIT 1").get(ip,model,color);
   const totalReserved=reservedTonerCounts().get(tonerKey(model,color))||0;
   const freeQuantity=(Number(stock&&stock.quantidade)||0)-totalReserved;
-  if(!stock||Number(stock.quantidade)<1||(!ownReservation&&freeQuantity<1))
-    return res.status(409).json({sucesso:false,mensagem:"O saldo disponível está reservado para outra troca."});
+  const canDeduct=Boolean(stock&&Number(stock.quantidade)>0&&(ownReservation||freeQuantity>=1));
+  const allowWithoutStock=req.body?.allowWithoutStock===true;
+  if(!canDeduct&&!allowWithoutStock)
+    return res.status(409).json({sucesso:false,mensagem:stock?"O saldo disponível está reservado para outra troca. Confirme novamente para registrar sem descontar o estoque.":"Este toner não possui saldo cadastrado. Confirme novamente para registrar a troca sem desconto."});
   const reading=latestPrinterReading(ip);
   const matching=currentTonerSupplies(reading).find(function(supply){
     const code=tonerCode(supply.description);
     return code&&String(model).toUpperCase().includes(code);
   })||currentTonerSupplies(reading)[0];
   const now=new Date().toISOString();
-  stock.quantidade=Number(stock.quantidade)-1;
+  if(canDeduct)stock.quantidade=Number(stock.quantidade)-1;
   const used=lerTonersUsados();
   const usedItem=used.find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(model,color);});
   if(usedItem)usedItem.quantidade=Number(usedItem.quantidade)+1;else used.push({modelo:model,cor:color,quantidade:1});
@@ -1369,7 +1371,7 @@ app.post("/api/toner/exchanges", auth.requirePermission("toner"), requireTonerOp
   if(ownReservation)auth.database.prepare("UPDATE toner_reservations SET status='used',completed_at=? WHERE id=?")
     .run(now,Number(ownReservation.id));
   auth.addAudit(req.user.id,"create","toner_exchange",String(result.lastInsertRowid),"Troca confirmada: "+model+" em "+ip);
-  return res.status(201).json({sucesso:true,id:Number(result.lastInsertRowid),mensagem:"Troca confirmada e estoque atualizado.",saldo:stock.quantidade});
+  return res.status(201).json({sucesso:true,id:Number(result.lastInsertRowid),mensagem:canDeduct?"Troca confirmada e estoque atualizado.":"Troca registrada. Não havia saldo livre para descontar; confira o estoque de toners.",saldo:stock?Number(stock.quantidade):0,estoqueAtualizado:canDeduct});
 });
 app.get("/api/toner/compatibility", auth.requirePermission("toner"), function(req,res) {
   return res.json({sucesso:true,itens:compatibilityRows()});
