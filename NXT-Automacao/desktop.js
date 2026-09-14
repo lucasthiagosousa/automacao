@@ -88,7 +88,7 @@ function criarJanelaConfiguracao(primeiroAcesso = false) {
     width: 520, height: 650, minWidth: 460, minHeight: 600,
     autoHideMenuBar: true, backgroundColor: "#f5f8fc",
     parent: janelaPrincipal || undefined, modal: Boolean(janelaPrincipal),
-    icon: path.join(__dirname, "build", "icon.ico"),
+    icon: carregarIcone(256),
     webPreferences: { preload: path.join(__dirname, "desktop-preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   janelaConfiguracao.loadFile(path.join(__dirname, "desktop-setup.html"), {
@@ -114,10 +114,16 @@ function obterEnderecoRede() {
   return `http://IP-DO-SERVIDOR:${portaConfigurada()}`;
 }
 
+function carregarIcone(tamanho) {
+  const svg = fs.readFileSync(path.join(__dirname, "build", "icon.svg"), "utf8");
+  const dataUrl = "data:image/svg+xml;base64," + Buffer.from(svg, "utf8").toString("base64");
+  return nativeImage.createFromDataURL(dataUrl).resize({ width: tamanho, height: tamanho, quality: "best" });
+}
+
 function criarTray() {
-  const imagem = nativeImage.createFromDataURL("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAACAUlEQVR4nO1b23ECMQw0DAWEvqAXqIT0QvoiHSQ/0Yw5/JCRVrId709mIHfWriVr7TtCWFj419hJLv44XX60ApHi++vzLS7NF/VEOocWMdj/OALxLThC7Dk3GpF8CLy4qwKMSp5Qi78owOjkCSUeWQFmIU/I8UkKYEX+cb89/UUjxetgMvIGKcL02fF8NY3lpU0gZ79lppFCxO2R1QY10JrmVmUBL4ESkXiWvcriqQQ0059LXOu6VlAZqAtQS10OCY171AARQHv2kNmgKgA6bREZoSKAVb0ixiMBIG0QtWoj7isSYBvQ8XyFtiyEN1DxAWj7iuwKYgG8ZlxrXJfNUA0WPoDQnQDWnaUbAayJE9wF8CJOMNsOt8LqYERFAEl/lngJDV+gVgLSvXvLdZqGSLwZygVjuReQbIZga4C2bUUdkamdB6BWc9R9XU6EtOq82xMhgsTKWtlgqACE1lm0NEUmAhBqxDzcoKkAhF6eDIWg3Aa5xLikpnaC9H0qeEviBHcn+LjfxMSHdoIesx5jOcH4w+UElxNcTnA5Qchof5jWCXKh7QQ1YPqWWAyJE5QifkvM7blAbImt3w2M4f5cwJN8CAkB3v3lxSjY8nPPAG8kBZg1C1K8shkwmwg5PsUSmEWEEo/qGjC6CLX4WYvgqCJw4l6/G5QM1JMYo2bpgjd+AQjsZlmiUMdBAAAAAElFTkSuQmCC").resize({ width: 32, height: 32 });
+  const imagem = carregarIcone(32);
   tray = new Tray(imagem);
-  tray.setToolTip("Central de Operações de TI");
+  tray.setToolTip("Nexo TI · Central de Operações");
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Abrir sistema", click: () => janelaPrincipal?.show() },
     { label: `Acesso na rede: ${obterEnderecoRede()}`, click: () => shell.openExternal(obterEnderecoRede()) },
@@ -140,7 +146,7 @@ function iniciarSistema() {
     janelaPrincipal = new BrowserWindow({
       width: 1500, height: 920, minWidth: 1040, minHeight: 680, show: false,
       autoHideMenuBar: true, backgroundColor: "#f4f7fb",
-      icon: path.join(__dirname, "build", "icon.ico"), title: "Central de Operações de TI",
+      icon: carregarIcone(256), title: "Central de Operações de TI",
       webPreferences: { preload: path.join(__dirname, "desktop-main-preload.js"), contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     const paginaInicial = abrirCriacaoAdmin ? "/setup.html" : "/";
