@@ -19,7 +19,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: build/icon.ico
+  icon: build/icon.svg
   artifactName: "Central-Operacoes-TI-Setup-${version}.${ext}"
 nsis:
   oneClick: false
