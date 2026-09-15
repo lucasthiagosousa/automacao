@@ -288,9 +288,87 @@
       { selector:"button[type='submit'],.btn-primary", title:"Gerar e exportar", text:"Gere o relatório, revise os resultados e então escolha PDF ou Excel." }
     ],
     automations: [
-      { selector:".automation-grid,.cards,.grid", title:"Executar automações", text:"Cada card representa uma rotina. Use Executar agora quando precisar antecipar uma atualização." },
-      { selector:".history,.table-wrap,table", title:"Histórico de execuções", text:"Confira duração, resultado e mensagem de erro de cada execução." },
-      { selector:"[data-action='retry'],.retry,.btn", title:"Executar novamente", text:"Após analisar uma falha, use este botão para realizar uma nova tentativa." }
+      { selector:"#cards", title:"Executar automações", text:"Cada card representa uma rotina. Use Executar agora quando precisar antecipar uma atualização." },
+      { selector:"#historyTabs", title:"Filtrar o histórico", text:"Alterne entre as guias para visualizar uma sequência menor de execuções." },
+      { selector:"#history", title:"Histórico de execuções", text:"Confira duração, resultado e mensagem de erro de cada execução." }
+    ],
+    "central-tasks": [
+      { selector:"#taskForm", title:"Criar uma tarefa", text:"Preencha título, responsável, prazo e categoria da atividade." },
+      { selector:"#taskTitle", title:"Descrever a atividade", text:"Use um título curto que deixe clara a ação necessária." },
+      { selector:"#tasks", title:"Acompanhar tarefas", text:"As tarefas registradas aparecem aqui até serem concluídas." }
+    ],
+    "stock-search": [
+      { selector:"#searchInput", title:"Pesquisar um ativo", text:"Digite patrimônio, nome, modelo, colaborador ou categoria." },
+      { selector:"#filterCompany", title:"Filtrar por empresa", text:"Combine a pesquisa com empresa, tipo, fabricante e status." },
+      { selector:"#tableBody", title:"Abrir os detalhes", text:"Selecione um resultado para consultar todos os dados do ativo." }
+    ],
+    "stock-export": [
+      { selector:"#exportButton", title:"Exportar os resultados", text:"Este botão exporta somente os itens correspondentes aos filtros aplicados." },
+      { selector:"#resultCount", title:"Conferir a quantidade", text:"Valide quantos registros serão exportados antes de baixar o arquivo." }
+    ],
+    "toner-add": [
+      { selector:"#tonerInventoryToggle", title:"Abrir estoque de toners", text:"Expanda esta seção para cadastrar os cartuchos disponíveis." },
+      { selector:"#tonerInventoryModel", open:"#tonerInventoryToggle", title:"Informar o modelo", text:"Digite o código exato do toner, como W9008MC ou CF289X." },
+      { selector:"#tonerInventoryColor", title:"Selecionar a cor", text:"Escolha a cor correspondente ao suprimento." },
+      { selector:"#tonerInventoryQuantity", title:"Informar a quantidade", text:"Digite quantas unidades estão entrando no estoque." },
+      { selector:"#tonerInventoryForm button[type='submit']", title:"Adicionar ao estoque", text:"Confirme para registrar o toner. Depois confira a lista e o saldo atualizado." }
+    ],
+    "toner-printer-add": [
+      { selector:"#managePrintersButton", title:"Gerenciar impressoras", text:"Abra o cadastro de IPs monitorados pelo sistema." },
+      { selector:"#printerIp", open:"#managePrintersButton", title:"Informar o IP", text:"Digite o endereço IP fixo da impressora." },
+      { selector:"#printerModel", title:"Informar o modelo", text:"Cadastre o modelo completo para facilitar a identificação." },
+      { selector:"#printerLocation", title:"Informar o local", text:"Use um nome conhecido pela equipe, como setor ou sala." },
+      { selector:"#printerSave", title:"Adicionar a impressora", text:"Salve e execute Atualizar impressoras para realizar a primeira leitura SNMP." }
+    ],
+    "toner-search": [
+      { selector:"#search", title:"Pesquisar impressora", text:"Digite IP, modelo, setor ou nome do toner." },
+      { selector:"#status", title:"Filtrar por situação", text:"Visualize somente impressoras críticas, em atenção, online ou offline." },
+      { selector:"#printerGrid", title:"Conferir os suprimentos", text:"Cada card mostra os níveis, o estado da impressora e os contadores disponíveis." }
+    ],
+    "toner-exchange": [
+      { selector:"a[href*='toner-operacao']", title:"Abrir Operação e trocas", text:"Entre na área operacional para visualizar as substituições recomendadas." },
+      { selector:"#worklist", title:"Roteiro de trocas", text:"A lista organiza impressoras e suprimentos que precisam de atendimento." },
+      { selector:"#reload", title:"Atualizar a lista", text:"Atualize depois de uma nova leitura para validar níveis e trocas automáticas." }
+    ],
+    "toner-compatibility": [
+      { selector:"[data-screen='compatibility'],button:nth-of-type(4)", title:"Abrir Compatibilidade", text:"Acesse a guia Compatibilidade para relacionar impressora e suprimento." },
+      { selector:"#printerModel", title:"Modelo da impressora", text:"Informe o modelo como ele aparece no painel." },
+      { selector:"#tonerModel", title:"Modelo do toner", text:"Digite o código do cartucho compatível." },
+      { selector:"#compatForm button[type='submit']", title:"Adicionar compatibilidade", text:"Salve o relacionamento para o sistema recomendar o toner correto." }
+    ],
+    "collaborators-import": [
+      { selector:"#dropzone", title:"Importar colaboradores", text:"Arraste a planilha atualizada ou clique para selecionar o arquivo." },
+      { selector:"#fileMeta", title:"Conferir a importação", text:"Verifique o nome do arquivo, a quantidade de registros e a data de atualização." },
+      { selector:"#cards", title:"Revisar os indicadores", text:"Depois da importação, confira desligamentos, transferências, férias e afastamentos." }
+    ],
+    "collaborators-vacation": [
+      { selector:"#countFerias", title:"Abrir Férias e acessos", text:"Selecione o indicador para visualizar colaboradores em férias ou próximos do período." },
+      { selector:"#searchFerias", title:"Pesquisar colaborador", text:"Localize rapidamente a pessoa pelo nome, matrícula ou setor." },
+      { selector:"#tbodyFerias", title:"Configurar acessos", text:"Abra o colaborador para definir responsáveis, prazos e acessos a suspender ou reativar." }
+    ],
+    "activities-search": [
+      { selector:"#search", title:"Pesquisar no histórico", text:"Digite atividade, ativo, descrição ou informação relacionada." },
+      { selector:"#from", title:"Definir o período", text:"Use as datas inicial e final para reduzir os resultados." },
+      { selector:"#user", title:"Filtrar responsável", text:"Selecione um usuário e, se necessário, combine com o filtro de módulo." },
+      { selector:"#pagination", title:"Navegar pelo histórico", text:"Use a paginação para acompanhar a sequência sem ocupar toda a página." }
+    ],
+    "reports-generate": [
+      { selector:"#type", title:"Escolher o relatório", text:"Selecione o conjunto de dados que deseja analisar." },
+      { selector:"#from", title:"Definir a data inicial", text:"Informe o primeiro dia do período." },
+      { selector:"#to", title:"Definir a data final", text:"Informe o último dia e use a pesquisa se precisar refinar." },
+      { selector:"#generate", title:"Gerar relatório", text:"Clique para atualizar os resultados com os filtros escolhidos." },
+      { selector:"#excel", title:"Exportar", text:"Após revisar o resultado, salve em Excel ou PDF." }
+    ],
+    "automations-daily": [
+      { selector:"#dailyEnabled", title:"Ativar os relatórios diários", text:"Habilite o envio automático nos dias úteis." },
+      { selector:"#startTime", title:"Horário de abertura", text:"Defina quando o resumo de início das atividades será enviado." },
+      { selector:"#closingTime", title:"Horário de fechamento", text:"Defina o horário do relatório de encerramento do dia." },
+      { selector:"#saveDaily", title:"Salvar os horários", text:"Confirme os dois horários para aplicar a programação." }
+    ],
+    "automations-history": [
+      { selector:"#historyTabs", title:"Guias do histórico", text:"Filtre as execuções por tipo para manter a lista organizada." },
+      { selector:"#history", title:"Resultado da execução", text:"Confira início, duração, resultado e mensagem técnica." },
+      { selector:"#historyFooter", title:"Paginação", text:"Avance ou retorne entre as páginas do histórico." }
     ]
   };
 
@@ -303,10 +381,13 @@
       const below=rect.bottom+14, top=below+popover.offsetHeight<innerHeight?below:Math.max(12,rect.top-popover.offsetHeight-14);
       popover.style.top=top+"px";popover.style.left=Math.min(innerWidth-popover.offsetWidth-12,Math.max(12,rect.left))+"px";
     }
-    function finish() { fetch("/api/auth/training-progress/"+encodeURIComponent(key),{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({completed:true})}).catch(function(){}); remove(); }
+    function finish() { const progressKey=key==="getting-started"?"getting-started":key.startsWith("central-")?"getting-started":key.split("-")[0]; fetch("/api/auth/training-progress/"+encodeURIComponent(progressKey),{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({completed:true})}).catch(function(){}); remove(); }
     function show() {
       while(current<steps.length && !(target=document.querySelector(steps[current].selector))) current++;
-      if(current>=steps.length){finish();return;} target.scrollIntoView({behavior:"smooth",block:"center"});
+      if(current>=steps.length){finish();return;}
+      const pendingStep=steps[current];
+      if(pendingStep.open && target.getClientRects().length===0){const opener=document.querySelector(pendingStep.open);if(opener)opener.click();setTimeout(show,220);return;}
+      target.scrollIntoView({behavior:"smooth",block:"center"});
       if(!spotlight){spotlight=document.createElement("div");spotlight.className="tour-spotlight";popover=document.createElement("section");popover.className="tour-popover";popover.setAttribute("role","dialog");popover.setAttribute("aria-live","polite");document.body.append(spotlight,popover);window.addEventListener("resize",position);window.addEventListener("scroll",position,true);}
       const step=steps[current];popover.textContent="";const meta=document.createElement("small");meta.textContent="Etapa "+(current+1)+" de "+steps.length;const title=document.createElement("h3");title.textContent=step.title;const text=document.createElement("p");text.textContent=step.text;
       const controls=document.createElement("div");controls.className="tour-controls";const skip=document.createElement("button");skip.className="tour-skip";skip.type="button";skip.textContent="Sair";skip.onclick=remove;const group=document.createElement("div");
