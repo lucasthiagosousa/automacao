@@ -29,9 +29,11 @@ jobs:
       - name: Criar ícone do Windows
         shell: powershell
         run: magick build/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
-      - name: Validar banco local e permissões
+      - name: Auditar dependências de produção
+        run: npm audit --omit=dev --audit-level=high
+      - name: Validar banco, permissões e controles de segurança
         shell: powershell
-        run: node smoke-test.js
+        run: npm test
       - name: Validar sintaxe e vídeo do login
         shell: powershell
         run: |
