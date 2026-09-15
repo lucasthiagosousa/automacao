@@ -93,6 +93,7 @@
       body.workspace-operational ::selection{background:#bdebd2;color:#063e25}
       .btn-primary{border-color:#0a9b59!important;background:linear-gradient(135deg,#12cc78,#079854)!important;color:#fff!important}
       @media(max-width:560px){body.workspace-operational .header-inner,.workspace-tabs{width:calc(100% - 24px)!important}body.workspace-page-colaboradores .wrap>.intro,body.workspace-page-colaboradores .wrap>#dropzone,body.workspace-page-colaboradores .wrap>#app,body.workspace-page-colaboradores .wrap>footer{width:calc(100% - 24px)!important}body.workspace-page-toner .toolbar #search,body.workspace-page-toner .toolbar #status,body.workspace-page-toner .toolbar .btn{flex:1 1 100%;width:100%!important}.auth-copy{display:none}.auth-account{padding:5px}.header-actions,.header-right{gap:6px!important}.header-actions>.btn,.header-right>.btn,.header-right>.back-link{min-height:36px!important;padding:7px 9px!important;font-size:10px!important}.workspace-tabs{gap:4px}.workspace-tab{flex:0 0 auto;height:37px;font-size:10px}}
+      .tour-spotlight{position:fixed;z-index:90;border:3px solid #35df8b;border-radius:12px;box-shadow:0 0 0 9999px rgba(0,22,12,.72),0 0 0 7px rgba(53,223,139,.18);pointer-events:none;transition:top .22s,left .22s,width .22s,height .22s}.tour-popover{position:fixed;z-index:91;width:min(360px,calc(100vw - 24px));padding:17px;border:1px solid #cce8da;border-radius:15px;background:#fff;color:#172b3f;box-shadow:0 18px 55px rgba(0,35,19,.28)}.tour-popover small{display:block;margin-bottom:5px;color:#087747;font-size:12px;font-weight:600}.tour-popover h3{margin:0 0 7px;font-size:18px}.tour-popover p{margin:0;color:#60758a;font-size:14px;line-height:1.5}.tour-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:15px}.tour-controls div{display:flex;gap:7px}.tour-controls button{min-height:38px;padding:0 12px;border:1px solid #cad8e5;border-radius:9px;background:#fff;color:#173149;font:500 13px inherit;cursor:pointer}.tour-controls .tour-next{border-color:#079854;background:#0aad63;color:#fff}.tour-controls button:focus-visible{outline:3px solid #0aad6340}.tour-skip{color:#687b90!important;border-color:transparent!important;background:transparent!important}
       .global-help-button{position:fixed;z-index:48;right:20px;bottom:20px;min-height:46px;padding:0 16px;display:inline-flex;align-items:center;gap:8px;border:1px solid #087747;border-radius:24px;background:#087747;color:#fff;font-size:13px;font-weight:600;box-shadow:0 10px 28px rgba(2,80,43,.25);cursor:pointer}.global-help-button:hover{background:#06683d;transform:translateY(-1px)}.global-help-button:focus-visible{outline:3px solid #60e5a1;outline-offset:3px}.global-help-button svg{width:19px;height:19px}
       .first-use-backdrop{position:fixed;z-index:80;inset:0;display:grid;place-items:center;padding:18px;background:rgba(1,24,13,.64);backdrop-filter:blur(4px)}.first-use-dialog{width:min(100%,520px);padding:25px;border:1px solid #d7e7df;border-radius:18px;background:#fff;color:#172b3f;box-shadow:0 25px 70px rgba(0,28,15,.3)}.first-use-dialog .tip-icon{width:48px;height:48px;display:grid;place-items:center;margin-bottom:15px;border-radius:14px;background:#e1f7eb;color:#087747;font-size:22px}.first-use-dialog h2{margin:0 0 8px;font-size:23px}.first-use-dialog p{margin:0 0 18px;color:#60758a;font-size:14px;line-height:1.6}.first-use-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:9px}.first-use-actions a,.first-use-actions button{min-height:42px;padding:0 14px;border:1px solid #cad8e5;border-radius:10px;background:#fff;color:#173149;font:500 14px inherit;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}.first-use-actions .primary{border-color:#079854;background:#0aad63;color:#fff}
       @media(max-width:560px){.global-help-button{right:12px;bottom:12px;width:46px;padding:0;justify-content:center}.global-help-button span{display:none}.first-use-dialog{padding:19px}.first-use-actions{display:grid}.first-use-actions>*{width:100%;justify-content:center}}
@@ -255,6 +256,67 @@
     }).catch(function () {});
   }
 
+  const GUIDED_TOURS = {
+    "getting-started": [
+      { selector:".workspace-tabs", title:"Navegação principal", text:"Use estas guias para alternar entre Central, Atividades, Estoque, Toners e Colaboradores." },
+      { selector:".kpis,.stats", title:"Resumo do dia", text:"Os indicadores mostram rapidamente o que precisa de atenção." },
+      { selector:".pending-list,.pending,.grid", title:"Próximas ações", text:"Aqui ficam as pendências e atividades que devem ser conferidas." }
+    ],
+    stock: [
+      { selector:"#search,.toolbar input[type='search'],input[type='search']", title:"Pesquisar no estoque", text:"Digite o patrimônio, nome, modelo ou categoria para encontrar um ativo." },
+      { selector:".kpis", title:"Indicadores do estoque", text:"Confira saldo, categorias abaixo do mínimo e itens a solicitar." },
+      { selector:".toolbar,section.filters", title:"Filtros e ações", text:"Use os filtros para reduzir a lista e os botões para atualizar ou exportar." }
+    ],
+    toner: [
+      { selector:"#search,.toolbar input", title:"Pesquisar impressora", text:"Pesquise por IP, modelo, local ou nome do suprimento." },
+      { selector:".kpis", title:"Situação da frota", text:"Veja quantas impressoras estão online, em atenção ou precisam de toner." },
+      { selector:".cards,.printer-grid,.grid", title:"Detalhes da impressora", text:"Abra o card para conferir níveis, contadores e histórico de trocas." }
+    ],
+    collaborators: [
+      { selector:"#dropzone", title:"Atualizar colaboradores", text:"Arraste a planilha ou clique nesta área para selecionar o arquivo atualizado." },
+      { selector:".filters,input[type='search']", title:"Pesquisar colaborador", text:"Use a pesquisa e os filtros para localizar férias, retornos, transferências e desligamentos." },
+      { selector:"#app,.table-wrap", title:"Ações de acesso", text:"Confira os acessos envolvidos e registre a conclusão de cada atividade." }
+    ],
+    activities: [
+      { selector:".filters,input[type='search']", title:"Pesquisar atividades", text:"Busque por ativo, descrição, usuário ou módulo." },
+      { selector:".kpis,.stats", title:"Resumo do período", text:"Estes números resumem as atividades encontradas nos filtros atuais." },
+      { selector:".pagination,.pager,[class*='pagin']", title:"Navegar entre páginas", text:"Avance pelas páginas para consultar o histórico sem criar uma lista muito longa." }
+    ],
+    reports: [
+      { selector:"select", title:"Escolher relatório", text:"Selecione Estoque, Movimentações, Toners, Impressões ou outro relatório disponível." },
+      { selector:"input[type='date']", title:"Definir período", text:"Informe as datas inicial e final para consultar somente o período necessário." },
+      { selector:"button[type='submit'],.btn-primary", title:"Gerar e exportar", text:"Gere o relatório, revise os resultados e então escolha PDF ou Excel." }
+    ],
+    automations: [
+      { selector:".automation-grid,.cards,.grid", title:"Executar automações", text:"Cada card representa uma rotina. Use Executar agora quando precisar antecipar uma atualização." },
+      { selector:".history,.table-wrap,table", title:"Histórico de execuções", text:"Confira duração, resultado e mensagem de erro de cada execução." },
+      { selector:"[data-action='retry'],.retry,.btn", title:"Executar novamente", text:"Após analisar uma falha, use este botão para realizar uma nova tentativa." }
+    ]
+  };
+
+  function startGuidedTour(key) {
+    const steps = GUIDED_TOURS[key] || []; let current = 0, spotlight, popover, target;
+    function remove() { if (spotlight) spotlight.remove(); if (popover) popover.remove(); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); const url=new URL(location.href);url.searchParams.delete("tour");history.replaceState(null,"",url.pathname+url.search+url.hash); }
+    function position() {
+      if (!target || !spotlight || !popover) return; const rect=target.getBoundingClientRect(),pad=6;
+      spotlight.style.left=Math.max(4,rect.left-pad)+"px";spotlight.style.top=Math.max(4,rect.top-pad)+"px";spotlight.style.width=Math.min(innerWidth-8,rect.width+pad*2)+"px";spotlight.style.height=Math.min(innerHeight-8,rect.height+pad*2)+"px";
+      const below=rect.bottom+14, top=below+popover.offsetHeight<innerHeight?below:Math.max(12,rect.top-popover.offsetHeight-14);
+      popover.style.top=top+"px";popover.style.left=Math.min(innerWidth-popover.offsetWidth-12,Math.max(12,rect.left))+"px";
+    }
+    function finish() { fetch("/api/auth/training-progress/"+encodeURIComponent(key),{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({completed:true})}).catch(function(){}); remove(); }
+    function show() {
+      while(current<steps.length && !(target=document.querySelector(steps[current].selector))) current++;
+      if(current>=steps.length){finish();return;} target.scrollIntoView({behavior:"smooth",block:"center"});
+      if(!spotlight){spotlight=document.createElement("div");spotlight.className="tour-spotlight";popover=document.createElement("section");popover.className="tour-popover";popover.setAttribute("role","dialog");popover.setAttribute("aria-live","polite");document.body.append(spotlight,popover);window.addEventListener("resize",position);window.addEventListener("scroll",position,true);}
+      const step=steps[current];popover.textContent="";const meta=document.createElement("small");meta.textContent="Etapa "+(current+1)+" de "+steps.length;const title=document.createElement("h3");title.textContent=step.title;const text=document.createElement("p");text.textContent=step.text;
+      const controls=document.createElement("div");controls.className="tour-controls";const skip=document.createElement("button");skip.className="tour-skip";skip.type="button";skip.textContent="Sair";skip.onclick=remove;const group=document.createElement("div");
+      if(current>0){const prev=document.createElement("button");prev.type="button";prev.textContent="Voltar";prev.onclick=function(){current--;show()};group.appendChild(prev);}
+      const next=document.createElement("button");next.type="button";next.className="tour-next";next.textContent=current===steps.length-1?"Concluir":"Próximo";next.onclick=function(){if(current===steps.length-1)finish();else{current++;show();}};group.appendChild(next);controls.append(skip,group);popover.append(meta,title,text,controls);setTimeout(position,260);next.focus();
+    }
+    if(!steps.length)return; show();
+  }
+  window.NXT_START_TOUR = startGuidedTour;
+
   function decorate(user) {
     const permissions=user.permissions||{};
     [{path:"/",key:"stock"},{path:"/toner.html",key:"toner"},{path:"/colaboradores.html",key:"collaborators"},{path:"/atividades.html",key:"view_audit"}].forEach(function(item){
@@ -293,6 +355,8 @@
     window.NXT_CURRENT_USER = user;
     decorate(user);
     installHelpExperience();
+    const requestedTour = new URLSearchParams(window.location.search).get("tour");
+    if (requestedTour) setTimeout(function () { startGuidedTour(requestedTour); }, 350);
     return user;
   });
 })();
