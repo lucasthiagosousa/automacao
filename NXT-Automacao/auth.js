@@ -643,7 +643,7 @@ function createAuth(options) {
 
   router.put("/training-progress/:lessonKey", requireAuth, function (request, response) {
     const lessonKey = safeText(request.params.lessonKey, 40);
-    if (!TRAINING_LESSONS.includes(lessonKey)) return response.status(400).json({ sucesso:false, mensagem:"Treinamento inválido." });
+    if (!TRAINING_LESSONS.concat(["welcome-seen"]).includes(lessonKey)) return response.status(400).json({ sucesso:false, mensagem:"Treinamento inválido." });
     const completed = request.body && request.body.completed === true;
     const now = nowIso();
     database.prepare(
