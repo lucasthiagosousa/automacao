@@ -10,6 +10,8 @@ const SESSION_COOKIE = "nxt_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_LIMIT = 5;
+const MAX_PASSWORD_LENGTH = 128;
+const MAX_LOGIN_KEYS = 5000;
 
 function createAuth(options) {
   const databasePath = options.databasePath;
@@ -321,6 +323,7 @@ function createAuth(options) {
   function passwordError(password) {
     const value = String(password || "");
     if (value.length < 10) return "A senha deve ter pelo menos 10 caracteres.";
+    if (value.length > MAX_PASSWORD_LENGTH) return "A senha deve ter no máximo 128 caracteres.";
     if (!/[a-z]/.test(value)) return "Inclua ao menos uma letra minúscula.";
     if (!/[A-Z]/.test(value)) return "Inclua ao menos uma letra maiúscula.";
     if (!/\d/.test(value)) return "Inclua ao menos um número.";
@@ -337,6 +340,8 @@ function createAuth(options) {
     return { salt: salt, hash: hashPassword(password, salt) };
   }
 
+  const dummyPassword = createPassword(crypto.randomBytes(32).toString("hex"));
+
   function verifyPassword(password, user) {
     const expected = Buffer.from(user.password_hash, "hex");
     const received = Buffer.from(hashPassword(password, user.password_salt), "hex");
@@ -351,7 +356,9 @@ function createAuth(options) {
       if (index < 0) return;
       const key = part.slice(0, index).trim();
       const value = part.slice(index + 1).trim();
-      if (key) cookies[key] = decodeURIComponent(value);
+      if (key) {
+        try { cookies[key] = decodeURIComponent(value); } catch { cookies[key] = ""; }
+      }
     });
     return cookies;
   }
@@ -369,8 +376,9 @@ function createAuth(options) {
     response.setHeader(
       "Set-Cookie",
       SESSION_COOKIE + "=" + encodeURIComponent(token)
-        + "; Path=/; HttpOnly; SameSite=Strict; Max-Age="
-        + Math.floor(SESSION_DURATION_MS / 1000)
+        + "; Path=/; HttpOnly; SameSite=Strict"
+        + (process.env.NXT_SECURE_COOKIE === "1" ? "; Secure" : "")
+        + "; Max-Age=" + Math.floor(SESSION_DURATION_MS / 1000)
     );
   }
 
@@ -381,7 +389,9 @@ function createAuth(options) {
     }
     response.setHeader(
       "Set-Cookie",
-      SESSION_COOKIE + "=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"
+      SESSION_COOKIE + "=; Path=/; HttpOnly; SameSite=Strict"
+        + (process.env.NXT_SECURE_COOKIE === "1" ? "; Secure" : "")
+        + "; Max-Age=0"
     );
   }
 
@@ -509,6 +519,10 @@ function createAuth(options) {
   }
 
   function registerFailure(request, username) {
+    if (loginAttempts.size >= MAX_LOGIN_KEYS) {
+      const oldest = loginAttempts.keys().next().value;
+      if (oldest) loginAttempts.delete(oldest);
+    }
     const key = attemptKey(request, username);
     const state = loginAttempts.get(key);
     if (!state || Date.now() - state.startedAt > LOGIN_WINDOW_MS) {
@@ -580,7 +594,13 @@ function createAuth(options) {
     const user = database.prepare(
       "SELECT * FROM users WHERE username = ? COLLATE NOCASE"
     ).get(username);
-    if (!user || !user.active || !verifyPassword(password, user)) {
+    const passwordTarget = user || {
+      password_hash: dummyPassword.hash,
+      password_salt: dummyPassword.salt
+    };
+    const validPassword = password.length <= MAX_PASSWORD_LENGTH
+      && verifyPassword(password, passwordTarget);
+    if (!user || !user.active || !validPassword) {
       registerFailure(request, username);
       return response.status(401).json({
         sucesso: false,
