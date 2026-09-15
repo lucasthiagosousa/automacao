@@ -218,7 +218,8 @@ def main():
     parser.add_argument("--limite", type=int, default=DEFAULT_ALERT_THRESHOLD,
                          help=f"Percentual abaixo do qual o toner entra na lista de pedido (padrao: {DEFAULT_ALERT_THRESHOLD}%%)")
     parser.add_argument("--csv", type=str, default=None, help="Caminho para exportar um CSV com o resultado")
-    parser.add_argument("--community", type=str, default="public", help="SNMP community string (padrao: public)")
+    parser.add_argument("--community", type=str, default=os.environ.get("NXT_SNMP_COMMUNITY", ""),
+                        help="SNMP community string (ou variavel NXT_SNMP_COMMUNITY)")
     parser.add_argument("--timeout", type=float, default=2.0, help="Timeout por consulta em segundos (padrao: 2.0)")
     parser.add_argument("--porta", type=int, default=161, help="Porta SNMP (padrao: 161)")
     parser.add_argument("--html", type=str, default=None, help="Caminho para gerar um relatorio visual em HTML (ex.: relatorio.html)")
@@ -228,6 +229,8 @@ def main():
     parser.add_argument("--lista-fixa", action="store_true",
                         help="Usa a lista antiga gravada no script (somente para contingencia)")
     args = parser.parse_args()
+    if not args.community:
+        parser.error("Informe --community ou defina NXT_SNMP_COMMUNITY no ambiente.")
 
     # Se rodou sem nenhum argumento (caso tipico de clique duplo no .exe),
     # assume o modo "so clicar": gera HTML, abre no navegador e tambem salva CSV.
@@ -253,7 +256,7 @@ def main():
         print("Nenhuma impressora ativa esta cadastrada no portal.")
         return 0
 
-    print(f"Consultando {len(printers)} impressoras via SNMP (community='{args.community}')...\n")
+    print(f"Consultando {len(printers)} impressoras via SNMP...\n")
 
     all_results = []
     low_toner_orders = []
