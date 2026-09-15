@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR" class="workspace-boot">
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Central de Ajuda · Nexo TI</title>
@@ -72,10 +72,20 @@ function updateProgress(){
  document.getElementById("progressValue").textContent=pct+"%";document.getElementById("progressFill").style.width=pct+"%";document.getElementById("progressCount").textContent=count+" de "+lessons.length+" guias concluídos";
  document.getElementById("progressNext").textContent=count===lessons.length?"Treinamento concluído. Você pode revisar qualquer guia.":"Próximo: "+lessons.find(function(item){return !progress[item.key]||!progress[item.key].completed}).title+".";
 }
-async function loadProgress(){try{const response=await fetch("/api/auth/training-progress",{cache:"no-store"});if(!response.ok)throw new Error();const data=await response.json();progress=data.progress||{};}catch{notify("Não foi possível carregar o progresso.");}updateProgress();render(document.getElementById("searchHelp").value)}
+async function loadProgress(){
+ const controller=new AbortController(),timeout=setTimeout(function(){controller.abort();},8000);
+ try{
+  const response=await fetch("/api/auth/training-progress",{cache:"no-store",signal:controller.signal});
+  if(response.status===401){window.location.replace("/login.html");return;}
+  if(!response.ok)throw new Error();
+  const data=await response.json();progress=data.progress||{};
+  if(!progress["welcome-seen"])fetch("/api/auth/training-progress/welcome-seen",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({completed:true})}).catch(function(){});
+ }catch(error){notify(error.name==="AbortError"?"A consulta demorou. Exibindo os guias disponíveis.":"Não foi possível carregar o progresso.");}
+ finally{clearTimeout(timeout);updateProgress();render(document.getElementById("searchHelp").value);}
+}
 async function save(key,completed){try{const response=await fetch("/api/auth/training-progress/"+encodeURIComponent(key),{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({completed:completed})});const data=await response.json();if(!response.ok)throw new Error(data.mensagem||"Falha ao salvar.");progress[key]={completed:completed,completedAt:data.completedAt||""};updateProgress();render(document.getElementById("searchHelp").value);notify(completed?"Treinamento concluído e registrado.":"Guia marcado para revisão.");}catch(error){notify(error.message||"Não foi possível salvar.")}}
 document.getElementById("searchHelp").addEventListener("input",function(){render(this.value)});document.getElementById("clearSearch").addEventListener("click",function(){document.getElementById("searchHelp").value="";render("")});
 document.getElementById("copyDiagnostic").addEventListener("click",async function(){const text=["Nexo TI — solicitação de ajuda","Usuário: "+((window.NXT_CURRENT_USER&&window.NXT_CURRENT_USER.username)||"não identificado"),"Página: "+location.href,"Data: "+new Date().toLocaleString("pt-BR"),"Navegador: "+navigator.userAgent].join("\n");try{await navigator.clipboard.writeText(text);notify("Dados copiados. Encaminhe ao suporte de TI.");}catch{notify("Não foi possível copiar automaticamente.")}});
-window.NXT_AUTH_PROMISE.then(loadProgress).catch(function(){});
+loadProgress();
 })();
 </script></body></html>
