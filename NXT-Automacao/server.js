@@ -25,10 +25,9 @@ const pastaDados = process.env.NXT_DATA_DIR
 
 fs.mkdirSync(pastaDados, { recursive: true });
 const arquivoPlanilha = path.join(pastaDados, "estoque-atual.xlsx");
-const arquivoAutomacao = path.join(
-  pastaProjeto,
-  "automacao.js"
-);
+const arquivoAutomacao = process.versions.electron
+  ? path.join(process.resourcesPath, "app.asar.unpacked", "automacao.js")
+  : path.join(pastaProjeto, "automacao.js");
 const arquivoBanco = path.join(pastaDados, "controle-estoque.db");
 const arquivoToner = path.join(pastaDados, "toner-atual.json");
 const arquivoRestauracao = path.join(pastaDados, "restauracao-pendente.db");
