@@ -31,7 +31,7 @@
 <div class="progress-card" aria-live="polite"><div class="progress-head"><div><strong>Seu treinamento</strong><div class="progress-meta" id="progressCount">Carregando progresso...</div></div><div class="progress-value" id="progressValue">0%</div></div><div class="progress-track"><div class="progress-fill" id="progressFill"></div></div><div class="progress-meta" id="progressNext">Comece pelo tutorial inicial.</div></div></section>
 <div class="toolbar"><input id="searchHelp" type="search" placeholder="Buscar guia, módulo ou tarefa..." aria-label="Buscar na Central de Ajuda"><button class="btn" id="clearSearch" type="button">Limpar busca</button></div>
 <div class="layout"><section class="panel"><div class="panel-head"><div><h3>Guias rápidos por módulo</h3><p>Abra um guia, siga as etapas e marque como concluído.</p></div></div><div class="lesson-list" id="lessonList"></div><div class="empty" id="emptyState">Nenhum guia corresponde à sua busca.</div></section>
-<aside class="side"><section class="panel"><div class="panel-head"><div><h3>Vídeos curtos</h3><p>Conteúdo direto para revisar os principais fluxos.</p></div></div><div class="video-grid" id="videoList"></div></section>
+<aside class="side"><section class="panel"><div class="panel-head"><div><h3>Tutoriais interativos</h3><p>Aprenda diretamente na tela, com cada campo e botão destacado.</p></div></div><div class="video-grid" id="videoList"></div></section>
 <section class="panel quick-help"><h3>Preciso de ajuda</h3><p>Não encontrou o que precisava? Copie os dados da tela atual e encaminhe ao suporte de TI para agilizar o atendimento.</p><button class="btn" id="copyDiagnostic" type="button">Copiar dados para suporte</button></section></aside></div>
 </main><div class="toast" id="toast" role="status"></div>
 <script src="/auth-ui.js"></script>
@@ -61,10 +61,11 @@ function render(query){
   summary.querySelector(".lesson-title").textContent=item.title;summary.querySelector(".lesson-desc").textContent=item.desc;summary.querySelector(".lesson-status").textContent=status;
   const body=document.createElement("div");body.className="lesson-body";const ol=document.createElement("ol");item.steps.forEach(function(step){const li=document.createElement("li");li.textContent=step;ol.appendChild(li)});
   const actions=document.createElement("div");actions.className="lesson-actions";const open=document.createElement("a");open.className="btn";open.href=item.href;open.textContent="Abrir módulo";
-  const complete=document.createElement("button");complete.className="btn btn-primary";complete.type="button";complete.textContent=status==="Concluído"?"Revisar depois":"Marcar como concluído";complete.addEventListener("click",function(){save(item.key,status!=="Concluído")});
-  actions.append(open,complete);body.append(ol,actions);details.append(summary,body);list.appendChild(details);
-  const video=document.createElement("article");video.className="video-card";video.innerHTML='<div class="video-top"><span class="play" aria-hidden="true">▶</span><div><strong></strong><span></span></div></div><button class="btn" type="button">Ver roteiro</button>';
-  video.querySelector("strong").textContent=item.video;video.querySelector(".video-top div span").textContent=item.duration+" · roteiro guiado";video.querySelector("button").addEventListener("click",function(){details.open=true;details.scrollIntoView({behavior:"smooth",block:"center"})});videos.appendChild(video);
+  const guided=document.createElement("a");guided.className="btn btn-primary";guided.href=item.href+(item.href.includes("?")?"&":"?")+"tour="+encodeURIComponent(item.key);guided.textContent="Iniciar tutorial";
+  const complete=document.createElement("button");complete.className="btn";complete.type="button";complete.textContent=status==="Concluído"?"Marcar para revisão":"Marcar como concluído";complete.addEventListener("click",function(){save(item.key,status!=="Concluído")});
+  actions.append(open,guided,complete);body.append(ol,actions);details.append(summary,body);list.appendChild(details);
+  const video=document.createElement("article");video.className="video-card";video.innerHTML='<div class="video-top"><span class="play" aria-hidden="true">▶</span><div><strong></strong><span></span></div></div><button class="btn" type="button">Iniciar destaque</button>';
+  video.querySelector("strong").textContent=item.video;video.querySelector(".video-top div span").textContent=item.steps.length+" etapas · na tela real";video.querySelector("button").addEventListener("click",function(){window.location.href=item.href+(item.href.includes("?")?"&":"?")+"tour="+encodeURIComponent(item.key)});videos.appendChild(video);
  });
 }
 function updateProgress(){
