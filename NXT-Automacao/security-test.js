@@ -78,6 +78,10 @@ run().catch((error) => {
   process.exitCode = 1;
 }).finally(() => {
   if (path.basename(tempDir).startsWith("nxt-security-")) {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    } catch (error) {
+      if (process.platform !== "win32") throw error;
+    }
   }
 });
