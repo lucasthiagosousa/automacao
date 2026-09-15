@@ -12,6 +12,8 @@ const dotenv = require("dotenv");
 dotenv.config({ path: arquivoEnv });
 
 const app = express();
+app.disable("x-powered-by");
+app.set("trust proxy", false);
 const PORTA = Number(process.env.PORT || 3000);
 const HOST = process.env.NXT_HOST || "127.0.0.1";
 
@@ -47,8 +49,50 @@ if (fs.existsSync(arquivoRestauracao)) {
   }
 }
 
-app.use(express.json({ limit: "80mb" }));
-app.use("/assets", express.static(path.join(pastaPublica, "assets")));
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+function sameOriginRequest(request) {
+  const fetchSite = String(request.get("sec-fetch-site") || "").toLowerCase();
+  if (fetchSite === "cross-site") return false;
+  const origin = request.get("origin");
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:")
+      && parsed.host === request.get("host");
+  } catch {
+    return false;
+  }
+}
+function loopbackRequest(request) {
+  const address = String(request.socket.remoteAddress || "").replace(/^::ffff:/, "");
+  return address === "127.0.0.1" || address === "::1";
+}
+app.use((request, response, next) => {
+  response.setHeader("X-Content-Type-Options", "nosniff");
+  response.setHeader("X-Frame-Options", "DENY");
+  response.setHeader("Referrer-Policy", "no-referrer");
+  response.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+  response.setHeader("Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+    + "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; media-src 'self' blob:; "
+    + "connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+  if (request.secure) {
+    response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  if (request.path.startsWith("/api/")) response.setHeader("Cache-Control", "no-store");
+  if (MUTATING_METHODS.has(request.method) && !sameOriginRequest(request)) {
+    return response.status(403).json({ sucesso: false, mensagem: "Origem da requisição não autorizada." });
+  }
+  return next();
+});
+app.use(express.json({ limit: process.env.NXT_JSON_LIMIT || "32mb", strict: true }));
+app.use("/assets", express.static(path.join(pastaPublica, "assets"), {
+  fallthrough: false,
+  immutable: true,
+  maxAge: "1d",
+  dotfiles: "deny"
+}));
 
 const auth = createAuth({
   databasePath: arquivoBanco,
@@ -81,6 +125,15 @@ app.get(["/setup", "/setup.html"], (req, res) => {
   res.sendFile(path.join(pastaPublica, "setup.html"));
 });
 
+app.post("/api/auth/setup", (request, response, next) => {
+  if (!loopbackRequest(request) && process.env.NXT_ALLOW_REMOTE_SETUP !== "1") {
+    return response.status(403).json({
+      sucesso: false,
+      mensagem: "A criação do primeiro administrador só pode ser feita diretamente no servidor."
+    });
+  }
+  return next();
+});
 app.use("/api/auth", auth.router);
 
 app.get(["/admin", "/admin.html"], auth.requireAuth, (req, res) => {
@@ -120,7 +173,12 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.static(pastaPublica));
+app.use(express.static(pastaPublica, {
+  dotfiles: "deny",
+  etag: true,
+  index: false,
+  redirect: false
+}));
 
 let estadoAtualizacao = {
   executando: false,
@@ -2181,13 +2239,23 @@ setInterval(function(){
  * retorna o dashboard principal.
  */
 app.use((req, res, next) => {
-  if (req.method !== "GET") {
-    return next();
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ sucesso: false, mensagem: "Endpoint não encontrado." });
   }
+  if (req.method !== "GET") return next();
+  return res.sendFile(path.join(pastaPublica, "index.html"));
+});
 
-  res.sendFile(
-    path.join(pastaPublica, "index.html")
-  );
+app.use((error, req, res, next) => {
+  console.error("Erro não tratado:", error && error.stack ? error.stack : error);
+  if (res.headersSent) return next(error);
+  if (error && error.type === "entity.too.large") {
+    return res.status(413).json({ sucesso: false, mensagem: "O arquivo ou conteúdo enviado excede o limite permitido." });
+  }
+  if (error instanceof SyntaxError && error.status === 400) {
+    return res.status(400).json({ sucesso: false, mensagem: "O conteúdo JSON enviado é inválido." });
+  }
+  return res.status(500).json({ sucesso: false, mensagem: "Ocorreu um erro interno. Consulte o histórico do servidor." });
 });
 
 const servidor = app.listen(PORTA, HOST, () => {
