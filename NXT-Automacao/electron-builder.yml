@@ -1,7 +1,9 @@
 appId: br.com.operacoesti.controle
 productName: Central de Operações de TI
 copyright: Copyright © 2026
-asar: false
+asar: true
+asarUnpack:
+  - automacao.js
 directories:
   output: dist
   buildResources: build
@@ -19,7 +21,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: build/icon.svg
+  icon: build/icon.ico
   artifactName: "Central-Operacoes-TI-Setup-${version}.${ext}"
 nsis:
   oneClick: false
