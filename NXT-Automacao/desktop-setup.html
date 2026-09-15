@@ -27,6 +27,7 @@
         <div class="field"><label for="email">Usuário ou e-mail NXT</label><input id="email" autocomplete="username" required></div>
         <div class="field"><label for="port">Porta</label><input id="port" type="number" min="1024" max="65535" value="3000" required><div class="hint">Recomendado: 3000</div></div>
         <div class="field full"><label for="password">Senha NXT</label><input id="password" type="password" autocomplete="current-password" required></div>
+        <div class="field full"><label for="snmpCommunity">Comunidade SNMP</label><input id="snmpCommunity" type="password" autocomplete="off" required><div class="hint">Credencial somente leitura configurada nas impressoras.</div></div>
       </div>
       <button id="submit" type="submit">Salvar e criar Master Admin</button>
       <div class="message" id="message"></div>
@@ -41,6 +42,7 @@
     window.nxtDesktop.obterConfiguracao().then(function(config){
       document.getElementById("email").value=config.email||"";
       document.getElementById("port").value=config.port||3000;
+      document.getElementById("snmpCommunity").value=config.snmpCommunity||"";
     });
     form.addEventListener("submit",async function(event){
       event.preventDefault();message.textContent="";submit.disabled=true;submit.textContent="Salvando...";
@@ -48,6 +50,7 @@
         await window.nxtDesktop.salvarConfiguracao({
           email:document.getElementById("email").value,
           password:document.getElementById("password").value,
+          snmpCommunity:document.getElementById("snmpCommunity").value,
           port:Number(document.getElementById("port").value),
           primeiroAcesso:primeiroAcesso
         });
