@@ -331,8 +331,8 @@
       { selector:"#reload", title:"Atualizar a lista", text:"Atualize depois de uma nova leitura para validar níveis e trocas automáticas." }
     ],
     "toner-compatibility": [
-      { selector:"[data-screen='compatibility'],button:nth-of-type(4)", title:"Abrir Compatibilidade", text:"Acesse a guia Compatibilidade para relacionar impressora e suprimento." },
-      { selector:"#printerModel", title:"Modelo da impressora", text:"Informe o modelo como ele aparece no painel." },
+      { selector:".tab[data-tab='compatibility']", title:"Abrir Compatibilidade", text:"Acesse a guia Compatibilidade para relacionar impressora e suprimento." },
+      { selector:"#printerModel", open:".tab[data-tab='compatibility']", title:"Modelo da impressora", text:"Informe o modelo como ele aparece no painel." },
       { selector:"#tonerModel", title:"Modelo do toner", text:"Digite o código do cartucho compatível." },
       { selector:"#compatForm button[type='submit']", title:"Adicionar compatibilidade", text:"Salve o relacionamento para o sistema recomendar o toner correto." }
     ],
