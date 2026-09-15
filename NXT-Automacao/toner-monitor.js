@@ -127,6 +127,10 @@ function parsePacket(buffer) {
     tag: parsedValue.tag, value: decodeValue(parsedValue.tag, parsedValue.value) };
 }
 
+function snmpCommunity() {
+  return String(process.env.NXT_SNMP_COMMUNITY || "").trim();
+}
+
 function query(ip, targetOid, pduType, timeout, requestId) {
   return new Promise(function (resolve) {
     const socket = dgram.createSocket("udp4");
@@ -137,7 +141,9 @@ function query(ip, targetOid, pduType, timeout, requestId) {
       try { resolve(parsePacket(message)); } catch { resolve(null); }
     });
     socket.once("error", function () { clearTimeout(timer); socket.close(); resolve(null); });
-    const packet = requestPacket("public", targetOid, requestId, pduType);
+    const community = snmpCommunity();
+    if (!community) { clearTimeout(timer); socket.close(); return resolve(null); }
+    const packet = requestPacket(community, targetOid, requestId, pduType);
     socket.send(packet, 161, ip, function (error) {
       if (error) { clearTimeout(timer); socket.close(); resolve(null); }
     });
@@ -226,6 +232,9 @@ async function checkPrinter(printer, threshold, timeout) {
 }
 
 async function scan(options = {}) {
+  if (!snmpCommunity()) {
+    throw new Error("Configure NXT_SNMP_COMMUNITY no arquivo .env antes da leitura SNMP.");
+  }
   const threshold = Math.max(1, Math.min(99, Number(options.threshold) || 20));
   const timeout = Math.max(500, Math.min(10000, Number(options.timeout) || 2200));
   const printerList = Array.isArray(options.printers) ? options.printers : PRINTERS;
