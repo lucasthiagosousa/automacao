@@ -93,6 +93,9 @@
       body.workspace-operational ::selection{background:#bdebd2;color:#063e25}
       .btn-primary{border-color:#0a9b59!important;background:linear-gradient(135deg,#12cc78,#079854)!important;color:#fff!important}
       @media(max-width:560px){body.workspace-operational .header-inner,.workspace-tabs{width:calc(100% - 24px)!important}body.workspace-page-colaboradores .wrap>.intro,body.workspace-page-colaboradores .wrap>#dropzone,body.workspace-page-colaboradores .wrap>#app,body.workspace-page-colaboradores .wrap>footer{width:calc(100% - 24px)!important}body.workspace-page-toner .toolbar #search,body.workspace-page-toner .toolbar #status,body.workspace-page-toner .toolbar .btn{flex:1 1 100%;width:100%!important}.auth-copy{display:none}.auth-account{padding:5px}.header-actions,.header-right{gap:6px!important}.header-actions>.btn,.header-right>.btn,.header-right>.back-link{min-height:36px!important;padding:7px 9px!important;font-size:10px!important}.workspace-tabs{gap:4px}.workspace-tab{flex:0 0 auto;height:37px;font-size:10px}}
+      .global-help-button{position:fixed;z-index:48;right:20px;bottom:20px;min-height:46px;padding:0 16px;display:inline-flex;align-items:center;gap:8px;border:1px solid #087747;border-radius:24px;background:#087747;color:#fff;font-size:13px;font-weight:600;box-shadow:0 10px 28px rgba(2,80,43,.25);cursor:pointer}.global-help-button:hover{background:#06683d;transform:translateY(-1px)}.global-help-button:focus-visible{outline:3px solid #60e5a1;outline-offset:3px}.global-help-button svg{width:19px;height:19px}
+      .first-use-backdrop{position:fixed;z-index:80;inset:0;display:grid;place-items:center;padding:18px;background:rgba(1,24,13,.64);backdrop-filter:blur(4px)}.first-use-dialog{width:min(100%,520px);padding:25px;border:1px solid #d7e7df;border-radius:18px;background:#fff;color:#172b3f;box-shadow:0 25px 70px rgba(0,28,15,.3)}.first-use-dialog .tip-icon{width:48px;height:48px;display:grid;place-items:center;margin-bottom:15px;border-radius:14px;background:#e1f7eb;color:#087747;font-size:22px}.first-use-dialog h2{margin:0 0 8px;font-size:23px}.first-use-dialog p{margin:0 0 18px;color:#60758a;font-size:14px;line-height:1.6}.first-use-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:9px}.first-use-actions a,.first-use-actions button{min-height:42px;padding:0 14px;border:1px solid #cad8e5;border-radius:10px;background:#fff;color:#173149;font:500 14px inherit;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}.first-use-actions .primary{border-color:#079854;background:#0aad63;color:#fff}
+      @media(max-width:560px){.global-help-button{right:12px;bottom:12px;width:46px;padding:0;justify-content:center}.global-help-button span{display:none}.first-use-dialog{padding:19px}.first-use-actions{display:grid}.first-use-actions>*{width:100%;justify-content:center}}
       /* Responsividade global: notebooks, tablets e celulares */
       body.workspace-operational{overflow-x:hidden}
       body.workspace-operational img,body.workspace-operational video,body.workspace-operational canvas,body.workspace-operational svg{max-width:100%}
@@ -229,6 +232,29 @@
     }
   }
 
+  function installHelpExperience() {
+    if (["/login.html", "/setup.html", "/ajuda.html"].includes(window.location.pathname)) return;
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "global-help-button";
+    button.setAttribute("aria-label", "Preciso de ajuda");
+    button.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 1 1 5.4 1.8c-1.3 1-2.5 1.7-2.5 3.2M12 18h.01"/></svg><span>Preciso de ajuda</span>';
+    button.addEventListener("click", function () { window.location.href = "/ajuda.html?origem=" + encodeURIComponent(window.location.pathname); });
+    document.body.appendChild(button);
+
+    fetch("/api/auth/training-progress", { cache:"no-store" }).then(function (response) {
+      if (!response.ok) return null; return response.json();
+    }).then(function (data) {
+      if (!data || (data.progress && data.progress["welcome-seen"])) return;
+      const backdrop = document.createElement("div"); backdrop.className = "first-use-backdrop"; backdrop.setAttribute("role", "presentation");
+      const dialog = document.createElement("section"); dialog.className = "first-use-dialog"; dialog.setAttribute("role", "dialog"); dialog.setAttribute("aria-modal", "true"); dialog.setAttribute("aria-labelledby", "firstUseTitle");
+      dialog.innerHTML = '<div class="tip-icon" aria-hidden="true">?</div><h2 id="firstUseTitle">Bem-vindo ao Nexo TI</h2><p>A Central de Ajuda reúne um tutorial inicial e guias rápidos de cada módulo. Seu progresso fica salvo no seu usuário.</p><div class="first-use-actions"><button type="button">Ver depois</button><a class="primary" href="/ajuda.html">Começar tutorial</a></div>';
+      function seen() { fetch("/api/auth/training-progress/welcome-seen", { method:"PUT", headers:{"content-type":"application/json"}, body:JSON.stringify({completed:true}) }).catch(function () {}); }
+      dialog.querySelector("button").addEventListener("click", function () { seen(); backdrop.remove(); });
+      dialog.querySelector("a").addEventListener("click", seen);
+      backdrop.appendChild(dialog); document.body.appendChild(backdrop); dialog.querySelector("a").focus();
+    }).catch(function () {});
+  }
+
   function decorate(user) {
     const permissions=user.permissions||{};
     [{path:"/",key:"stock"},{path:"/toner.html",key:"toner"},{path:"/colaboradores.html",key:"collaborators"},{path:"/atividades.html",key:"view_audit"}].forEach(function(item){
@@ -266,6 +292,7 @@
   window.NXT_AUTH_PROMISE = requestUser().then(function (user) {
     window.NXT_CURRENT_USER = user;
     decorate(user);
+    installHelpExperience();
     return user;
   });
 })();
