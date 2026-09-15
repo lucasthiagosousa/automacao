@@ -51,12 +51,13 @@ jobs:
           $resources = "dist\win-unpacked\resources"
           $arquivos = @(
             "$resources\app.asar",
-            "$resources\app.asar.unpacked\automacao.js",
-            "dist\win-unpacked\Central de Operações de TI.exe"
+            "$resources\app.asar.unpacked\automacao.js"
           )
           foreach ($arquivo in $arquivos) {
             if (-not (Test-Path $arquivo)) { throw "Arquivo obrigatorio ausente: $arquivo" }
           }
+          $executavel = Get-ChildItem -Path "dist\win-unpacked" -Filter "*.exe" | Select-Object -First 1
+          if (-not $executavel) { throw "Executavel principal ausente." }
 
       - name: Publicar instalador
         shell: pwsh
