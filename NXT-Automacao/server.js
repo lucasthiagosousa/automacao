@@ -2247,7 +2247,6 @@ app.use((req, res, next) => {
 });
 
 app.use((error, req, res, next) => {
-  console.error("Erro não tratado:", error && error.stack ? error.stack : error);
   if (res.headersSent) return next(error);
   if (error && error.type === "entity.too.large") {
     return res.status(413).json({ sucesso: false, mensagem: "O arquivo ou conteúdo enviado excede o limite permitido." });
@@ -2255,6 +2254,10 @@ app.use((error, req, res, next) => {
   if (error instanceof SyntaxError && error.status === 400) {
     return res.status(400).json({ sucesso: false, mensagem: "O conteúdo JSON enviado é inválido." });
   }
+  if (Number(error && error.status) === 404) {
+    return res.status(404).json({ sucesso: false, mensagem: "Arquivo não encontrado." });
+  }
+  console.error("Erro não tratado:", error && error.stack ? error.stack : error);
   return res.status(500).json({ sucesso: false, mensagem: "Ocorreu um erro interno. Consulte o histórico do servidor." });
 });
 
