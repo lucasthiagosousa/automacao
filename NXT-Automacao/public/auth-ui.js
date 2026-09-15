@@ -372,8 +372,38 @@
     ]
   };
 
+  const TOUR_PATHS = {
+    "getting-started":"Menu principal → Central",
+    "central-tasks":"Menu principal → Central → Tarefas operacionais",
+    stock:"Menu principal → Estoque",
+    "stock-search":"Menu principal → Estoque → Pesquisa e filtros",
+    "stock-export":"Menu principal → Estoque → Pesquisa e filtros → Exportar",
+    toner:"Menu principal → Toners",
+    "toner-add":"Menu principal → Toners → Estoque de toners → Expandir",
+    "toner-printer-add":"Menu principal → Toners → Gerenciar IPs",
+    "toner-search":"Menu principal → Toners → Pesquisa de impressoras",
+    "toner-exchange":"Menu principal → Toners → Operação e trocas → Roteiro de trocas",
+    "toner-compatibility":"Menu principal → Toners → Operação e trocas → Compatibilidade",
+    collaborators:"Menu principal → Colaboradores",
+    "collaborators-import":"Menu principal → Colaboradores → Importar planilha",
+    "collaborators-vacation":"Menu principal → Colaboradores → Férias e acessos",
+    activities:"Menu principal → Atividades",
+    "activities-search":"Menu principal → Atividades → Filtros do histórico",
+    reports:"Central → Configurações → Abrir Centro de relatórios",
+    "reports-generate":"Central → Configurações → Abrir Centro de relatórios → Gerar relatório",
+    automations:"Central → Configurações → Monitorar automações",
+    "automations-daily":"Central → Configurações → Monitorar automações → Relatório diário",
+    "automations-history":"Central → Configurações → Monitorar automações → Histórico de execuções"
+  };
+
   function startGuidedTour(key) {
-    const steps = GUIDED_TOURS[key] || []; let current = 0, spotlight, popover, target;
+    const originalSteps = GUIDED_TOURS[key] || [];
+    const steps = originalSteps.slice();
+    if (TOUR_PATHS[key]) steps.unshift({
+      selector:".workspace-tabs,.header-actions,.header-right,.header",
+      title:"Como chegar até esta função",
+      text:TOUR_PATHS[key]
+    }); let current = 0, spotlight, popover, target;
     function remove() { if (spotlight) spotlight.remove(); if (popover) popover.remove(); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); const url=new URL(location.href);url.searchParams.delete("tour");history.replaceState(null,"",url.pathname+url.search+url.hash); }
     function position() {
       if (!target || !spotlight || !popover) return; const rect=target.getBoundingClientRect(),pad=6;
