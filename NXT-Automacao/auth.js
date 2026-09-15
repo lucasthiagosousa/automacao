@@ -138,6 +138,11 @@ function createAuth(options) {
     + "description TEXT NOT NULL DEFAULT '',user_id INTEGER,created_at TEXT NOT NULL,"
     + "FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL"
     + ");"
+    + "CREATE TABLE IF NOT EXISTS user_training_progress ("
+    + "user_id INTEGER NOT NULL,lesson_key TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,"
+    + "completed_at TEXT NOT NULL DEFAULT '',updated_at TEXT NOT NULL,"
+    + "PRIMARY KEY(user_id,lesson_key),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE"
+    + ");"
     + "CREATE TABLE IF NOT EXISTS operational_tasks ("
     + "id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,category TEXT NOT NULL DEFAULT 'general',"
     + "source_type TEXT NOT NULL DEFAULT '',source_id TEXT NOT NULL DEFAULT '',"
@@ -620,6 +625,34 @@ function createAuth(options) {
   router.get("/me", requireAuth, function (request, response) {
     response.setHeader("Cache-Control", "no-store");
     response.json({ sucesso: true, user: publicUser(request.user) });
+  });
+
+  const TRAINING_LESSONS = ["getting-started","stock","toner","collaborators","activities","reports","automations"];
+
+  router.get("/training-progress", requireAuth, function (request, response) {
+    response.setHeader("Cache-Control", "no-store");
+    const rows = database.prepare(
+      "SELECT lesson_key AS lessonKey,completed,completed_at AS completedAt,updated_at AS updatedAt FROM user_training_progress WHERE user_id=?"
+    ).all(Number(request.user.id));
+    const progress = Object.fromEntries(rows.map(function (row) {
+      return [row.lessonKey, { completed:Boolean(row.completed), completedAt:row.completedAt || "", updatedAt:row.updatedAt }];
+    }));
+    const completed = TRAINING_LESSONS.filter(function (key) { return progress[key] && progress[key].completed; }).length;
+    response.json({ sucesso:true, lessons:TRAINING_LESSONS, progress:progress, completed:completed, total:TRAINING_LESSONS.length, percentage:Math.round(completed * 100 / TRAINING_LESSONS.length) });
+  });
+
+  router.put("/training-progress/:lessonKey", requireAuth, function (request, response) {
+    const lessonKey = safeText(request.params.lessonKey, 40);
+    if (!TRAINING_LESSONS.includes(lessonKey)) return response.status(400).json({ sucesso:false, mensagem:"Treinamento inválido." });
+    const completed = request.body && request.body.completed === true;
+    const now = nowIso();
+    database.prepare(
+      "INSERT INTO user_training_progress (user_id,lesson_key,completed,completed_at,updated_at) VALUES (?,?,?,?,?) "
+      + "ON CONFLICT(user_id,lesson_key) DO UPDATE SET completed=excluded.completed,completed_at=excluded.completed_at,updated_at=excluded.updated_at"
+    ).run(Number(request.user.id), lessonKey, completed ? 1 : 0, completed ? now : "", now);
+    addAudit(Number(request.user.id), completed ? "training_completed" : "training_reopened", "training", lessonKey,
+      completed ? "Guia de treinamento concluído." : "Guia de treinamento marcado para revisão.");
+    response.json({ sucesso:true, lessonKey:lessonKey, completed:completed, completedAt:completed ? now : "" });
   });
 
   router.get("/vacation-access-plans", requireAuth, requirePermission("collaborators"), function (request, response) {
