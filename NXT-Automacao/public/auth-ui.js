@@ -250,7 +250,7 @@
       dialog.innerHTML = '<div class="tip-icon" aria-hidden="true">?</div><h2 id="firstUseTitle">Bem-vindo ao Nexo TI</h2><p>A Central de Ajuda reúne um tutorial inicial e guias rápidos de cada módulo. Seu progresso fica salvo no seu usuário.</p><div class="first-use-actions"><button type="button">Ver depois</button><a class="primary" href="/ajuda.html">Começar tutorial</a></div>';
       function seen() { fetch("/api/auth/training-progress/welcome-seen", { method:"PUT", headers:{"content-type":"application/json"}, body:JSON.stringify({completed:true}) }).catch(function () {}); }
       dialog.querySelector("button").addEventListener("click", function () { seen(); backdrop.remove(); });
-      dialog.querySelector("a").addEventListener("click", seen);
+      dialog.querySelector("a").addEventListener("click", function () { backdrop.remove(); });
       backdrop.appendChild(dialog); document.body.appendChild(backdrop); dialog.querySelector("a").focus();
     }).catch(function () {});
   }
