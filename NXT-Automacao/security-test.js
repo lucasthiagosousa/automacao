@@ -48,6 +48,26 @@ async function run() {
     assert.match(cookie, /HttpOnly/i);
     assert.match(cookie, /SameSite=Strict/i);
 
+    response = await fetch(base + "/api/auth/training-progress", { headers: { cookie } });
+    assert.equal(response.status, 200, "Progresso do treinamento não pôde ser consultado.");
+    let training = await response.json();
+    assert.equal(training.total, 7);
+    assert.equal(training.completed, 0);
+
+    response = await fetch(base + "/api/auth/training-progress/getting-started", {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json", origin: base },
+      body: JSON.stringify({ completed: true })
+    });
+    assert.equal(response.status, 200, "Conclusão do treinamento não pôde ser registrada.");
+
+    response = await fetch(base + "/api/auth/training-progress/invalid-lesson", {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json", origin: base },
+      body: JSON.stringify({ completed: true })
+    });
+    assert.equal(response.status, 400, "Identificador de treinamento inválido deveria ser rejeitado.");
+
     response = await fetch(base + "/api/system/health");
     assert.equal(response.status, 401, "Rota protegida aceitou acesso sem sessão.");
 
