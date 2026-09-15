@@ -48,15 +48,11 @@ jobs:
       - name: Validar dependências empacotadas
         shell: powershell
         run: |
-          $app = "dist\win-unpacked\resources\app"
+          $resources = "dist\win-unpacked\resources"
           $arquivos = @(
-            "$app\node_modules\dunder-proto\get.js",
-            "$app\node_modules\get-proto\index.js",
-            "$app\node_modules\express\index.js",
-            "$app\server.js",
-            "$app\desktop.js",
-            "$app\public\toner-operacao.html",
-            "$app\public\vendor\qrcode.min.js"
+            "$resources\app.asar",
+            "$resources\app.asar.unpacked\automacao.js",
+            "dist\win-unpacked\Central de Operações de TI.exe"
           )
           foreach ($arquivo in $arquivos) {
             if (-not (Test-Path $arquivo)) { throw "Arquivo obrigatorio ausente: $arquivo" }
