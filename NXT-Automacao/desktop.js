@@ -47,7 +47,7 @@ function carregarConfiguracao() {
   return resultado;
 }
 
-function salvarConfiguracao({ email, password, port = 3000, skip = false }) {
+function salvarConfiguracao({ email, password, snmpCommunity, port = 3000, skip = false }) {
   const destino = caminhos();
   fs.mkdirSync(destino.raiz, { recursive: true });
   const limpar = (valor) => String(valor || "").replace(/[\r\n]/g, "").trim();
@@ -58,14 +58,16 @@ function salvarConfiguracao({ email, password, port = 3000, skip = false }) {
   const conteudo = [
     `NXT_EMAIL=${limpar(email)}`,
     `NXT_PASSWORD=${limpar(password)}`,
+    `NXT_SNMP_COMMUNITY=${limpar(snmpCommunity)}`,
     `NXT_PORT=${porta}`,
-    "NXT_CONFIG_VERSION=2",
+    "NXT_CONFIG_VERSION=3",
     `NXT_SETUP_SKIPPED=${skip ? "1" : "0"}`,
     "",
   ].join("\n");
   fs.writeFileSync(destino.env, conteudo, { encoding: "utf8", mode: 0o600 });
   process.env.NXT_EMAIL = limpar(email);
   process.env.NXT_PASSWORD = limpar(password);
+  process.env.NXT_SNMP_COMMUNITY = limpar(snmpCommunity);
   process.env.PORT = String(porta);
 }
 
@@ -187,10 +189,10 @@ ipcMain.handle("report:save-pdf", async (_evento, options = {}) => {
 
 ipcMain.handle("nxt-config:get", () => {
   const config = carregarConfiguracao();
-  return { email: config.NXT_EMAIL || "", port: Number(config.NXT_PORT || 3000) };
+  return { email: config.NXT_EMAIL || "", snmpCommunity: config.NXT_SNMP_COMMUNITY || "", port: Number(config.NXT_PORT || 3000) };
 });
 ipcMain.handle("nxt-config:save", (_evento, dados) => {
-  if (!dados?.email || !dados?.password) throw new Error("Informe o e-mail e a senha do NXT.");
+  if (!dados?.email || !dados?.password || !dados?.snmpCommunity) throw new Error("Informe o e-mail, a senha do NXT e a comunidade SNMP.");
   salvarConfiguracao(dados);
   abrirCriacaoAdmin = Boolean(dados?.primeiroAcesso);
   janelaConfiguracao?.close();
@@ -198,7 +200,7 @@ ipcMain.handle("nxt-config:save", (_evento, dados) => {
   return { sucesso: true };
 });
 ipcMain.handle("nxt-config:skip", () => {
-  salvarConfiguracao({ email: "", password: "", port: 3000, skip: true });
+  salvarConfiguracao({ email: "", password: "", snmpCommunity: "", port: 3000, skip: true });
   janelaConfiguracao?.close();
   if (!janelaPrincipal) iniciarSistema();
   return { sucesso: true };
@@ -223,8 +225,8 @@ app.whenReady().then(() => {
   app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
   configurarAmbiente();
   const config = carregarConfiguracao();
-  const configuracaoAtual = config.NXT_CONFIG_VERSION === "2";
-  const credenciaisCompletas = Boolean(config.NXT_EMAIL && config.NXT_PASSWORD);
+  const configuracaoAtual = config.NXT_CONFIG_VERSION === "3";
+  const credenciaisCompletas = Boolean(config.NXT_EMAIL && config.NXT_PASSWORD && config.NXT_SNMP_COMMUNITY);
   if (!configuracaoAtual || !credenciaisCompletas) criarJanelaConfiguracao(true);
   else iniciarSistema();
 });
