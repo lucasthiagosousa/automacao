@@ -94,6 +94,17 @@ app.use("/assets", express.static(path.join(pastaPublica, "assets"), {
   dotfiles: "deny"
 }));
 
+app.get("/favicon.ico", (req, res) => {
+  res.type("image/svg+xml");
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  return res.sendFile(path.join(pastaPublica, "assets", "nexo-ti-icon.svg"));
+});
+app.get("/favicon.svg", (req, res) => {
+  res.type("image/svg+xml");
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  return res.sendFile(path.join(pastaPublica, "assets", "nexo-ti-icon.svg"));
+});
+
 const auth = createAuth({
   databasePath: arquivoBanco,
 });
