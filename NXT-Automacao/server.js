@@ -1477,29 +1477,22 @@ function buildTonerWorklist() {
   const threshold = Number(report.threshold) || 20;
   const inventory = lerEstoqueToners();
   const reserved = reservedTonerCounts();
-  const compatibility = compatibilityRows().filter(function(item) { return item.active; });
   return (report.printers || []).filter(function(printer) {
     return printer.online !== false && currentTonerSupplies(printer).some(function(supply) { return Number(supply.percent) <= threshold + 15; });
   }).map(function(printer) {
-    const rules = compatibility.filter(function(rule) {
-      return rule.printerModel.toLocaleLowerCase("pt-BR") === String(printer.model || "").toLocaleLowerCase("pt-BR");
-    });
     const supplies = currentTonerSupplies(printer).filter(function(supply) {
       return Number(supply.percent) <= threshold + 15;
     }).map(function(supply) {
       const detected = tonerCode(supply.description);
       const color = tonerColor(supply.description);
-      const rule = rules.find(function(item) {
-        return detected && String(item.tonerModel).toUpperCase().includes(detected);
-      }) || (rules.length === 1 ? rules[0] : null);
-      const model = rule ? rule.tonerModel : detected || printer.cartridge || "Confirmar modelo";
+      const model = detected || printer.cartridge || "Confirmar modelo";
       const item = inventory.find(function(entry) {
-        return tonerKey(entry.modelo, entry.cor) === tonerKey(model, rule ? rule.color : color);
+        return tonerKey(entry.modelo, entry.cor) === tonerKey(model, color);
       });
-      const reservedQuantity = reserved.get(tonerKey(model, rule ? rule.color : color)) || 0;
+      const reservedQuantity = reserved.get(tonerKey(model, color)) || 0;
       return {
         description:supply.description, level:Number(supply.percent), status:supply.status,
-        tonerModel:model, color:rule ? rule.color : color,
+        tonerModel:model, color:color,
         stock:Number(item && item.quantidade) || 0,
         reserved:reservedQuantity,
         available:Math.max(0, (Number(item && item.quantidade) || 0) - reservedQuantity)
@@ -1523,7 +1516,7 @@ app.get("/api/toner/operations", auth.requirePermission("toner"), function(req,r
     + "COALESCE(u.username,'Sistema') AS reservedBy FROM toner_reservations r LEFT JOIN users u ON u.id=r.reserved_by "
     + "WHERE r.status='reserved' ORDER BY r.reserved_at DESC"
   ).all();
-  return res.json({sucesso:true,worklist:buildTonerWorklist(),reservations:reservations,compatibility:compatibilityRows()});
+  return res.json({sucesso:true,worklist:buildTonerWorklist(),reservations:reservations});
 });
 app.get("/api/toner/exchanges", auth.requirePermission("toner"), function(req,res) {
   const limit=Math.max(1,Math.min(500,Number(req.query.limit)||100));
@@ -1561,11 +1554,6 @@ app.post("/api/toner/exchanges", auth.requirePermission("toner"), requireTonerOp
   const ip=String(req.body?.ip||"").trim(),model=String(req.body?.tonerModel||"").trim(),color=String(req.body?.color||"").trim();
   const printer=activePrinterByIp(ip);
   if(!printer||!model||!color)return res.status(400).json({sucesso:false,mensagem:"Informe impressora, modelo e cor do toner."});
-  const rules=compatibilityRows().filter(function(rule){
-    return rule.active&&rule.printerModel.toLocaleLowerCase("pt-BR")===String(printer.model||"").toLocaleLowerCase("pt-BR");
-  });
-  if(rules.length&&!rules.some(function(rule){return tonerKey(rule.tonerModel,rule.color)===tonerKey(model,color);}))
-    return res.status(409).json({sucesso:false,mensagem:"O toner escolhido não está marcado como compatível com este modelo de impressora."});
   const inventory=lerEstoqueToners();
   const stock=inventory.find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(model,color);});
   const ownReservation=auth.database.prepare("SELECT id FROM toner_reservations WHERE printer_ip=? AND toner_model=? AND color=? AND status='reserved' ORDER BY reserved_at LIMIT 1").get(ip,model,color);
@@ -1624,11 +1612,44 @@ app.get("/api/toner/diagnostics/:ip", auth.requireMaster, function(req,res) {
   const history=auth.database.prepare(
     "SELECT supply_name AS supplyName,level,status,recorded_at AS recordedAt FROM toner_history WHERE printer_ip=? ORDER BY recorded_at DESC LIMIT 30"
   ).all(printer.ip);
+  const report=lerTonerAtual(),lastReading=report.updatedAt||null,supplies=reading&&reading.supplies||[];
+  const responded=Boolean(reading&&reading.online),ageMinutes=lastReading?Math.max(0,Math.round((Date.now()-Date.parse(lastReading))/60000)):null;
+  const validSupplies=supplies.filter(function(item){return item.isToner!==false&&Number.isFinite(Number(item.percent));});
+  const unavailableSupplies=supplies.filter(function(item){return item.isToner!==false&&!Number.isFinite(Number(item.percent));});
+  const recentHistory=history.slice(0,10),zeroReadings=recentHistory.filter(function(item){return Number(item.level)===0;}).length;
+  const issues=[],actions=[];
+  if(!responded){
+    issues.push({severity:"critical",title:"Sem resposta SNMP",detail:"A impressora não respondeu à consulta UDP na porta 161."});
+    actions.push("Confirme se a impressora está ligada e acessível pelo IP.");
+    actions.push("Teste conectividade de rede entre o servidor e a impressora.");
+    actions.push("Verifique se o SNMP v2c está habilitado e se a comunidade configurada está correta.");
+    actions.push("Libere UDP 161 no firewall ou na VLAN, se necessário.");
+  }else{
+    if(!supplies.length){
+      issues.push({severity:"warning",title:"Suprimentos não informados",detail:"O equipamento respondeu, mas não retornou a tabela de suprimentos."});
+      actions.push("Confirme se o equipamento permite leitura da Printer-MIB.");
+      actions.push("Atualize o firmware e revise as permissões SNMP somente leitura.");
+    }
+    if(unavailableSupplies.length){
+      issues.push({severity:"warning",title:"Níveis incompletos",detail:unavailableSupplies.length+" consumível(is) foram encontrados sem percentual calculável."});
+      actions.push("Confira se os campos de nível atual e capacidade máxima são fornecidos pelo fabricante.");
+    }
+    if(zeroReadings>=2){
+      issues.push({severity:"warning",title:"Leituras zeradas recorrentes",detail:zeroReadings+" das últimas "+recentHistory.length+" leituras retornaram 0%. Isso pode gerar falso alerta."});
+      actions.push("Compare o nível exibido no painel físico da impressora com a leitura SNMP.");
+    }
+  }
+  if(ageMinutes!==null&&ageMinutes>120){
+    issues.push({severity:"warning",title:"Leitura desatualizada",detail:"A última leitura ocorreu há "+ageMinutes+" minutos."});
+    actions.push("Execute uma nova atualização das impressoras.");
+  }
+  if(responded&&supplies.length&&validSupplies.length&&!issues.length)
+    issues.push({severity:"ok",title:"Comunicação saudável",detail:"A impressora respondeu e informou os níveis esperados."});
   return res.json({sucesso:true,diagnostic:{
-    ip:printer.ip,model:printer.model,location:printer.location,snmpVersion:"v2c",port:161,readOnly:true,
-    responded:Boolean(reading&&reading.online),status:reading?reading.status:"unknown",
-    lastReading:lerTonerAtual().updatedAt||null,hostname:reading&&reading.hostname||"",
-    supplies:reading&&reading.supplies||[],history:history
+    ip:printer.ip,model:printer.model,location:printer.location,unit:printer.unit||"",snmpVersion:"v2c",port:161,readOnly:true,
+    responded:responded,status:reading?reading.status:"unknown",health:!responded?"critical":issues.some(function(item){return item.severity==="warning";})?"warning":"ok",
+    lastReading:lastReading,ageMinutes:ageMinutes,hostname:reading&&reading.hostname||"",
+    supplies:supplies,validSupplyCount:validSupplies.length,issues:issues,actions:Array.from(new Set(actions)),history:history
   }});
 });
 app.get("/api/toner/insights", auth.requirePermission("toner"), function(req,res) {
