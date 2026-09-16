@@ -684,7 +684,7 @@ app.post(
     try {
       const impressoras = auth.getPrinters()
         .filter((item) => item.active)
-        .map((item) => [item.ip, item.model]);
+        .map((item) => [item.ip, item.model, item.location || "Sem unidade"]);
       const relatorio = await tonerMonitor.scan({
         threshold: Math.max(1, Math.min(99, Number(auth.getSetting("toner_threshold", "20")) || 20)),
         printers: impressoras,
