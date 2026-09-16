@@ -379,11 +379,15 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
       render();
       try { await save(); } catch (error) { items = backup; render(); notify(error.message); }
     });
-    window.NXT_AUTH_PROMISE.then(async function () {
+    async function reloadInventory() {
       var data = await api("/api/toner/inventory?t=" + Date.now(), { cache: "no-store" });
       items = data.itens || [];
       render();
-    }).catch(function (error) { notify(error.message); });
+    }
+    window.addEventListener("toner-inventory-changed", function () {
+      reloadInventory().catch(function (error) { notify(error.message); });
+    });
+    window.NXT_AUTH_PROMISE.then(reloadInventory).catch(function (error) { notify(error.message); });
     render();
   })();
   </script>
@@ -518,18 +522,30 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
       render();
       if (message) notify(message);
     }
+    async function registerUsed(item) {
+      var response = await fetch("/api/toner/used/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelo: item.modelo,
+          cor: item.cor,
+          unidade: item.unidade
+        })
+      });
+      var data = await response.json();
+      if (!response.ok) throw new Error(data.mensagem || "Não foi possível registrar o uso do toner.");
+      items = data.usados || [];
+      window.dispatchEvent(new CustomEvent("toner-inventory-changed"));
+      render();
+      notify(data.mensagem || "Toner usado registrado e estoque atualizado.");
+    }
     document.getElementById("usedTonerForm").addEventListener("submit", async function (event) {
       event.preventDefault();
       var modelo = modelInput.value.trim().replace(/\s+/g, " ");
       var cor = colorInput.value;
       var unidade = unitInput.value;
-      var existing = items.find(function (item) {
-        return item.modelo.toLowerCase() === modelo.toLowerCase() && item.cor.toLowerCase() === cor.toLowerCase() && (item.unidade || "Sem unidade") === unidade;
-      });
-      if (existing) existing.quantidade += 1;
-      else items.push({ modelo: modelo, cor: cor, unidade: unidade, quantidade: 1 });
       try {
-        await save("Toner usado registrado.");
+        await registerUsed({ modelo: modelo, cor: cor, unidade: unidade });
         emailUnitInput.value = unidade;
         event.target.reset();
         render();
@@ -546,8 +562,17 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
       if (!button) return;
       var index = Number(button.dataset.plus ?? button.dataset.minus ?? button.dataset.remove);
       if (!Number.isInteger(index) || !items[index]) return;
+      if (button.dataset.plus !== undefined) {
+        button.disabled = true;
+        try {
+          await registerUsed(items[index]);
+        } catch (error) {
+          button.disabled = false;
+          notify(error.message);
+        }
+        return;
+      }
       var backup = items.map(function (item) { return Object.assign({}, item); });
-      if (button.dataset.plus !== undefined) items[index].quantidade += 1;
       if (button.dataset.minus !== undefined) {
         items[index].quantidade -= 1;
         if (items[index].quantidade <= 0) items.splice(index, 1);
