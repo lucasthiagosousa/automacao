@@ -1302,10 +1302,17 @@ app.put("/api/configuracao/toner", auth.requireMaster, (req, res) => {
  * Toners usados aguardando reposição.
  * A lista é compartilhada entre todos os usuários com acesso ao módulo.
  */
+function normalizarUnidadeToner(value) {
+  const key = String(value || "").trim().toLocaleLowerCase("pt-BR");
+  return ({ osasco: "Osasco", cd: "CD", bahia: "Bahia" })[key] || "Sem unidade";
+}
 function lerTonersUsados() {
   try {
     const items = JSON.parse(auth.getSetting("used_toners", "[]"));
-    return Array.isArray(items) ? items : [];
+    return Array.isArray(items) ? items.map((item) => ({
+      ...item,
+      unidade: normalizarUnidadeToner(item?.unidade)
+    })) : [];
   } catch {
     return [];
   }
@@ -1327,11 +1334,12 @@ app.put("/api/toner/used", auth.requirePermission("toner"), (req, res) => {
   for (const entry of source) {
     const modelo = String(entry?.modelo || "").trim().replace(/\s+/g, " ").slice(0, 80);
     const cor = String(entry?.cor || "").trim().replace(/\s+/g, " ").slice(0, 30);
+    const unidade = normalizarUnidadeToner(entry?.unidade);
     const quantidade = Number.parseInt(entry?.quantidade, 10);
     if (!modelo || !cor || !Number.isInteger(quantidade) || quantidade < 1 || quantidade > 999) {
       return res.status(400).json({ sucesso: false, mensagem: "Informe modelo, cor e uma quantidade válida." });
     }
-    itens.push({ modelo, cor, quantidade });
+    itens.push({ modelo, cor, unidade, quantidade });
   }
   auth.setSetting("used_toners", JSON.stringify(itens), Number(req.user.id));
   auth.addAudit(
@@ -1399,6 +1407,7 @@ app.put("/api/toner/inventory", auth.requirePermission("toner"), (req, res) => {
 app.post("/api/toner/inventory/use", auth.requirePermission("toner"), (req, res) => {
   const modelo = String(req.body?.modelo || "").trim();
   const cor = String(req.body?.cor || "").trim();
+  const unidade = normalizarUnidadeToner(req.body?.unidade);
   const inventory = lerEstoqueToners();
   const item = inventory.find((entry) =>
     entry.modelo.toLocaleLowerCase("pt-BR") === modelo.toLocaleLowerCase("pt-BR")
@@ -1412,9 +1421,10 @@ app.post("/api/toner/inventory/use", auth.requirePermission("toner"), (req, res)
   const usedItem = used.find((entry) =>
     entry.modelo.toLocaleLowerCase("pt-BR") === modelo.toLocaleLowerCase("pt-BR")
     && entry.cor.toLocaleLowerCase("pt-BR") === cor.toLocaleLowerCase("pt-BR")
+    && entry.unidade === unidade
   );
   if (usedItem) usedItem.quantidade = Number(usedItem.quantidade) + 1;
-  else used.push({ modelo: item.modelo, cor: item.cor, quantidade: 1 });
+  else used.push({ modelo: item.modelo, cor: item.cor, unidade, quantidade: 1 });
   auth.setSetting("toner_inventory", JSON.stringify(inventory), Number(req.user.id));
   auth.setSetting("used_toners", JSON.stringify(used), Number(req.user.id));
   auth.addAudit(req.user.id, "update", "toner_inventory", "", "Uso registrado: 1 unidade de " + item.modelo + " (" + item.cor + ")");
@@ -1570,9 +1580,9 @@ app.post("/api/toner/exchanges", auth.requirePermission("toner"), requireTonerOp
   })||currentTonerSupplies(reading)[0];
   const now=new Date().toISOString();
   if(canDeduct)stock.quantidade=Number(stock.quantidade)-1;
-  const used=lerTonersUsados();
-  const usedItem=used.find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(model,color);});
-  if(usedItem)usedItem.quantidade=Number(usedItem.quantidade)+1;else used.push({modelo:model,cor:color,quantidade:1});
+  const used=lerTonersUsados(),unidade=normalizarUnidadeToner(printer.unit);
+  const usedItem=used.find(function(entry){return tonerKey(entry.modelo,entry.cor)===tonerKey(model,color)&&entry.unidade===unidade;});
+  if(usedItem)usedItem.quantidade=Number(usedItem.quantidade)+1;else used.push({modelo:model,cor:color,unidade,quantidade:1});
   auth.setSetting("toner_inventory",JSON.stringify(inventory),Number(req.user.id));
   auth.setSetting("used_toners",JSON.stringify(used),Number(req.user.id));
   const result=auth.database.prepare(
@@ -1787,8 +1797,9 @@ function registerAutomaticTonerExchange(item,currentLevel,stamp){
   const reserved=reservedTonerCounts().get(tonerKey(model,color))||0,free=(Number(stock&&stock.quantidade)||0)-reserved;
   const canDeduct=Boolean(stock&&Number(stock.quantidade)>0&&(reservation||free>=1));
   if(canDeduct)stock.quantidade=Number(stock.quantidade)-1;
-  const used=lerTonersUsados(),usedItem=used.find(function(x){return tonerKey(x.modelo,x.cor)===tonerKey(model,color);});
-  if(usedItem)usedItem.quantidade=Number(usedItem.quantidade)+1;else used.push({modelo:model,cor:color,quantidade:1});
+  const printer=activePrinterByIp(item.printer_ip),unidade=normalizarUnidadeToner(printer&&printer.unit);
+  const used=lerTonersUsados(),usedItem=used.find(function(x){return tonerKey(x.modelo,x.cor)===tonerKey(model,color)&&x.unidade===unidade;});
+  if(usedItem)usedItem.quantidade=Number(usedItem.quantidade)+1;else used.push({modelo:model,cor:color,unidade,quantidade:1});
   auth.setSetting("toner_inventory",JSON.stringify(inventory),null);
   auth.setSetting("used_toners",JSON.stringify(used),null);
   const result=auth.database.prepare("INSERT INTO toner_exchanges (printer_ip,printer_name,printer_model,toner_model,color,previous_level,performed_by,created_at,source,current_level) VALUES (?,?,?,?,?,?,NULL,?,'automatic',?)")
@@ -1860,7 +1871,7 @@ app.get("/api/toner/analytics",auth.requirePermission("toner"),function(req,res)
 app.put("/api/toner/costs",auth.requireMaster,function(req,res){const clean={};Object.entries(req.body?.costs||{}).slice(0,200).forEach(function([key,value]){if(key.trim())clean[key.trim().toUpperCase()]=Math.max(0,Number(value)||0);});auth.setSetting("toner_unit_costs",JSON.stringify(clean),req.user.id);auth.addAudit(req.user.id,"update","toner_costs","","Custos de toner atualizados");res.json({sucesso:true,costs:clean});});
 app.post("/api/toner/maintenance",auth.requireMaster,function(req,res){const ip=String(req.body?.ip||"").trim(),type=String(req.body?.type||"Manutenção preventiva").trim().slice(0,120),interval=Math.max(1000,Number(req.body?.intervalPages)||100000),current=Number((lerTonerAtual().printers||[]).find(p=>p.ip===ip)?.totalPages)||0,now=new Date().toISOString();if(!ip)return res.status(400).json({sucesso:false,mensagem:"Selecione uma impressora."});const result=auth.database.prepare("INSERT INTO printer_maintenance (printer_ip,maintenance_type,interval_pages,last_pages,next_due_pages,notes,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)").run(ip,type,interval,current,current+interval,String(req.body?.notes||"").slice(0,500),req.user.id,now,now);auth.addAudit(req.user.id,"create","printer_maintenance",String(result.lastInsertRowid),type+" em "+ip);res.status(201).json({sucesso:true,id:Number(result.lastInsertRowid)});});
 app.post("/api/toner/maintenance/:id/complete",auth.requireMaster,function(req,res){const m=auth.database.prepare("SELECT * FROM printer_maintenance WHERE id=?").get(Number(req.params.id));if(!m)return res.status(404).json({sucesso:false,mensagem:"Manutenção não encontrada."});const current=Number((lerTonerAtual().printers||[]).find(p=>p.ip===m.printer_ip)?.totalPages)||m.next_due_pages,now=new Date().toISOString();auth.database.prepare("UPDATE printer_maintenance SET last_pages=?,next_due_pages=?,last_at=?,updated_at=? WHERE id=?").run(current,current+m.interval_pages,now,now,m.id);auth.addAudit(req.user.id,"update","printer_maintenance",String(m.id),"Manutenção concluída");res.json({sucesso:true});});
-app.patch("/api/toner/change-candidates/:id",auth.requirePermission("toner"),requireTonerOperator,function(req,res){const item=auth.database.prepare("SELECT * FROM toner_change_candidates WHERE id=? AND status='pending'").get(Number(req.params.id));if(!item)return res.status(404).json({sucesso:false,mensagem:"Sugestão não encontrada."});const status=req.body?.action==="confirm"?"confirmed":"dismissed",now=new Date().toISOString();auth.database.prepare("UPDATE toner_change_candidates SET status=?,resolved_at=?,resolved_by=? WHERE id=?").run(status,now,req.user.id,item.id);if(status==="confirmed"){const model=tonerCode(item.supply_name)||"Confirmar modelo",color=tonerColor(item.supply_name),inventory=lerEstoqueToners(),stock=inventory.find(x=>tonerKey(x.modelo,x.cor)===tonerKey(model,color)),used=lerTonersUsados(),usedItem=used.find(x=>tonerKey(x.modelo,x.cor)===tonerKey(model,color));if(stock&&stock.quantidade>0)stock.quantidade--;if(usedItem)usedItem.quantidade++;else used.push({modelo:model,cor:color,quantidade:1});auth.setSetting("toner_inventory",JSON.stringify(inventory),req.user.id);auth.setSetting("used_toners",JSON.stringify(used),req.user.id);auth.database.prepare("INSERT INTO toner_exchanges (printer_ip,printer_name,printer_model,toner_model,color,previous_level,performed_by,created_at) VALUES (?,?,?,?,?,?,?,?)").run(item.printer_ip,item.printer_name,item.printer_model,model,color,item.previous_level,req.user.id,now);auth.addAudit(req.user.id,"create","toner_exchange",String(item.id),"Troca detectada: "+model+" em "+item.printer_ip);}res.json({sucesso:true,status});});
+app.patch("/api/toner/change-candidates/:id",auth.requirePermission("toner"),requireTonerOperator,function(req,res){const item=auth.database.prepare("SELECT * FROM toner_change_candidates WHERE id=? AND status='pending'").get(Number(req.params.id));if(!item)return res.status(404).json({sucesso:false,mensagem:"Sugestão não encontrada."});const status=req.body?.action==="confirm"?"confirmed":"dismissed",now=new Date().toISOString();auth.database.prepare("UPDATE toner_change_candidates SET status=?,resolved_at=?,resolved_by=? WHERE id=?").run(status,now,req.user.id,item.id);if(status==="confirmed"){const model=tonerCode(item.supply_name)||"Confirmar modelo",color=tonerColor(item.supply_name),inventory=lerEstoqueToners(),stock=inventory.find(x=>tonerKey(x.modelo,x.cor)===tonerKey(model,color)),printer=activePrinterByIp(item.printer_ip),unidade=normalizarUnidadeToner(printer&&printer.unit),used=lerTonersUsados(),usedItem=used.find(x=>tonerKey(x.modelo,x.cor)===tonerKey(model,color)&&x.unidade===unidade);if(stock&&stock.quantidade>0)stock.quantidade--;if(usedItem)usedItem.quantidade++;else used.push({modelo:model,cor:color,unidade,quantidade:1});auth.setSetting("toner_inventory",JSON.stringify(inventory),req.user.id);auth.setSetting("used_toners",JSON.stringify(used),req.user.id);auth.database.prepare("INSERT INTO toner_exchanges (printer_ip,printer_name,printer_model,toner_model,color,previous_level,performed_by,created_at) VALUES (?,?,?,?,?,?,?,?)").run(item.printer_ip,item.printer_name,item.printer_model,model,color,item.previous_level,req.user.id,now);auth.addAudit(req.user.id,"create","toner_exchange",String(item.id),"Troca detectada: "+model+" em "+item.printer_ip);}res.json({sucesso:true,status});});
 
 app.get("/api/toner", auth.requirePermission("toner"), (req, res) => {
   res.setHeader("Cache-Control", "no-store");
