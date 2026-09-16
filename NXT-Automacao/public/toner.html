@@ -447,7 +447,7 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
       var lines = [
         "Olá, boa tarde!",
         "",
-        "Solicito, por gentileza, a compra dos seguintes toners:",
+        "Solicito, por gentileza, a reposição dos seguintes toners:",
         ""
       ];
       var unitOrder = ["Osasco", "CD", "Bahia", "Sem unidade"];
@@ -456,12 +456,13 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
         if (!unitItems.length) return;
         lines.push(unit.toUpperCase());
         unitItems.forEach(function (item) {
-          lines.push("- " + item.modelo + " (" + item.cor + ") — " + item.quantidade + " " + (item.quantidade === 1 ? "unidade" : "unidades"));
+          lines.push("- " + item.quantidade + " " + (item.quantidade === 1 ? "unidade" : "unidades") + " — " + item.modelo + " (" + item.cor + ")");
         });
-        lines.push("SOLICITAR COMPRA", "");
+        lines.push("");
       });
       lines.push(
         "Total: " + total() + " " + (total() === 1 ? "unidade." : "unidades."),
+        "",
         "",
         "Por favor, confirmem o recebimento da solicitação e informem a previsão de entrega.",
         "",
