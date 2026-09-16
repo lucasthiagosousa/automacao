@@ -258,7 +258,7 @@ function lerTonerAtual() {
       updatedAt: null,
       threshold: 20,
       summary: { total: auth.getPrinters().filter((item) => item.active).length, online: 0, offline: 0, critical: 0, warning: 0 },
-      printers: auth.getPrinters().filter((item) => item.active).map(({ ip, model, location }) => ({
+      printers: auth.getPrinters().filter((item) => item.active).map(({ ip, model, location, unit }) => ({
         ip,
         model,
         hostname: "",
@@ -266,7 +266,7 @@ function lerTonerAtual() {
         supplies: [],
         status: "unknown",
         location,
-        unit: "",
+        unit: unit || "",
         cartridge: "Aguardando consulta SNMP",
       }))
     };
@@ -1842,7 +1842,7 @@ app.post(
     try {
       const impressoras = auth.getPrinters()
         .filter((item) => item.active)
-        .map((item) => [item.ip, item.model]);
+        .map((item) => [item.ip, item.model, item.location || "", item.unit || ""]);
       const relatorioLido = await tonerMonitor.scan({
         threshold: Math.max(1, Math.min(99, Number(auth.getSetting("toner_threshold", "20")) || 20)),
         printers: impressoras,
