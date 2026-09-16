@@ -1500,7 +1500,7 @@ function buildTonerWorklist() {
     });
     return {
       ip:printer.ip, name:printer.hostname || printer.model || printer.ip,
-      model:printer.model || "", location:(activePrinterByIp(printer.ip) || {}).location || "",
+      model:printer.model || "", location:(activePrinterByIp(printer.ip) || {}).location || "", unit:(activePrinterByIp(printer.ip) || {}).unit || "",
       status:printer.status, supplies:supplies
     };
   }).sort(function(a,b) {
