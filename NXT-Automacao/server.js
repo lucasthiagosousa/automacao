@@ -1809,7 +1809,9 @@ function detectTonerChanges(report){
       const readings=history.all(p.ip,name,stamp);
       const lowReadings=readings.slice(0,2);
       const hasTwoConsecutiveLow=lowReadings.length===2&&lowReadings.every(function(row){return Number(row.level)<=LOW_MAX;});
-      if(!hasTwoConsecutiveLow)return;
+      const zeroReadings=lowReadings.filter(function(row){return Number(row.level)===0;}).length;
+      const zeroConfirmed=zeroReadings<2||(readings.length>=3&&Number(readings[2].level)===0);
+      if(!hasTwoConsecutiveLow||!zeroConfirmed)return;
       const previousLevel=Math.max(Number(lowReadings[0].level),Number(lowReadings[1].level));
       if(level-previousLevel<40)return;
       const model=tonerCode(name)||"Modelo não identificado",color=tonerColor(name),cooldownStart=new Date(Date.parse(stamp)-7*24*60*60*1000).toISOString();
