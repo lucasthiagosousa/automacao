@@ -82,14 +82,17 @@ let estadoAtualizacao = {
 let tonerExecutando = false;
 
 function lerTonerAtual() {
+  const cadastradas = auth.getPrinters().filter((item) => item.active);
+  let relatorio;
+
   try {
-    return JSON.parse(fs.readFileSync(arquivoToner, "utf8"));
+    relatorio = JSON.parse(fs.readFileSync(arquivoToner, "utf8"));
   } catch {
-    return {
+    relatorio = {
       updatedAt: null,
       threshold: 20,
-      summary: { total: auth.getPrinters().filter((item) => item.active).length, online: 0, offline: 0, critical: 0, warning: 0 },
-      printers: auth.getPrinters().filter((item) => item.active).map(({ ip, model, location }) => ({
+      summary: { total: cadastradas.length, online: 0, offline: 0, critical: 0, warning: 0 },
+      printers: cadastradas.map(({ ip, model, location }) => ({
         ip,
         model,
         hostname: "",
@@ -101,6 +104,16 @@ function lerTonerAtual() {
       }))
     };
   }
+
+  const cadastroPorIp = new Map(cadastradas.map((item) => [item.ip, item]));
+  relatorio.printers = (relatorio.printers || []).map((printer) => {
+    const cadastro = cadastroPorIp.get(printer.ip);
+    return cadastro
+      ? { ...printer, model: cadastro.model || printer.model, location: cadastro.location || "Sem unidade" }
+      : printer;
+  });
+
+  return relatorio;
 }
 
 function texto(valor) {
