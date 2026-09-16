@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const os = require("node:os");
+const crypto = require("node:crypto");
 const { DatabaseSync } = require("node:sqlite");
 const { createAuth } = require("./auth");
 const tonerMonitor = require("./toner-monitor");
@@ -1296,6 +1297,91 @@ app.put("/api/configuracao/toner", auth.requireMaster, (req, res) => {
   auth.setSetting("toner_threshold", String(limite), Number(req.user.id));
   auth.addAudit(req.user.id, "update", "toner_threshold", "", "Limite de toner alterado para " + limite + "%");
   return res.json({ sucesso: true, limite });
+});
+
+/*
+ * Identificadores internos para periféricos sem número de série de fábrica.
+ */
+function lerIdentificadoresPerifericos() {
+  try {
+    const items = JSON.parse(auth.getSetting("peripheral_identifiers", "[]"));
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
+  }
+}
+function salvarIdentificadoresPerifericos(items, userId) {
+  auth.setSetting("peripheral_identifiers", JSON.stringify(items), Number(userId) || null);
+}
+function prefixoIdentificador(tipo) {
+  const value = String(tipo || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  const known = {
+    TECLADO: "TEC", MOUSE: "MOU", MONITOR: "MON", HEADSET: "HDS",
+    WEBCAM: "WEB", DOCK: "DOC", CARREGADOR: "CAR", ADAPTADOR: "ADA",
+    IMPRESSORA: "IMP", OUTRO: "OUT"
+  };
+  return known[value] || "OUT";
+}
+function siglaUnidadeIdentificador(unidade) {
+  return ({ osasco: "OSA", cd: "CD", bahia: "BA" })[
+    String(unidade || "").trim().toLocaleLowerCase("pt-BR")
+  ] || "GER";
+}
+
+app.get("/api/peripheral-identifiers", auth.requirePermission("stock"), (req, res) => {
+  const items = lerIdentificadoresPerifericos().sort((a, b) =>
+    String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
+  );
+  return res.json({ sucesso: true, itens: items });
+});
+
+app.post("/api/peripheral-identifiers", auth.requirePermission("stock"), (req, res) => {
+  const tipo = String(req.body?.tipo || "").trim().slice(0, 40);
+  const unidade = String(req.body?.unidade || "").trim().slice(0, 30);
+  const descricao = String(req.body?.descricao || "").trim().replace(/\s+/g, " ").slice(0, 120);
+  const quantidade = Number.parseInt(req.body?.quantidade, 10);
+  if (!tipo || !["Osasco", "CD", "Bahia"].includes(unidade)) {
+    return res.status(400).json({ sucesso: false, mensagem: "Informe o tipo do periférico e a unidade." });
+  }
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 50) {
+    return res.status(400).json({ sucesso: false, mensagem: "Gere entre 1 e 50 etiquetas por vez." });
+  }
+
+  const items = lerIdentificadoresPerifericos();
+  const existing = new Set(items.map((item) => String(item.codigo || "").toUpperCase()));
+  const created = [];
+  for (let index = 0; index < quantidade; index += 1) {
+    let codigo = "";
+    do {
+      const random = crypto.randomBytes(4).toString("hex").toUpperCase();
+      codigo = "NXT-" + prefixoIdentificador(tipo) + "-" + siglaUnidadeIdentificador(unidade) + "-" + random;
+    } while (existing.has(codigo));
+    existing.add(codigo);
+    const item = {
+      id: crypto.randomUUID(),
+      codigo,
+      tipo,
+      unidade,
+      descricao,
+      createdAt: new Date().toISOString(),
+      createdBy: req.user?.username || "Sistema"
+    };
+    items.push(item);
+    created.push(item);
+  }
+  salvarIdentificadoresPerifericos(items, req.user.id);
+  auth.addAudit(req.user.id, "create", "peripheral_identifier", "", quantidade + " identificador(es) gerado(s) para " + tipo);
+  return res.status(201).json({ sucesso: true, itens: created, total: items.length });
+});
+
+app.delete("/api/peripheral-identifiers/:id", auth.requirePermission("stock"), (req, res) => {
+  const items = lerIdentificadoresPerifericos();
+  const index = items.findIndex((item) => item.id === String(req.params.id || ""));
+  if (index < 0) return res.status(404).json({ sucesso: false, mensagem: "Identificador não encontrado." });
+  const removed = items.splice(index, 1)[0];
+  salvarIdentificadoresPerifericos(items, req.user.id);
+  auth.addAudit(req.user.id, "delete", "peripheral_identifier", removed.id, "Identificador removido: " + removed.codigo);
+  return res.json({ sucesso: true });
 });
 
 /*
