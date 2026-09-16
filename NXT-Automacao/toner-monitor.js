@@ -160,9 +160,9 @@ function tonerSupply(description) {
 }
 
 async function checkPrinter(printer, threshold, timeout) {
-  const [ip, model] = printer;
+  const [ip, model, location = "Sem unidade"] = printer;
   const hostname = await query(ip, OIDS.hostname, 0xa0, timeout, 1);
-  if (!hostname) return { ip, model, hostname: "", online: false, supplies: [], status: "offline",
+  if (!hostname) return { ip, model, location, hostname: "", online: false, supplies: [], status: "offline",
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
   const [descriptions, levels, maximums] = await Promise.all([
     walk(ip, OIDS.description, timeout), walk(ip, OIDS.level, timeout), walk(ip, OIDS.maximum, timeout)
@@ -181,7 +181,7 @@ async function checkPrinter(printer, threshold, timeout) {
   const statuses = toner.map(function (item) { return item.status; });
   const status = statuses.includes("critical") ? "critical" : statuses.includes("warning") ? "warning"
     : statuses.includes("ok") ? "ok" : "unknown";
-  return { ip, model, hostname: String(hostname.value || ""), online: true, supplies, status,
+  return { ip, model, location, hostname: String(hostname.value || ""), online: true, supplies, status,
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
 }
 
