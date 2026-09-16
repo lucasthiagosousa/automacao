@@ -1,6 +1,30 @@
 (function () {
   "use strict";
 
+  function ensureGlobalFavicon() {
+    var iconPath = "/assets/nexo-ti-icon.svg";
+    var links = document.querySelectorAll('link[rel="icon"],link[rel="shortcut icon"]');
+    if (!links.length) {
+      var icon = document.createElement("link");
+      icon.rel = "icon";
+      icon.type = "image/svg+xml";
+      document.head.appendChild(icon);
+      links = [icon];
+    }
+    Array.from(links).forEach(function (link) {
+      link.href = iconPath;
+      if (!link.type) link.type = "image/svg+xml";
+    });
+    var apple = document.querySelector('link[rel="apple-touch-icon"]');
+    if (!apple) {
+      apple = document.createElement("link");
+      apple.rel = "apple-touch-icon";
+      document.head.appendChild(apple);
+    }
+    apple.href = iconPath;
+  }
+  ensureGlobalFavicon();
+
   const ROLE_LABELS = { master: "Master Admin", operator: "Operador", viewer: "Visualizador" };
   const WORKSPACE_PAGES = ["/central.html", "/atividades.html", "/", "/index.html", "/identificadores.html", "/toner.html", "/toner-operacao.html", "/colaboradores.html"];
 
