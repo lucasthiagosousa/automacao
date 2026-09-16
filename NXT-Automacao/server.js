@@ -246,7 +246,13 @@ auth.database.exec(
 
 function lerTonerAtual() {
   try {
-    return JSON.parse(fs.readFileSync(arquivoToner, "utf8"));
+    const report = JSON.parse(fs.readFileSync(arquivoToner, "utf8"));
+    const registered = new Map(auth.getPrinters().map(function (printer) { return [printer.ip, printer]; }));
+    report.printers = (report.printers || []).map(function (printer) {
+      const saved = registered.get(printer.ip) || {};
+      return { ...printer, location: saved.location || printer.location || "", unit: saved.unit || printer.unit || "" };
+    });
+    return report;
   } catch {
     return {
       updatedAt: null,
@@ -260,6 +266,7 @@ function lerTonerAtual() {
         supplies: [],
         status: "unknown",
         location,
+        unit: "",
         cartridge: "Aguardando consulta SNMP",
       }))
     };
