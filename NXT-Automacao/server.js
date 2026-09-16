@@ -1458,6 +1458,9 @@ app.post("/api/toner/inventory/use", auth.requirePermission("toner"), (req, res)
   const modelo = String(req.body?.modelo || "").trim();
   const cor = String(req.body?.cor || "").trim();
   const unidade = normalizarUnidadeToner(req.body?.unidade);
+  if (unidade === "Sem unidade") {
+    return res.status(400).json({ sucesso: false, mensagem: "Selecione Osasco, CD ou Bahia antes de registrar o uso." });
+  }
   const inventory = lerEstoqueToners();
   const item = inventory.find((entry) =>
     entry.modelo.toLocaleLowerCase("pt-BR") === modelo.toLocaleLowerCase("pt-BR")
@@ -1478,7 +1481,7 @@ app.post("/api/toner/inventory/use", auth.requirePermission("toner"), (req, res)
   auth.setSetting("toner_inventory", JSON.stringify(inventory), Number(req.user.id));
   auth.setSetting("used_toners", JSON.stringify(used), Number(req.user.id));
   auth.addAudit(req.user.id, "update", "toner_inventory", "", "Uso registrado: 1 unidade de " + item.modelo + " (" + item.cor + ")");
-  return res.json({ sucesso: true, itens: inventory, usados: used });
+  return res.json({ sucesso: true, itens: inventory, usados: used, unidade, mensagem: "Uso registrado em " + unidade + " e enviado para reposição." });
 });
 
 /*
