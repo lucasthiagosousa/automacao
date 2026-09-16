@@ -176,9 +176,9 @@ function tonerSupply(description) {
 }
 
 async function checkPrinter(printer, threshold, timeout) {
-  const [ip, model] = printer;
+  const [ip, model, location = "", unit = ""] = printer;
   const hostname = await query(ip, OIDS.hostname, 0xa0, timeout, 1);
-  if (!hostname) return { ip, model, hostname: "", online: false, supplies: [], status: "offline", totalPages: null,
+  if (!hostname) return { ip, model, location, unit, hostname: "", online: false, supplies: [], status: "offline", totalPages: null,
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
   /*
    * Os índices de prtMarkerSuppliesTable variam entre fabricantes e até
@@ -226,7 +226,7 @@ async function checkPrinter(printer, threshold, timeout) {
   const statuses = toner.map(function (item) { return item.status; });
   const status = statuses.includes("critical") ? "critical" : statuses.includes("warning") ? "warning"
     : statuses.includes("ok") ? "ok" : "online";
-  return { ip, model, hostname: String(hostname.value || ""), online: true, supplies, status,
+  return { ip, model, location, unit, hostname: String(hostname.value || ""), online: true, supplies, status,
     totalPages: totalPages >= 0 ? totalPages : null,
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
 }
