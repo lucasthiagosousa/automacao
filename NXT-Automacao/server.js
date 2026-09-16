@@ -1352,6 +1352,56 @@ app.put("/api/toner/used", auth.requirePermission("toner"), (req, res) => {
   return res.json({ sucesso: true, itens });
 });
 
+app.post("/api/toner/used/register", auth.requirePermission("toner"), (req, res) => {
+  const modelo = String(req.body?.modelo || "").trim().replace(/\s+/g, " ").slice(0, 80);
+  const cor = String(req.body?.cor || "").trim().replace(/\s+/g, " ").slice(0, 30);
+  const unidade = normalizarUnidadeToner(req.body?.unidade);
+  if (!modelo || !cor || unidade === "Sem unidade") {
+    return res.status(400).json({ sucesso: false, mensagem: "Informe o modelo, a cor e a unidade do toner usado." });
+  }
+
+  const inventory = lerEstoqueToners();
+  const requestedCode = tonerCode(modelo);
+  const stock = inventory.find((entry) => {
+    const sameColor = String(entry.cor || "").toLocaleLowerCase("pt-BR") === cor.toLocaleLowerCase("pt-BR");
+    const exactModel = tonerKey(entry.modelo, entry.cor) === tonerKey(modelo, cor);
+    const stockCode = tonerCode(entry.modelo);
+    return sameColor && (exactModel || (requestedCode && stockCode === requestedCode));
+  });
+  if (!stock || Number(stock.quantidade) < 1) {
+    return res.status(409).json({
+      sucesso: false,
+      mensagem: "Não há saldo disponível deste toner no estoque. Cadastre uma unidade antes de registrar o uso."
+    });
+  }
+
+  stock.quantidade = Number(stock.quantidade) - 1;
+  const usados = lerTonersUsados();
+  const usado = usados.find((entry) =>
+    tonerKey(entry.modelo, entry.cor) === tonerKey(stock.modelo, stock.cor)
+    && entry.unidade === unidade
+  );
+  if (usado) usado.quantidade = Number(usado.quantidade) + 1;
+  else usados.push({ modelo: stock.modelo, cor: stock.cor, unidade, quantidade: 1 });
+
+  auth.setSetting("toner_inventory", JSON.stringify(inventory), Number(req.user.id));
+  auth.setSetting("used_toners", JSON.stringify(usados), Number(req.user.id));
+  auth.addAudit(
+    req.user.id,
+    "update",
+    "used_toners",
+    "",
+    "Uso registrado: 1 unidade de " + stock.modelo + " (" + stock.cor + ") em " + unidade
+  );
+  return res.status(201).json({
+    sucesso: true,
+    mensagem: "Uso registrado. Estoque atualizado de " + (Number(stock.quantidade) + 1) + " para " + stock.quantidade + ".",
+    itens: inventory,
+    usados,
+    saldo: Number(stock.quantidade)
+  });
+});
+
 /*
  * Estoque exclusivo de toners, separado do inventário de ativos.
  */
