@@ -272,6 +272,11 @@ function createAuth(options) {
     + "notes TEXT NOT NULL DEFAULT '',FOREIGN KEY(count_id) REFERENCES inventory_counts(id) ON DELETE CASCADE"
     + ");"
   );
+  const printerColumns = database.prepare("PRAGMA table_info(printers)").all().map(function (column) { return column.name; });
+  if (!printerColumns.includes("unit")) {
+    database.exec("ALTER TABLE printers ADD COLUMN unit TEXT NOT NULL DEFAULT ''");
+  }
+
   const userColumns = database.prepare("PRAGMA table_info(users)").all().map(function (column) { return column.name; });
   if (!userColumns.includes("permissions_json")) {
     database.exec("ALTER TABLE users ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '{}'");
@@ -979,7 +984,7 @@ function createAuth(options) {
 
   function getPrinters() {
     return database.prepare(
-      "SELECT id,ip,model,location,active,created_at AS createdAt,updated_at AS updatedAt FROM printers ORDER BY ip"
+      "SELECT id,ip,model,location,unit,active,created_at AS createdAt,updated_at AS updatedAt FROM printers ORDER BY unit,ip"
     ).all().map(function (row) {
       return { ...row, id: Number(row.id), active: Boolean(row.active) };
     });
@@ -1011,18 +1016,20 @@ function createAuth(options) {
     if (!validIp(ip)) throw new Error("Informe um endereço IPv4 válido.");
     const model = String(values.model || "").trim().slice(0, 120);
     const location = String(values.location || "").trim().slice(0, 160);
+    const allowedUnits = ["Osasco", "CD", "Bahia"];
+    const unit = allowedUnits.includes(String(values.unit || "").trim()) ? String(values.unit).trim() : "";
     const active = values.active === false ? 0 : 1;
     const timestamp = nowIso();
     try {
       if (id) {
         const result = database.prepare(
-          "UPDATE printers SET ip=?,model=?,location=?,active=?,updated_by=?,updated_at=? WHERE id=?"
-        ).run(ip, model, location, active, userId, timestamp, Number(id));
+          "UPDATE printers SET ip=?,model=?,location=?,unit=?,active=?,updated_by=?,updated_at=? WHERE id=?"
+        ).run(ip, model, location, unit, active, userId, timestamp, Number(id));
         if (!result.changes) return null;
       } else {
         const result = database.prepare(
-          "INSERT INTO printers (ip,model,location,active,created_by,created_at,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?)"
-        ).run(ip, model, location, active, userId, timestamp, userId, timestamp);
+          "INSERT INTO printers (ip,model,location,unit,active,created_by,created_at,updated_by,updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
+        ).run(ip, model, location, unit, active, userId, timestamp, userId, timestamp);
         id = Number(result.lastInsertRowid);
       }
     } catch (error) {
@@ -1030,7 +1037,7 @@ function createAuth(options) {
       throw error;
     }
     const row = database.prepare(
-      "SELECT id,ip,model,location,active,created_at AS createdAt,updated_at AS updatedAt FROM printers WHERE id=?"
+      "SELECT id,ip,model,location,unit,active,created_at AS createdAt,updated_at AS updatedAt FROM printers WHERE id=?"
     ).get(Number(id));
     return row ? { ...row, id: Number(row.id), active: Boolean(row.active) } : null;
   }
