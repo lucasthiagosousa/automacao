@@ -26,7 +26,7 @@
   ensureGlobalFavicon();
 
   const ROLE_LABELS = { master: "Master Admin", operator: "Operador", viewer: "Visualizador" };
-  const WORKSPACE_PAGES = ["/central.html", "/atividades.html", "/", "/index.html", "/identificadores.html", "/toner.html", "/toner-operacao.html", "/colaboradores.html"];
+  const WORKSPACE_PAGES = ["/central.html", "/inteligencia.html", "/atividades.html", "/", "/index.html", "/identificadores.html", "/toner.html", "/toner-operacao.html", "/colaboradores.html"];
 
   window.addEventListener("pageshow", function (event) {
     if (event.persisted) window.location.reload();
@@ -310,7 +310,7 @@
     const path = window.location.pathname;
     if (!WORKSPACE_PAGES.includes(path)) return;
     document.body.classList.add("workspace-operational");
-    if (path === "/central.html") document.body.classList.add("workspace-page-central");
+    if (path === "/central.html" || path === "/inteligencia.html") document.body.classList.add("workspace-page-central");
     if (path === "/atividades.html") document.body.classList.add("workspace-page-activities");
     if (path === "/" || path === "/index.html" || path === "/identificadores.html") document.body.classList.add("workspace-page-stock");
     if (path === "/toner.html" || path === "/toner-operacao.html") document.body.classList.add("workspace-page-toner");
@@ -327,6 +327,7 @@
     nav.setAttribute("aria-label", "Módulos do sistema");
     [
       { href: "/central.html", type: "central", title: "Visão geral", subtitle: "Pendências e indicadores", paths: ["/central.html"] },
+      { href: "/inteligencia.html", type: "activity", title: "Inteligência", subtitle: "Alertas e saúde", paths: ["/inteligencia.html"] },
       { href: "/atividades.html", type: "activity", title: "Atividades", subtitle: "Linha do tempo operacional", paths: ["/atividades.html"], permission: "view_audit" },
       { href: "/", type: "stock", title: "Estoque", subtitle: "Ativos e solicitações", paths: ["/", "/index.html"], permission: "stock" },
       { href: "/identificadores.html", type: "identifier", title: "Identificadores", subtitle: "Seriais e etiquetas", paths: ["/identificadores.html"], permission: "stock" },
