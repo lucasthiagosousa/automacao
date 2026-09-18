@@ -919,7 +919,7 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
   analytics:{hash:"toner-analytics",eyebrow:"HISTÓRICO E PREVISÃO",title:"Análises de impressão",description:"Acompanhe consumo, rendimento, alertas e previsão de troca."}
  };
  function viewFromHash(){var hash=location.hash.replace("#","");return Object.keys(config).find(function(key){return config[key].hash===hash})||"printers"}
- function showView(name,updateHash){
+ function showView(name,updateHash,shouldScroll){
   if(!config[name])name="printers";
   document.querySelectorAll("[data-toner-section]").forEach(function(section){section.classList.toggle("toner-view-hidden",section.dataset.tonerSection!==name)});
   document.querySelectorAll("[data-toner-view]").forEach(function(button){var active=button.dataset.tonerView===name;button.classList.toggle("active",active);button.setAttribute("aria-current",active?"page":"false")});
@@ -927,11 +927,11 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
   document.getElementById("tonerViewTitle").textContent=config[name].title;
   document.getElementById("tonerViewDescription").textContent=config[name].description;
   if(updateHash)history.replaceState(null,"","#"+config[name].hash);
-  window.scrollTo({top:document.querySelector(".toner-task-nav").offsetTop-12,behavior:"smooth"});
+  if(shouldScroll)window.scrollTo({top:document.querySelector(".toner-task-nav").offsetTop-12,behavior:"smooth"});
  }
- document.querySelector(".toner-task-nav").addEventListener("click",function(event){var button=event.target.closest("[data-toner-view]");if(!button)return;showView(button.dataset.tonerView,true)});
- window.addEventListener("hashchange",function(){showView(viewFromHash(),false)});
- showView(viewFromHash(),false);
+ document.querySelector(".toner-task-nav").addEventListener("click",function(event){var button=event.target.closest("[data-toner-view]");if(!button)return;showView(button.dataset.tonerView,true,true)});
+ window.addEventListener("hashchange",function(){showView(viewFromHash(),false,true)});
+ showView(viewFromHash(),false,Boolean(location.hash));
 })();
 </script></body>
 </html>
