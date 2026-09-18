@@ -326,11 +326,11 @@
     nav.className = "workspace-tabs";
     nav.setAttribute("aria-label", "Módulos do sistema");
     [
-      { href: "/central.html", type: "central", title: "Visão geral", subtitle: "Pendências e indicadores", paths: ["/central.html"] },
-      { href: "/inteligencia.html", type: "activity", title: "Inteligência", subtitle: "Alertas e saúde", paths: ["/inteligencia.html"] },
-      { href: "/atividades.html", type: "activity", title: "Atividades", subtitle: "Linha do tempo operacional", paths: ["/atividades.html"], permission: "view_audit" },
-      { href: "/", type: "stock", title: "Estoque", subtitle: "Ativos e solicitações", paths: ["/", "/index.html"], permission: "stock" },
-      { href: "/identificadores.html", type: "identifier", title: "Identificadores", subtitle: "Seriais e etiquetas", paths: ["/identificadores.html"], permission: "stock" },
+      { href: "/central.html", type: "central", title: "Início", subtitle: "Resumo e pendências", paths: ["/central.html"] },
+      { href: "/inteligencia.html", type: "activity", title: "Alertas", subtitle: "Saúde da operação", paths: ["/inteligencia.html"] },
+      { href: "/atividades.html", type: "activity", title: "Histórico", subtitle: "Ações realizadas", paths: ["/atividades.html"], permission: "view_audit" },
+      { href: "/", type: "stock", title: "Ativos", subtitle: "Estoque e solicitações", paths: ["/", "/index.html"], permission: "stock" },
+      { href: "/identificadores.html", type: "identifier", title: "Etiquetas", subtitle: "Seriais e impressão", paths: ["/identificadores.html"], permission: "stock" },
       { href: "/toner.html?v=20260828-9", type: "toner", title: "Toners", subtitle: "Impressoras e suprimentos", paths: ["/toner.html", "/toner-operacao.html"], permission: "toner" },
       { href: "/colaboradores.html", type: "people", title: "Colaboradores", subtitle: "Acessos e movimentações", paths: ["/colaboradores.html"], permission: "collaborators" }
     ].forEach(function (item) {
