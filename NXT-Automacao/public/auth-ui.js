@@ -227,73 +227,64 @@
     let transitioning = false;
     const style = document.createElement("style");
     style.textContent = `
-      .workspace-transition-overlay{position:fixed;z-index:10000;inset:0;display:grid;place-items:center;padding:24px;opacity:0;visibility:hidden;background:linear-gradient(135deg,rgba(0,17,9,.965),rgba(3,48,25,.955) 58%,rgba(8,122,69,.94));backdrop-filter:blur(10px);transition:opacity 220ms cubic-bezier(.22,.8,.24,1),visibility 220ms}
-      .workspace-transition-overlay:before{content:"";position:absolute;width:min(58vw,720px);height:min(58vw,720px);border-radius:50%;background:radial-gradient(circle,rgba(34,222,129,.18),transparent 68%);transform:translate(28%,-30%) scale(.82);opacity:0;transition:opacity 360ms ease,transform 520ms cubic-bezier(.22,.8,.24,1)}
-      .workspace-transition-overlay.active{opacity:1;visibility:visible}.workspace-transition-overlay.active:before{opacity:1;transform:translate(28%,-30%) scale(1)}
-      .workspace-transition-overlay.complete{opacity:0;visibility:hidden;pointer-events:none}
-      .workspace-transition-card{position:relative;width:min(360px,calc(100vw - 36px));display:grid;justify-items:center;color:#fff;text-align:center;transform:translateY(10px) scale(.985);opacity:0;transition:transform 360ms cubic-bezier(.22,.8,.24,1),opacity 260ms ease}
-      .workspace-transition-overlay.active .workspace-transition-card{transform:none;opacity:1}
-      .workspace-transition-mark{width:54px;height:54px;display:grid;place-items:center;margin-bottom:15px;border:1px solid rgba(135,255,190,.34);border-radius:16px;background:rgba(255,255,255,.1);box-shadow:inset 0 1px rgba(255,255,255,.12),0 16px 34px rgba(0,0,0,.2)}
-      .workspace-transition-mark svg{width:27px;height:27px}
-      .workspace-transition-card small{color:#79e8ad;font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
-      .workspace-transition-card strong{display:block;margin-top:7px;font-size:20px;font-weight:600;letter-spacing:-.025em}
-      .workspace-transition-card p{margin:6px 0 15px;color:rgba(232,249,240,.7);font-size:10px}
-      .workspace-transition-progress{width:210px;height:3px;overflow:hidden;border-radius:99px;background:rgba(255,255,255,.12)}
-      .workspace-transition-progress span{display:block;width:42%;height:100%;border-radius:inherit;background:linear-gradient(90deg,#35df8b,#b1ffd3);box-shadow:0 0 14px rgba(53,223,139,.55);animation:workspace-progress 950ms cubic-bezier(.4,0,.2,1) infinite}
-      body.workspace-navigation-leaving>:not(.workspace-transition-overlay){opacity:.18!important;filter:blur(1.5px);transition:opacity 190ms ease,filter 190ms ease;pointer-events:none}
-      .workspace-tab.transition-target{border-color:rgba(92,244,161,.72)!important;background:rgba(27,214,112,.25)!important;box-shadow:0 0 0 4px rgba(53,223,139,.08),inset 0 1px rgba(255,255,255,.13)!important}
-      @keyframes workspace-progress{0%{transform:translateX(-115%)}100%{transform:translateX(340%)}}
-      @media(prefers-reduced-motion:reduce){.workspace-transition-overlay,.workspace-transition-card,.workspace-transition-overlay:before{transition-duration:1ms!important}.workspace-transition-progress span{animation:none;width:100%}body.workspace-navigation-leaving>:not(.workspace-transition-overlay){filter:none!important;transition-duration:1ms!important}}
+      body.workspace-navigation-leaving main,
+      body.workspace-navigation-leaving .content,
+      body.workspace-navigation-leaving .wrap > #app {
+        opacity: .72;
+        transform: translateY(-2px);
+        transition: opacity 85ms ease-out,transform 85ms ease-out;
+        pointer-events: none;
+      }
+      body.workspace-navigation-arriving main,
+      body.workspace-navigation-arriving .content,
+      body.workspace-navigation-arriving .wrap > #app {
+        animation: workspace-quick-enter 155ms cubic-bezier(.22,.8,.24,1) both;
+      }
+      .workspace-tab.transition-target {
+        border-color:rgba(92,244,161,.58)!important;
+        background:rgba(27,214,112,.2)!important;
+        transition:background 80ms ease,border-color 80ms ease!important;
+      }
+      @keyframes workspace-quick-enter {
+        from { opacity:.76; transform:translateY(3px); }
+        to { opacity:1; transform:translateY(0); }
+      }
+      @media(prefers-reduced-motion:reduce) {
+        body.workspace-navigation-leaving main,
+        body.workspace-navigation-leaving .content,
+        body.workspace-navigation-leaving .wrap > #app,
+        body.workspace-navigation-arriving main,
+        body.workspace-navigation-arriving .content,
+        body.workspace-navigation-arriving .wrap > #app {
+          animation:none!important;
+          transition:none!important;
+          transform:none!important;
+        }
+      }
     `;
     document.head.appendChild(style);
 
-    function transitionMarkup(label) {
-      return '<div class="workspace-transition-card"><div class="workspace-transition-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m12 3-9 5 9 5 9-5-9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg></div><small>Nexo TI</small><strong>' + String(label || "Carregando módulo") + '</strong><p>Preparando sua área de trabalho...</p><div class="workspace-transition-progress"><span></span></div></div>';
-    }
-
-    function createOverlay(label, immediate) {
-      let overlay = document.querySelector(".workspace-transition-overlay");
-      if (!overlay) {
-        overlay = document.createElement("div");
-        overlay.className = "workspace-transition-overlay";
-        overlay.setAttribute("role", "status");
-        overlay.setAttribute("aria-live", "polite");
-        document.body.appendChild(overlay);
-      }
-      overlay.innerHTML = transitionMarkup(label);
-      if (immediate) overlay.classList.add("active");
-      else requestAnimationFrame(function () { requestAnimationFrame(function () { overlay.classList.add("active"); }); });
-      return overlay;
-    }
-
-    function pendingTransition() {
+    function hasPendingTransition() {
       try {
         const value = JSON.parse(sessionStorage.getItem(TRANSITION_KEY) || "null");
-        if (!value || Date.now() - Number(value.startedAt || 0) > 15000) {
+        if (!value || Date.now() - Number(value.startedAt || 0) > 10000) {
           sessionStorage.removeItem(TRANSITION_KEY);
-          return null;
+          return false;
         }
-        return value;
+        return true;
       } catch {
-        return null;
+        return false;
       }
     }
 
-    const pending = pendingTransition();
-    if (pending) {
-      document.body.classList.add("workspace-navigation-arriving");
-      createOverlay(pending.label, true);
-    }
+    if (hasPendingTransition()) document.body.classList.add("workspace-navigation-arriving");
 
     window.NXT_FINISH_WORKSPACE_TRANSITION = function () {
-      const overlay = document.querySelector(".workspace-transition-overlay");
       try { sessionStorage.removeItem(TRANSITION_KEY); } catch {}
-      document.body.classList.remove("workspace-navigation-arriving", "workspace-navigation-leaving");
-      if (!overlay) return;
-      requestAnimationFrame(function () {
-        overlay.classList.add("complete");
-        window.setTimeout(function () { overlay.remove(); }, 280);
-      });
+      window.setTimeout(function () {
+        document.body.classList.remove("workspace-navigation-arriving", "workspace-navigation-leaving");
+        document.documentElement.removeAttribute("aria-busy");
+      }, 170);
     };
 
     document.addEventListener("click", function (event) {
@@ -302,8 +293,6 @@
       const target = new URL(anchor.href, window.location.href);
       if (target.origin !== window.location.origin || (target.pathname === window.location.pathname && target.search === window.location.search)) return;
       event.preventDefault();
-      const labelNode = anchor.querySelector(".workspace-tab-copy > span");
-      const label = labelNode ? labelNode.textContent.trim() : "Carregando módulo";
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         window.location.href = target.href;
         return;
@@ -312,9 +301,8 @@
       anchor.classList.add("transition-target");
       document.body.classList.add("workspace-navigation-leaving");
       document.documentElement.setAttribute("aria-busy", "true");
-      try { sessionStorage.setItem(TRANSITION_KEY, JSON.stringify({ label: label, startedAt: Date.now() })); } catch {}
-      createOverlay(label, false);
-      window.setTimeout(function () { window.location.href = target.href; }, 280);
+      try { sessionStorage.setItem(TRANSITION_KEY, JSON.stringify({ startedAt: Date.now() })); } catch {}
+      window.setTimeout(function () { window.location.href = target.href; }, 85);
     });
   }
 
