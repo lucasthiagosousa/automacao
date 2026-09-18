@@ -462,7 +462,7 @@
       { selector:"#printerGrid", title:"Conferir os suprimentos", text:"Cada card mostra os níveis, o estado da impressora e os contadores disponíveis." }
     ],
     "toner-exchange": [
-      { selector:"a[href*='toner-operacao']", title:"Abrir Operação e trocas", text:"Entre na área operacional para visualizar as substituições recomendadas." },
+      { selector:"a[href*='toner-operacao']", title:"Abrir Registrar troca", text:"Entre na área operacional para visualizar as substituições recomendadas." },
       { selector:"#worklist", title:"Roteiro de trocas", text:"A lista organiza impressoras e suprimentos que precisam de atendimento." },
       { selector:"#reload", title:"Atualizar a lista", text:"Atualize depois de uma nova leitura para validar níveis e trocas automáticas." }
     ],
@@ -518,8 +518,7 @@
     "toner-add":"Menu principal → Toners → Estoque de toners → Expandir",
     "toner-printer-add":"Menu principal → Toners → Gerenciar IPs",
     "toner-search":"Menu principal → Toners → Pesquisa de impressoras",
-    "toner-exchange":"Menu principal → Toners → Operação e trocas → Roteiro de trocas",
-    "toner-compatibility":"Menu principal → Toners → Operação e trocas → Compatibilidade",
+    "toner-exchange":"Menu principal → Toners → Registrar troca → Roteiro de trocas",
     collaborators:"Menu principal → Colaboradores",
     "collaborators-import":"Menu principal → Colaboradores → Importar planilha",
     "collaborators-vacation":"Menu principal → Colaboradores → Férias e acessos",
