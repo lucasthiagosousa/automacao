@@ -205,6 +205,84 @@
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>';
   }
 
+  function installSmoothNavigation() {
+    const style = document.createElement("style");
+    style.textContent = `
+      @view-transition { navigation: auto; }
+      body.workspace-operational .header,
+      body.workspace-page-colaboradores .wrap > header {
+        view-transition-name: workspace-header;
+      }
+      body.workspace-operational .workspace-tabs-shell {
+        view-transition-name: workspace-navigation;
+      }
+      ::view-transition-group(root) {
+        animation-duration: 260ms;
+        animation-timing-function: cubic-bezier(.22,.8,.24,1);
+      }
+      ::view-transition-old(root) {
+        animation: workspace-page-out 170ms cubic-bezier(.4,0,1,1) both;
+      }
+      ::view-transition-new(root) {
+        animation: workspace-page-in 280ms cubic-bezier(.22,.8,.24,1) both;
+      }
+      ::view-transition-group(workspace-header),
+      ::view-transition-group(workspace-navigation) {
+        animation-duration: 260ms;
+        animation-timing-function: cubic-bezier(.22,.8,.24,1);
+      }
+      ::view-transition-old(workspace-header),
+      ::view-transition-new(workspace-header),
+      ::view-transition-old(workspace-navigation),
+      ::view-transition-new(workspace-navigation) {
+        animation-duration: 260ms;
+        mix-blend-mode: normal;
+      }
+      @keyframes workspace-page-out {
+        to { opacity: 0; transform: translateY(-3px); }
+      }
+      @keyframes workspace-page-in {
+        from { opacity: 0; transform: translateY(5px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      body.workspace-navigation-leaving {
+        opacity: .12!important;
+        transform: translateY(-3px);
+        transition: opacity 130ms ease,transform 130ms ease;
+        pointer-events: none;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        ::view-transition-group(root),
+        ::view-transition-group(workspace-header),
+        ::view-transition-group(workspace-navigation),
+        ::view-transition-old(root),
+        ::view-transition-new(root) {
+          animation-duration: 1ms!important;
+        }
+        body.workspace-navigation-leaving {
+          transition-duration: 1ms!important;
+          transform: none;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+
+    document.addEventListener("click", function (event) {
+      const anchor = event.target.closest("a.workspace-tab");
+      if (!anchor || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = new URL(anchor.href, window.location.href);
+      if (target.origin !== window.location.origin || target.pathname === window.location.pathname) return;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      if (CSS.supports && CSS.supports("view-transition-name: workspace-navigation")) return;
+      event.preventDefault();
+      document.body.classList.add("workspace-navigation-leaving");
+      document.documentElement.setAttribute("aria-busy", "true");
+      window.setTimeout(function () {
+        window.location.href = target.href;
+      }, 130);
+    });
+  }
+
   function installWorkspaceNavigation() {
     const path = window.location.pathname;
     if (!WORKSPACE_PAGES.includes(path)) return;
@@ -485,6 +563,7 @@
    * que o navegador mostre por um instante o layout antigo de cada módulo.
    */
   addStyles();
+  installSmoothNavigation();
   installWorkspaceNavigation();
   document.documentElement.classList.add("workspace-ready");
 
