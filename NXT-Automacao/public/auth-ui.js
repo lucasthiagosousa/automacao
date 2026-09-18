@@ -99,7 +99,7 @@
       body.workspace-page-colaboradores .workspace-tabs-shell{width:100%;margin:0 0 26px}
       body.workspace-page-colaboradores .wrap>.intro,body.workspace-page-colaboradores .wrap>#dropzone,body.workspace-page-colaboradores .wrap>#app,body.workspace-page-colaboradores .wrap>footer{width:min(calc(100% - 48px),1280px)!important;margin-left:auto!important;margin-right:auto!important}body.workspace-page-colaboradores .wrap>.intro{margin-top:0!important;margin-bottom:16px!important}
       body.workspace-operational a[data-old-workspace-link]{display:none!important}
-      @media(min-width:901px){body.workspace-operational{zoom:1.06}}
+      @media(min-width:901px){body.workspace-operational{zoom:1!important}}
             @media(max-width:1328px){body.workspace-page-colaboradores .wrap>header{padding-left:24px;padding-right:24px}}
       @media(max-width:900px){body.workspace-operational .header-inner,body.workspace-page-colaboradores .wrap>header{align-items:flex-start!important;flex-direction:column!important}.header-actions,.header-right{width:100%;justify-content:flex-start!important}.workspace-tabs{width:calc(100% - 24px);height:55px}.workspace-tab{padding:0 12px}.workspace-tab-copy small{display:none}.workspace-page-heading{align-items:flex-start;flex-direction:column;gap:7px}.workspace-page-heading p{text-align:left}}
       /* Identidade verde global: ações e estados interativos */
