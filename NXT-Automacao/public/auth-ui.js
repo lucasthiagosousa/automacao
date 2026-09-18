@@ -465,14 +465,7 @@
       { selector:"a[href*='toner-operacao']", title:"Abrir Registrar troca", text:"Entre na área operacional para visualizar as substituições recomendadas." },
       { selector:"#worklist", title:"Roteiro de trocas", text:"A lista organiza impressoras e suprimentos que precisam de atendimento." },
       { selector:"#reload", title:"Atualizar a lista", text:"Atualize depois de uma nova leitura para validar níveis e trocas automáticas." }
-    ],
-    "toner-compatibility": [
-      { selector:".tab[data-tab='compatibility']", title:"Abrir Compatibilidade", text:"Acesse a guia Compatibilidade para relacionar impressora e suprimento." },
-      { selector:"#printerModel", open:".tab[data-tab='compatibility']", title:"Modelo da impressora", text:"Informe o modelo como ele aparece no painel." },
-      { selector:"#tonerModel", title:"Modelo do toner", text:"Digite o código do cartucho compatível." },
-      { selector:"#compatForm button[type='submit']", title:"Adicionar compatibilidade", text:"Salve o relacionamento para o sistema recomendar o toner correto." }
-    ],
-    "collaborators-import": [
+    ],"collaborators-import": [
       { selector:"#dropzone", title:"Importar colaboradores", text:"Arraste a planilha atualizada ou clique para selecionar o arquivo." },
       { selector:"#fileMeta", title:"Conferir a importação", text:"Verifique o nome do arquivo, a quantidade de registros e a data de atualização." },
       { selector:"#cards", title:"Revisar os indicadores", text:"Depois da importação, confira desligamentos, transferências, férias e afastamentos." }
