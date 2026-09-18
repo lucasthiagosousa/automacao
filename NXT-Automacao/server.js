@@ -1295,6 +1295,131 @@ app.delete("/api/impressoras/:id", auth.requirePermission("toner"), (req, res) =
   return res.json({ sucesso: true });
 });
 
+
+/*
+ * Impressoras das linhas de produção. Não participam do monitoramento de toner:
+ * este cadastro existe somente para acompanhar disponibilidade por ping.
+ */
+function lerImpressorasFabrica() {
+  try {
+    const items = JSON.parse(auth.getSetting("factory_printers", "[]"));
+    return Array.isArray(items) ? items : [];
+  } catch {
+    return [];
+  }
+}
+function salvarImpressorasFabrica(items, userId) {
+  auth.setSetting("factory_printers", JSON.stringify(items), Number(userId) || null);
+}
+function normalizarImpressoraFabrica(body, current) {
+  const ip = String(body?.ip ?? current?.ip ?? "").trim();
+  const linha = String(body?.linha ?? current?.linha ?? "").trim();
+  const nome = String(body?.nome ?? current?.nome ?? "").trim();
+  const unidade = String(body?.unidade ?? current?.unidade ?? "").trim();
+  if (!/^(?=.{1,253}$)[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?$/.test(ip)) {
+    throw new Error("Informe um IP ou hostname válido.");
+  }
+  if (!linha || linha.length > 40) throw new Error("Informe o número ou nome da linha.");
+  if (nome.length > 80) throw new Error("A descrição deve ter no máximo 80 caracteres.");
+  if (!["Osasco", "CD", "Bahia"].includes(unidade)) throw new Error("Selecione uma unidade válida.");
+  return { ip, linha, nome, unidade };
+}
+function verificarPing(host) {
+  return new Promise((resolve) => {
+    const inicio = Date.now();
+    const windows = process.platform === "win32";
+    const args = windows ? ["-n", "1", "-w", "1500", host] : ["-c", "1", "-W", "2", host];
+    let finalizado = false;
+    let processo;
+    const concluir = (online, erro) => {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(limite);
+      resolve({
+        online,
+        latenciaMs: online ? Math.max(1, Date.now() - inicio) : null,
+        verificadoEm: new Date().toISOString(),
+        erro: online ? null : (erro || "Sem resposta")
+      });
+    };
+    const limite = setTimeout(() => {
+      if (processo) processo.kill();
+      concluir(false, "Tempo de resposta esgotado");
+    }, 3000);
+    try {
+      processo = spawn("ping", args, { windowsHide: true, stdio: "ignore" });
+      processo.once("error", () => concluir(false, "Não foi possível executar o ping"));
+      processo.once("close", (codigo) => concluir(codigo === 0));
+    } catch {
+      concluir(false, "Não foi possível executar o ping");
+    }
+  });
+}
+
+app.get("/api/factory-printers", auth.requirePermission("toner"), (req, res) => {
+  res.json({
+    sucesso: true,
+    impressoras: lerImpressorasFabrica(),
+    podeEditar: ["master", "operator"].includes(req.user.role)
+  });
+});
+
+app.post("/api/factory-printers", auth.requirePermission("toner"), (req, res) => {
+  if (!["master", "operator"].includes(req.user.role)) return res.status(403).json({ sucesso: false, mensagem: "Acesso somente para edição." });
+  try {
+    const dados = normalizarImpressoraFabrica(req.body);
+    const items = lerImpressorasFabrica();
+    if (items.some((item) => item.ip.toLowerCase() === dados.ip.toLowerCase())) {
+      return res.status(409).json({ sucesso: false, mensagem: "Este IP ou hostname já está cadastrado." });
+    }
+    const impressora = { id: crypto.randomUUID(), ...dados, criadaEm: new Date().toISOString() };
+    items.push(impressora);
+    salvarImpressorasFabrica(items, req.user.id);
+    auth.addAudit(req.user.id, "create", "factory_printer", impressora.id, "Impressora de fábrica cadastrada: " + impressora.ip);
+    return res.status(201).json({ sucesso: true, impressora });
+  } catch (error) {
+    return res.status(400).json({ sucesso: false, mensagem: error.message });
+  }
+});
+
+app.patch("/api/factory-printers/:id", auth.requirePermission("toner"), (req, res) => {
+  if (!["master", "operator"].includes(req.user.role)) return res.status(403).json({ sucesso: false, mensagem: "Acesso somente para edição." });
+  try {
+    const items = lerImpressorasFabrica();
+    const index = items.findIndex((item) => item.id === req.params.id);
+    if (index < 0) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
+    const dados = normalizarImpressoraFabrica(req.body, items[index]);
+    if (items.some((item, itemIndex) => itemIndex !== index && item.ip.toLowerCase() === dados.ip.toLowerCase())) {
+      return res.status(409).json({ sucesso: false, mensagem: "Este IP ou hostname já está cadastrado." });
+    }
+    items[index] = { ...items[index], ...dados, atualizadaEm: new Date().toISOString() };
+    salvarImpressorasFabrica(items, req.user.id);
+    auth.addAudit(req.user.id, "update", "factory_printer", items[index].id, "Impressora de fábrica atualizada: " + items[index].ip);
+    return res.json({ sucesso: true, impressora: items[index] });
+  } catch (error) {
+    return res.status(400).json({ sucesso: false, mensagem: error.message });
+  }
+});
+
+app.delete("/api/factory-printers/:id", auth.requirePermission("toner"), (req, res) => {
+  if (!["master", "operator"].includes(req.user.role)) return res.status(403).json({ sucesso: false, mensagem: "Acesso somente para edição." });
+  const items = lerImpressorasFabrica();
+  const index = items.findIndex((item) => item.id === req.params.id);
+  if (index < 0) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
+  const [removed] = items.splice(index, 1);
+  salvarImpressorasFabrica(items, req.user.id);
+  auth.addAudit(req.user.id, "delete", "factory_printer", removed.id, "Impressora de fábrica removida: " + removed.ip);
+  return res.json({ sucesso: true });
+});
+
+app.post("/api/factory-printers/check", auth.requirePermission("toner"), async (req, res) => {
+  const items = lerImpressorasFabrica();
+  const selected = req.body?.id ? items.filter((item) => item.id === req.body.id) : items;
+  if (req.body?.id && !selected.length) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
+  const resultados = await Promise.all(selected.map(async (item) => ({ id: item.id, ...(await verificarPing(item.ip)) })));
+  return res.json({ sucesso: true, resultados });
+});
+
 app.get("/api/configuracao/toner", auth.requireAuth, (req, res) => {
   const limite = Math.max(1, Math.min(99, Number(auth.getSetting("toner_threshold", "20")) || 20));
   res.json({ sucesso: true, limite, podeEditar: req.user.role === "master" });
