@@ -32,14 +32,31 @@
     if (event.persisted) window.location.reload();
   });
 
+  const WORKSPACE_USER_CACHE = "nxt-workspace-user";
+
+  function cachedWorkspaceUser() {
+    try {
+      const value = JSON.parse(sessionStorage.getItem(WORKSPACE_USER_CACHE) || "null");
+      return value && value.username ? value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function cacheWorkspaceUser(user) {
+    try { sessionStorage.setItem(WORKSPACE_USER_CACHE, JSON.stringify(user)); } catch {}
+  }
+
   async function requestUser() {
     const response = await fetch("/api/auth/me", { cache: "no-store" });
     if (response.status === 401) {
+      try { sessionStorage.removeItem(WORKSPACE_USER_CACHE); } catch {}
       window.location.replace("/login.html");
       throw new Error("Sessão expirada.");
     }
     const result = await response.json();
     if (!response.ok) throw new Error(result.mensagem || "Não foi possível validar a sessão.");
+    cacheWorkspaceUser(result.user);
     return result.user;
   }
 
@@ -79,7 +96,7 @@
       body.workspace-operational .header .btn-header{border-color:rgba(255,255,255,.25)!important;background:rgba(255,255,255,.1)!important;color:#fff!important;box-shadow:none!important}
       body.workspace-operational .header .btn-header:hover{background:rgba(255,255,255,.18)!important;border-color:rgba(255,255,255,.4)!important}
       body.workspace-operational .workspace-tabs-shell{position:relative;z-index:4;background:linear-gradient(112deg,#001109 0%,#042b17 52%,#087a45 100%);border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(0,86,42,.28);box-shadow:0 12px 28px rgba(0,48,24,.16)}body.workspace-operational .workspace-tabs-shell:after{content:"";position:absolute;left:0;right:0;bottom:-18px;height:18px;pointer-events:none;background:linear-gradient(180deg,rgba(0,180,83,.10),transparent)}
-      .workspace-tabs{width:calc(100% - 48px);max-width:none;height:58px;margin:auto;display:flex;align-items:center;gap:8px;overflow-x:auto;scrollbar-width:none}.workspace-tabs::-webkit-scrollbar{display:none}
+      .workspace-tabs{width:calc(100% - 48px);max-width:none;height:58px;margin:auto;display:flex;align-items:center;gap:8px;overflow-x:auto;scrollbar-width:none;transition:opacity .2s ease,transform .24s cubic-bezier(.22,.8,.24,1)}.workspace-tabs::-webkit-scrollbar{display:none}.workspace-tabs-shell.access-loading .workspace-tabs{opacity:0;transform:translateY(3px);pointer-events:none}.workspace-tabs-shell.access-ready .workspace-tabs{opacity:1;transform:none}.workspace-tabs-loader{position:absolute;inset:0;display:flex;align-items:center;gap:10px;width:calc(100% - 48px);height:58px;margin:auto;pointer-events:none;transition:opacity .18s ease}.workspace-tabs-loader span{display:block;width:118px;height:35px;border-radius:10px;background:linear-gradient(90deg,rgba(255,255,255,.035),rgba(255,255,255,.11),rgba(255,255,255,.035));background-size:220% 100%;animation:workspace-loader 1.1s ease-in-out infinite}.workspace-tabs-loader span:nth-child(2){width:138px;animation-delay:.08s}.workspace-tabs-loader span:nth-child(3){width:126px;animation-delay:.16s}@keyframes workspace-loader{to{background-position:-220% 0}}
       .workspace-tab{height:39px;padding:0 14px;display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;border-radius:11px;color:rgba(231,242,250,.7);font-size:11px;font-weight:550;text-decoration:none;white-space:nowrap;transition:background .16s,border-color .16s,color .16s,transform .16s}
       .workspace-tab svg{width:17px;height:17px}.workspace-tab:hover{background:rgba(255,255,255,.09);color:#fff;transform:translateY(-1px)}.workspace-tab.active{border-color:rgba(72,236,147,.38);background:rgba(15,201,101,.18);color:#fff;box-shadow:inset 0 1px rgba(255,255,255,.08),0 5px 14px rgba(0,0,0,.1)}
       .workspace-tab-copy{display:flex;flex-direction:column;line-height:1.12}.workspace-tab-copy small{margin-top:2px;color:rgba(199,235,215,.55);font-size:8px;font-weight:500}.workspace-tab.active small{color:rgba(220,255,235,.78)}
@@ -283,7 +300,7 @@
     });
   }
 
-  function installWorkspaceNavigation() {
+  function installWorkspaceNavigation(cachedUser) {
     const path = window.location.pathname;
     if (!WORKSPACE_PAGES.includes(path)) return;
     document.body.classList.add("workspace-operational");
@@ -298,18 +315,19 @@
     });
 
     const shell = document.createElement("div");
-    shell.className = "workspace-tabs-shell";
+    shell.className = "workspace-tabs-shell " + (cachedUser ? "access-ready" : "access-loading");
     const nav = document.createElement("nav");
     nav.className = "workspace-tabs";
     nav.setAttribute("aria-label", "Módulos do sistema");
     [
       { href: "/central.html", type: "central", title: "Central", subtitle: "Pendências e indicadores", paths: ["/central.html"] },
-      { href: "/atividades.html", type: "activity", title: "Atividades", subtitle: "Linha do tempo operacional", paths: ["/atividades.html"] },
-      { href: "/", type: "stock", title: "Estoque", subtitle: "Ativos e solicitações", paths: ["/", "/index.html"] },
-      { href: "/identificadores.html", type: "identifier", title: "Identificadores", subtitle: "Seriais e etiquetas", paths: ["/identificadores.html"] },
-      { href: "/toner.html?v=20260828-9", type: "toner", title: "Toners", subtitle: "Impressoras e suprimentos", paths: ["/toner.html", "/toner-operacao.html"] },
-      { href: "/colaboradores.html", type: "people", title: "Colaboradores", subtitle: "Acessos e movimentações", paths: ["/colaboradores.html"] }
+      { href: "/atividades.html", type: "activity", title: "Atividades", subtitle: "Linha do tempo operacional", paths: ["/atividades.html"], permission: "view_audit" },
+      { href: "/", type: "stock", title: "Estoque", subtitle: "Ativos e solicitações", paths: ["/", "/index.html"], permission: "stock" },
+      { href: "/identificadores.html", type: "identifier", title: "Identificadores", subtitle: "Seriais e etiquetas", paths: ["/identificadores.html"], permission: "stock" },
+      { href: "/toner.html?v=20260828-9", type: "toner", title: "Toners", subtitle: "Impressoras e suprimentos", paths: ["/toner.html", "/toner-operacao.html"], permission: "toner" },
+      { href: "/colaboradores.html", type: "people", title: "Colaboradores", subtitle: "Acessos e movimentações", paths: ["/colaboradores.html"], permission: "collaborators" }
     ].forEach(function (item) {
+      if (cachedUser && item.permission && (cachedUser.permissions || {})[item.permission] === false) return;
       const anchor = document.createElement("a");
       anchor.className = "workspace-tab" + (item.paths.includes(path) ? " active" : "");
       anchor.href = item.href;
@@ -319,6 +337,13 @@
       nav.appendChild(anchor);
     });
     shell.appendChild(nav);
+    if (!cachedUser) {
+      const loader = document.createElement("div");
+      loader.className = "workspace-tabs-loader";
+      loader.setAttribute("aria-label", "Carregando módulos autorizados");
+      loader.innerHTML = "<span></span><span></span><span></span>";
+      shell.appendChild(loader);
+    }
 
     const header = path === "/colaboradores.html"
       ? document.querySelector(".wrap > header")
@@ -534,10 +559,10 @@
 
   function decorate(user) {
     const permissions=user.permissions||{};
-    [{path:"/",key:"stock"},{path:"/toner.html",key:"toner"},{path:"/colaboradores.html",key:"collaborators"},{path:"/atividades.html",key:"view_audit"}].forEach(function(item){
+    [{path:"/",key:"stock"},{path:"/identificadores.html",key:"stock"},{path:"/toner.html",key:"toner"},{path:"/colaboradores.html",key:"collaborators"},{path:"/atividades.html",key:"view_audit"}].forEach(function(item){
       document.querySelectorAll('.workspace-tab[href^="'+item.path+'"]').forEach(function(tab){if(permissions[item.key]===false)tab.remove();});
     });
-    const current=window.location.pathname,currentKey=current==="/toner.html"?"toner":current==="/colaboradores.html"?"collaborators":current==="/atividades.html"?"view_audit":(current==="/"||current==="/index.html")?"stock":"";
+    const current=window.location.pathname,currentKey=(current==="/toner.html"||current==="/toner-operacao.html")?"toner":current==="/colaboradores.html"?"collaborators":current==="/atividades.html"?"view_audit":(current==="/"||current==="/index.html"||current==="/identificadores.html")?"stock":"";
     if(currentKey&&permissions[currentKey]===false)window.location.replace("/central.html");
     const actions = document.querySelector(".header-actions, .header-right");
     if (actions) {
@@ -547,9 +572,16 @@
       logout.addEventListener("click", async function (event) {
         event.preventDefault();
         await fetch("/api/auth/logout", { method: "POST" });
+        try { sessionStorage.removeItem(WORKSPACE_USER_CACHE); } catch {}
         window.location.replace("/login.html");
       });
       actions.appendChild(logout);
+    }
+    const shell = document.querySelector(".workspace-tabs-shell");
+    if (shell) {
+      shell.querySelector(".workspace-tabs-loader")?.remove();
+      shell.classList.remove("access-loading");
+      shell.classList.add("access-ready");
     }
     document.body.classList.add("role-" + user.role);
     ["nxtUpdateButton","uploadButton","tonerThresholdButton","refreshButton"].forEach(function(id){
@@ -562,9 +594,10 @@
    * O shell visual precisa existir antes da consulta ao usuário para evitar
    * que o navegador mostre por um instante o layout antigo de cada módulo.
    */
+  const initialWorkspaceUser = cachedWorkspaceUser();
   addStyles();
   installSmoothNavigation();
-  installWorkspaceNavigation();
+  installWorkspaceNavigation(initialWorkspaceUser);
   document.documentElement.classList.add("workspace-ready");
 
   window.NXT_AUTH_PROMISE = requestUser().then(function (user) {
