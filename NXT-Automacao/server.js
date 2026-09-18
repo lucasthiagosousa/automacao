@@ -1416,9 +1416,224 @@ app.post("/api/factory-printers/check", auth.requirePermission("toner"), async (
   const items = lerImpressorasFabrica();
   const selected = req.body?.id ? items.filter((item) => item.id === req.body.id) : items;
   if (req.body?.id && !selected.length) return res.status(404).json({ sucesso: false, mensagem: "Impressora não encontrada." });
-  const resultados = await Promise.all(selected.map(async (item) => ({ id: item.id, ...(await verificarPing(item.ip)) })));
+  const resultados = await Promise.all(selected.map(async (item) => { const result = await verificarPing(item.ip); registrarDisponibilidadeFabrica(item, result); return { id: item.id, ...result }; }));
   return res.json({ sucesso: true, resultados });
 });
+
+
+/*
+ * Inteligência operacional. Consolida dados locais sem realizar qualquer escrita
+ * no NXT4Insight, que permanece somente como fonte de consulta do estoque.
+ */
+function lerEstadoDisponibilidadeFabrica() {
+  try {
+    const value = JSON.parse(auth.getSetting("factory_availability_state", "{}"));
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+function salvarEstadoDisponibilidadeFabrica(value) {
+  auth.setSetting("factory_availability_state", JSON.stringify(value), null);
+}
+function lerIncidentesFabrica() {
+  try {
+    const value = JSON.parse(auth.getSetting("factory_incidents", "[]"));
+    return Array.isArray(value) ? value : [];
+  } catch { return []; }
+}
+function salvarIncidentesFabrica(value, userId) {
+  auth.setSetting("factory_incidents", JSON.stringify(value.slice(0, 500)), Number(userId) || null);
+}
+function registrarDisponibilidadeFabrica(printer, result) {
+  const state = lerEstadoDisponibilidadeFabrica();
+  const now = result.verificadoEm || new Date().toISOString();
+  const current = state[printer.id] || {
+    samples: 0, onlineSamples: 0, outages: 0, downtimeMs: 0,
+    offlineSince: null, lastOnlineAt: null, lastStatus: "unknown", events: []
+  };
+  current.samples += 1;
+  if (result.online) current.onlineSamples += 1;
+  if (!result.online && current.lastStatus !== "offline") {
+    current.outages += 1;
+    current.offlineSince = now;
+    current.events.unshift({ type: "offline", at: now });
+  }
+  if (result.online && current.lastStatus === "offline" && current.offlineSince) {
+    current.downtimeMs += Math.max(0, Date.parse(now) - Date.parse(current.offlineSince));
+    current.events.unshift({ type: "online", at: now, durationMs: Math.max(0, Date.parse(now) - Date.parse(current.offlineSince)) });
+    current.offlineSince = null;
+  }
+  if (result.online) current.lastOnlineAt = now;
+  current.lastStatus = result.online ? "online" : "offline";
+  current.lastCheckedAt = now;
+  current.latencyMs = result.latenciaMs;
+  current.events = current.events.slice(0, 100);
+  state[printer.id] = current;
+  salvarEstadoDisponibilidadeFabrica(state);
+
+  const incidents = lerIncidentesFabrica();
+  const open = incidents.find((item) => item.printerId === printer.id && ["open","acknowledged"].includes(item.status));
+  const thresholdMinutes = Math.max(1, Number(auth.getSetting("factory_incident_minutes", "3")) || 3);
+  const offlineMinutes = current.offlineSince ? (Date.now() - Date.parse(current.offlineSince)) / 60000 : 0;
+  if (!result.online && offlineMinutes >= thresholdMinutes && !open) {
+    incidents.unshift({
+      id: crypto.randomUUID(), printerId: printer.id, equipment: printer.nome || ("Linha " + printer.linha),
+      ip: printer.ip, line: printer.linha, unit: printer.unidade, startedAt: current.offlineSince,
+      durationMinutes: Math.floor(offlineMinutes), responsible: "", deadline: "", status: "open",
+      createdAt: now, updatedAt: now, notes: "Criado automaticamente após ausência de resposta ao ping."
+    });
+    salvarIncidentesFabrica(incidents);
+  } else if (result.online && open) {
+    open.status = "resolved"; open.resolvedAt = now; open.updatedAt = now;
+    open.durationMinutes = Math.max(1, Math.floor((Date.parse(now) - Date.parse(open.startedAt)) / 60000));
+    open.notes = (open.notes ? open.notes + " " : "") + "Resolvido automaticamente após o retorno do equipamento.";
+    salvarIncidentesFabrica(incidents);
+  }
+}
+async function monitorarImpressorasFabrica() {
+  const items = lerImpressorasFabrica();
+  if (!items.length) return [];
+  const results = await Promise.all(items.map(async (printer) => {
+    const result = await verificarPing(printer.ip);
+    registrarDisponibilidadeFabrica(printer, result);
+    return { id: printer.id, ...result };
+  }));
+  return results;
+}
+function disponibilidadeFabrica() {
+  const state = lerEstadoDisponibilidadeFabrica();
+  return lerImpressorasFabrica().map((printer) => {
+    const item = state[printer.id] || {};
+    const currentDowntime = item.offlineSince ? Math.max(0, Date.now() - Date.parse(item.offlineSince)) : 0;
+    return {
+      ...printer,
+      status: item.lastStatus || "unknown",
+      latencyMs: item.latencyMs ?? null,
+      lastCheckedAt: item.lastCheckedAt || null,
+      lastOnlineAt: item.lastOnlineAt || null,
+      offlineSince: item.offlineSince || null,
+      availability: item.samples ? Math.round((item.onlineSamples / item.samples) * 1000) / 10 : null,
+      outages: Number(item.outages || 0),
+      downtimeMinutes: Math.round((Number(item.downtimeMs || 0) + currentDowntime) / 60000),
+      events: Array.isArray(item.events) ? item.events.slice(0, 20) : []
+    };
+  });
+}
+function prioridadeAlerta(type) {
+  return { factory: 1, automation: 1, toner: 2, stock: 2, access: 3, purchase: 2 }[type] || 3;
+}
+async function construirInteligenciaOperacional() {
+  const alerts = [];
+  let stockShortages = [];
+  try {
+    const stock = await lerPlanilha(), categories = Array.isArray(stock.categorias) ? stock.categorias : [];
+    auth.getMinimums().filter((rule) => rule.monitored && Number(rule.minimum) > 0).forEach((rule) => {
+      const key = String(rule.categoryName || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const found = categories.find((cat) => {
+        const name = String(cat.nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        return name === key || name.includes(key) || key.includes(name);
+      });
+      const current = found ? Number(found.atual) || 0 : 0, minimum = Number(rule.minimum) || 0;
+      if (current < minimum) {
+        const item = { name: rule.categoryName, current, minimum, missing: minimum - current };
+        stockShortages.push(item);
+        alerts.push({ id: "stock:" + (rule.categoryKey || key), type: "stock", priority: prioridadeAlerta("stock"), title: rule.categoryName + " abaixo do mínimo", detail: current + " disponível(is) · mínimo " + minimum, responsible: "Compras / Estoque", deadline: "Hoje", action: "/", actionLabel: "Abrir estoque" });
+      }
+    });
+  } catch {}
+  const toner = lerTonerAtual(), threshold = Math.max(1, Number(toner.threshold || auth.getSetting("toner_threshold", "20")) || 20);
+  const criticalToners = [];
+  (toner.printers || []).forEach((printer) => (printer.supplies || []).filter((supply) => supply.isToner !== false && Number(supply.percent) <= threshold).forEach((supply) => {
+    const item = { ip: printer.ip, printer: printer.hostname || printer.model || printer.ip, unit: printer.unit || "", supply: supply.description, percent: Number(supply.percent) };
+    criticalToners.push(item);
+    alerts.push({ id: "toner:" + printer.ip + ":" + supply.description, type: "toner", priority: prioridadeAlerta("toner"), title: "Toner crítico · " + item.printer, detail: item.supply + " em " + item.percent + "%", responsible: "Suporte de TI", deadline: item.percent <= 5 ? "Imediato" : "Hoje", action: "/toner-operacao.html", actionLabel: "Abrir trocas" });
+  }));
+  const availability = disponibilidadeFabrica();
+  availability.filter((printer) => printer.status === "offline").forEach((printer) => alerts.push({
+    id: "factory:" + printer.id, type: "factory", priority: prioridadeAlerta("factory"),
+    title: "Linha " + printer.linha + " sem resposta", detail: printer.ip + " · " + printer.unidade,
+    responsible: "Infraestrutura de TI", deadline: printer.offlineSince ? "Em andamento" : "Verificar",
+    action: "/inteligencia.html#disponibilidade", actionLabel: "Ver disponibilidade"
+  }));
+  let failedAutomations = [];
+  try {
+    failedAutomations = auth.database.prepare("SELECT id,automation_type type,message,started_at startedAt FROM automation_runs WHERE status='error' ORDER BY id DESC LIMIT 10").all();
+    failedAutomations.forEach((run) => alerts.push({ id: "automation:" + run.id, type: "automation", priority: prioridadeAlerta("automation"), title: "Falha na automação · " + run.type, detail: run.message || "Execução não concluída", responsible: "Administração do sistema", deadline: "Imediato", action: "/automacoes.html#history-navigation", actionLabel: "Abrir histórico" }));
+  } catch {}
+  let pendingAccess = [];
+  try {
+    pendingAccess = auth.database.prepare("SELECT employee_key id,employee_name name,activation_date activationDate,updated_at updatedAt FROM vacation_access_plans WHERE completed=0 ORDER BY activation_date LIMIT 30").all();
+    pendingAccess.forEach((plan) => alerts.push({ id: "access:" + plan.id, type: "access", priority: prioridadeAlerta("access"), title: "Acesso pendente · " + (plan.name || plan.id), detail: plan.activationDate ? "Programado para " + plan.activationDate : "Data não definida", responsible: "Suporte / Acessos", deadline: plan.activationDate || "Definir", action: "/colaboradores.html", actionLabel: "Abrir acessos" }));
+  } catch {}
+  const today = new Date().toISOString().slice(0, 10);
+  const purchases = auth.getRestockRequests();
+  const overduePurchases = purchases.filter((request) => request.status !== "finished" && request.expectedAt && request.expectedAt < today);
+  overduePurchases.forEach((request) => alerts.push({ id: "purchase:" + request.id, type: "purchase", priority: prioridadeAlerta("purchase"), title: "Solicitação atrasada · #" + request.id, detail: "Previsão era " + request.expectedAt + " · " + (request.buyer || "sem responsável"), responsible: request.buyer || "Compras", deadline: "Atrasada", action: "/#solicitacoes", actionLabel: "Abrir solicitação" }));
+  alerts.sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title, "pt-BR"));
+
+  const units = ["Osasco","Bahia","CD"].map((unit) => {
+    const printers = availability.filter((printer) => printer.unidade === unit);
+    const unitToners = criticalToners.filter((item) => item.unit === unit);
+    return {
+      unit,
+      stock: stockShortages.length ? "attention" : "normal",
+      stockLabel: stockShortages.length ? stockShortages.length + " abaixo do mínimo" : "Normal",
+      printersOnline: printers.filter((printer) => printer.status === "online").length,
+      printersTotal: printers.length,
+      tonerCritical: unitToners.length,
+      automationFailures: failedAutomations.length
+    };
+  });
+  const exchanges = auth.database.prepare("SELECT toner_model model,color,COUNT(*) uses,MIN(created_at) firstAt,MAX(created_at) lastAt FROM toner_exchanges WHERE created_at>=datetime('now','-90 days') GROUP BY toner_model,color").all();
+  const usageMap = new Map(exchanges.map((item) => [String(item.model).toLowerCase() + "|" + String(item.color).toLowerCase(), item]));
+  const forecast = lerEstoqueToners().map((item) => {
+    const usage = usageMap.get(String(item.modelo).toLowerCase() + "|" + String(item.cor).toLowerCase());
+    const monthlyUse = usage ? Math.round((Number(usage.uses) / 90) * 30 * 10) / 10 : 0;
+    const daysRemaining = monthlyUse > 0 ? Math.floor(Number(item.quantidade) / (monthlyUse / 30)) : null;
+    return { ...item, monthlyUse, daysRemaining, estimatedEnd: daysRemaining === null ? null : new Date(Date.now() + daysRemaining * 86400000).toISOString().slice(0,10), recommendedPurchase: Math.max(0, Math.ceil(monthlyUse * 2 - Number(item.quantidade))) };
+  }).sort((a,b) => (a.daysRemaining ?? 99999) - (b.daysRemaining ?? 99999));
+  return { generatedAt: new Date().toISOString(), alerts, units, availability, incidents: lerIncidentesFabrica(), forecast, purchases };
+}
+
+app.get("/api/operations/intelligence", auth.requireAuth, async (req, res) => {
+  try { return res.json({ sucesso: true, data: await construirInteligenciaOperacional() }); }
+  catch (error) { return res.status(500).json({ sucesso: false, mensagem: error.message }); }
+});
+app.post("/api/operations/factory/check", auth.requirePermission("toner"), async (req, res) => {
+  try { return res.json({ sucesso: true, resultados: await monitorarImpressorasFabrica() }); }
+  catch (error) { return res.status(500).json({ sucesso: false, mensagem: error.message }); }
+});
+app.patch("/api/operations/incidents/:id", auth.requirePermission("toner"), (req, res) => {
+  const incidents = lerIncidentesFabrica(), incident = incidents.find((item) => item.id === req.params.id);
+  if (!incident) return res.status(404).json({ sucesso: false, mensagem: "Incidente não encontrado." });
+  const status = String(req.body?.status || incident.status);
+  if (!["open","acknowledged","resolved"].includes(status)) return res.status(400).json({ sucesso: false, mensagem: "Status inválido." });
+  incident.status = status;
+  incident.responsible = String(req.body?.responsible ?? incident.responsible).trim().slice(0,100);
+  incident.deadline = String(req.body?.deadline ?? incident.deadline).trim().slice(0,30);
+  incident.notes = String(req.body?.notes ?? incident.notes).trim().slice(0,1000);
+  incident.updatedAt = new Date().toISOString();
+  if (status === "resolved" && !incident.resolvedAt) incident.resolvedAt = incident.updatedAt;
+  salvarIncidentesFabrica(incidents, req.user.id);
+  auth.addAudit(req.user.id, "update", "factory_incident", incident.id, "Incidente de impressora atualizado");
+  return res.json({ sucesso: true, incident });
+});
+app.post("/api/operations/diagnose", auth.requirePermission("toner"), async (req, res) => {
+  const ip = String(req.body?.ip || "").trim(), printer = lerImpressorasFabrica().find((item) => item.ip === ip);
+  if (!ip || !/^[a-zA-Z0-9.-]{1,253}$/.test(ip)) return res.status(400).json({ sucesso: false, mensagem: "Informe um IP ou hostname válido." });
+  const ping = await verificarPing(ip);
+  if (printer) registrarDisponibilidadeFabrica(printer, ping);
+  const tonerReport = lerTonerAtual(), snmpPrinter = (tonerReport.printers || []).find((item) => item.ip === ip);
+  const steps = [
+    { label: "Resposta ao ping", ok: ping.online, detail: ping.online ? ping.latenciaMs + " ms" : (ping.erro || "Sem resposta") },
+    { label: "Cadastro no monitor", ok: Boolean(printer || snmpPrinter), detail: printer ? "Impressora de fábrica" : snmpPrinter ? "Impressora com suprimentos" : "IP não cadastrado" },
+    { label: "Leitura SNMP", ok: Boolean(snmpPrinter && snmpPrinter.online), detail: snmpPrinter ? (snmpPrinter.online ? "Respondendo" : "Sem resposta") : "Não aplicável ou não cadastrada" },
+    { label: "Suprimentos disponíveis", ok: Boolean(snmpPrinter && (snmpPrinter.supplies || []).length), detail: snmpPrinter ? (snmpPrinter.supplies || []).length + " identificado(s)" : "Não aplicável à impressora de fábrica" }
+  ];
+  const conclusion = !ping.online ? "Verifique energia, cabo de rede, porta do switch, VLAN e endereço IP." : snmpPrinter && !snmpPrinter.online ? "A rede responde, mas o SNMP não. Confira serviço SNMP, comunidade e firewall." : "Comunicação básica funcionando. Continue a análise pelos indicadores apresentados.";
+  return res.json({ sucesso: true, diagnosis: { ip, checkedAt: new Date().toISOString(), steps, conclusion } });
+});
+
+setInterval(() => { monitorarImpressorasFabrica().catch((error) => console.error("Monitor de fábrica:", error.message)); }, 60000).unref();
 
 app.get("/api/configuracao/toner", auth.requireAuth, (req, res) => {
   const limite = Math.max(1, Math.min(99, Number(auth.getSetting("toner_threshold", "20")) || 20));
