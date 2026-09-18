@@ -326,7 +326,7 @@
     nav.className = "workspace-tabs";
     nav.setAttribute("aria-label", "Módulos do sistema");
     [
-      { href: "/central.html", type: "central", title: "Central", subtitle: "Pendências e indicadores", paths: ["/central.html"] },
+      { href: "/central.html", type: "central", title: "Visão geral", subtitle: "Pendências e indicadores", paths: ["/central.html"] },
       { href: "/atividades.html", type: "activity", title: "Atividades", subtitle: "Linha do tempo operacional", paths: ["/atividades.html"], permission: "view_audit" },
       { href: "/", type: "stock", title: "Estoque", subtitle: "Ativos e solicitações", paths: ["/", "/index.html"], permission: "stock" },
       { href: "/identificadores.html", type: "identifier", title: "Identificadores", subtitle: "Seriais e etiquetas", paths: ["/identificadores.html"], permission: "stock" },
@@ -393,7 +393,7 @@
 
   const GUIDED_TOURS = {
     "getting-started": [
-      { selector:".workspace-tabs", title:"Navegação principal", text:"Use estas guias para alternar entre Central, Atividades, Estoque, Toners e Colaboradores." },
+      { selector:".workspace-tabs", title:"Navegação principal", text:"Use estas guias para alternar entre Visão geral, Atividades, Estoque, Identificadores, Toners e Colaboradores." },
       { selector:".kpis,.stats", title:"Resumo do dia", text:"Os indicadores mostram rapidamente o que precisa de atenção." },
       { selector:".pending-list,.pending,.grid", title:"Próximas ações", text:"Aqui ficam as pendências e atividades que devem ser conferidas." }
     ],
@@ -508,8 +508,8 @@
   };
 
   const TOUR_PATHS = {
-    "getting-started":"Menu principal → Central",
-    "central-tasks":"Menu principal → Central → Tarefas operacionais",
+    "getting-started":"Menu principal → Visão geral",
+    "central-tasks":"Menu principal → Visão geral → Tarefas operacionais",
     stock:"Menu principal → Estoque",
     "stock-search":"Menu principal → Estoque → Pesquisa e filtros",
     "stock-export":"Menu principal → Estoque → Pesquisa e filtros → Exportar",
@@ -524,11 +524,11 @@
     "collaborators-vacation":"Menu principal → Colaboradores → Férias e acessos",
     activities:"Menu principal → Atividades",
     "activities-search":"Menu principal → Atividades → Filtros do histórico",
-    reports:"Central → Configurações → Abrir Centro de relatórios",
-    "reports-generate":"Central → Configurações → Abrir Centro de relatórios → Gerar relatório",
-    automations:"Central → Configurações → Monitorar automações",
-    "automations-daily":"Central → Configurações → Monitorar automações → Relatório diário",
-    "automations-history":"Central → Configurações → Monitorar automações → Histórico de execuções"
+    reports:"Configurações → Criar ou consultar relatórios",
+    "reports-generate":"Configurações → Criar ou consultar relatórios → Gerar relatório",
+    automations:"Configurações → Monitorar automações",
+    "automations-daily":"Configurações → Configurar horários → Relatório diário",
+    "automations-history":"Configurações → Monitorar automações → Histórico de execuções"
   };
 
   function startGuidedTour(key) {
@@ -572,7 +572,7 @@
     if(currentKey&&permissions[currentKey]===false)window.location.replace("/central.html");
     const actions = document.querySelector(".header-actions, .header-right");
     if (actions) {
-      if (user.canManageUsers) { actions.appendChild(link("Usuários", "/admin.html", "users")); actions.appendChild(link("Configurações", "/configuracoes.html", "settings")); }
+      if (user.canManageUsers) { actions.appendChild(link("Usuários", "/admin.html", "users")); if (window.location.pathname !== "/configuracoes.html") actions.appendChild(link("Configurações", "/configuracoes.html", "settings")); }
       actions.appendChild(accountControl(user));
       const logout = link("Sair", "#", "logout");
       logout.addEventListener("click", async function (event) {
