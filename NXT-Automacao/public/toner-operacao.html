@@ -60,15 +60,19 @@ body :where(button,.btn,[role="button"]){font-weight:500!important}
 @media(max-width:430px){.history-date{grid-template-columns:1fr}.exchange-history{padding:13px}.history-result{grid-template-columns:1fr}}
 </style><link rel="stylesheet" href="/global-buttons.css"><link rel="stylesheet" href="/global-layout.css"><link rel="icon" href="/assets/nexo-ti-icon.svg" type="image/svg+xml"><link rel="shortcut icon" href="/assets/nexo-ti-icon.svg"><style id="operation-simplification">
 .operation-context{display:flex;align-items:center;gap:8px;margin:0 0 14px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow-x:auto}.operation-context span{display:flex;align-items:center;gap:7px;min-width:max-content;padding:7px 10px;border-radius:9px;background:#f5f8fa;color:#405d70;font-size:10px}.operation-context span b{width:21px;height:21px;display:grid;place-items:center;border-radius:7px;background:#e3f6ec;color:#087649}.operation-context a{margin-left:auto;min-width:max-content;color:#08745f;font-size:10px;text-decoration:none;font-weight:600}@media(max-width:700px){.operation-context{align-items:stretch;flex-direction:column}.operation-context span{width:100%}.operation-context a{margin:2px 4px 0}.hero-side{grid-template-columns:1fr 1fr 1fr}}
-</style><style id="toner-module-navigation">
-.toner-module-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin:0 0 14px}
-.toner-module-nav a{display:flex;align-items:center;gap:10px;min-width:0;min-height:62px;padding:12px;border:1px solid var(--line);border-radius:13px;background:#fff;color:var(--text);text-decoration:none;box-shadow:0 5px 16px rgba(20,46,65,.04);transition:border-color .16s,background .16s,transform .16s}
-.toner-module-nav a:hover{border-color:#b7c9d6;background:#f8fbfc;transform:translateY(-1px)}
-.toner-module-nav a.active{border-color:#6dc99c;background:#eaf8f1;box-shadow:0 0 0 2px rgba(10,173,99,.08)}.toner-module-nav a.active:hover{border-color:#54b987;background:#eaf8f1}
-.toner-module-nav b{flex:0 0 27px;width:27px;height:27px;display:grid;place-items:center;border-radius:8px;background:#edf3f6;color:#456176;font-size:10px}
-.toner-module-nav a.active b{background:#0aad63;color:#fff}
-.toner-module-nav a:focus-visible{outline:3px solid rgba(10,173,99,.2);outline-offset:2px}.toner-module-nav span,.toner-module-nav strong,.toner-module-nav small{display:block;min-width:0}.toner-module-nav strong{font-size:10px}.toner-module-nav small{margin-top:2px;color:var(--muted);font-size:8px}
-@media(max-width:1050px){.toner-module-nav{grid-template-columns:repeat(3,1fr)}}@media(max-width:650px){.toner-module-nav{grid-template-columns:1fr 1fr}.toner-module-nav a{min-height:58px}.toner-module-nav a:last-child{grid-column:1/-1}}
+</style><style id="toner-task-navigation">
+.toner-task-nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin:0 0 14px}
+.toner-task-nav a{display:flex;align-items:center;gap:10px;min-width:0;min-height:62px;padding:12px;border:1px solid var(--line);border-radius:13px;background:#fff;color:var(--text);font:inherit;text-align:left;text-decoration:none;cursor:pointer;box-shadow:0 5px 16px rgba(20,46,65,.04);transition:border-color .16s,background .16s,transform .16s}
+.toner-task-nav a:hover{border-color:#b7c9d6;background:#f8fbfc;transform:translateY(-1px)}
+.toner-task-nav a.active{border-color:#6dc99c;background:#eaf8f1;box-shadow:0 0 0 2px rgba(10,173,99,.08)}
+.toner-task-nav a.active:hover{border-color:#54b987;background:#eaf8f1}
+.toner-task-nav b{flex:0 0 27px;width:27px;height:27px;display:grid;place-items:center;border-radius:8px;background:#edf3f6;color:#456176;font-size:10px}
+.toner-task-nav a.active b{background:#0aad63;color:#fff}
+.toner-task-nav a:focus-visible{outline:3px solid rgba(10,173,99,.2);outline-offset:2px}
+.toner-task-nav span,.toner-task-nav strong,.toner-task-nav small{display:block;min-width:0}
+.toner-task-nav strong{font-size:10px}.toner-task-nav small{margin-top:2px;color:var(--muted);font-size:8px}
+@media(max-width:1050px){.toner-task-nav{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:650px){.toner-task-nav{grid-template-columns:1fr 1fr}.toner-task-nav a{min-height:58px}.toner-task-nav a:last-child{grid-column:1/-1}}
 </style><style id="toner-operation-consistency">
 .page{max-width:1460px;margin:auto;padding:22px 28px 45px}
 .hero{grid-template-columns:minmax(0,1fr) auto;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 6px 22px rgba(36,55,74,.04);overflow:hidden}
@@ -84,7 +88,7 @@ body :where(button,.btn,[role="button"]){font-weight:500!important}
   <header class="header"><div class="head header-inner"><div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></div><div><h1>Registrar troca de toner</h1><p>Uma tela simples para localizar, confirmar e concluir a troca</p></div></div><div class="actions header-actions"></div></div></header>
   <main class="page">
     <section class="intro"><div><span>Gestão de suprimentos</span><h2>Impressoras e toners</h2></div><p>Escolha abaixo o que deseja fazer. A tela mostra somente as informações necessárias para essa atividade.</p></section>
-    <nav class="toner-module-nav" aria-label="Áreas de toner">
+    <nav class="toner-task-nav" aria-label="Áreas de toner">
       <a href="/toner.html#toner-printers"><b>1</b><span><strong>Impressoras</strong><small>Níveis e disponibilidade</small></span></a>
       <a class="active" href="/toner-operacao.html" aria-current="page"><b>2</b><span><strong>Registrar troca</strong><small>Fluxo guiado do técnico</small></span></a>
       <a href="/toner.html#toner-inventory"><b>3</b><span><strong>Estoque</strong><small>Entradas e saldo disponível</small></span></a>
