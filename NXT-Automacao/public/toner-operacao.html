@@ -69,10 +69,21 @@ body :where(button,.btn,[role="button"]){font-weight:500!important}
 .toner-module-nav a.active b{background:#0aad63;color:#fff}
 .toner-module-nav a:focus-visible{outline:3px solid rgba(10,173,99,.2);outline-offset:2px}.toner-module-nav span,.toner-module-nav strong,.toner-module-nav small{display:block;min-width:0}.toner-module-nav strong{font-size:10px}.toner-module-nav small{margin-top:2px;color:var(--muted);font-size:8px}
 @media(max-width:1050px){.toner-module-nav{grid-template-columns:repeat(3,1fr)}}@media(max-width:650px){.toner-module-nav{grid-template-columns:1fr 1fr}.toner-module-nav a{min-height:58px}.toner-module-nav a:last-child{grid-column:1/-1}}
+</style><style id="toner-operation-consistency">
+.page{max-width:1460px;margin:auto;padding:22px 28px 45px}
+.hero{grid-template-columns:minmax(0,1fr) auto;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:0 6px 22px rgba(36,55,74,.04);overflow:hidden}
+.hero-main,.hero-side{border:0;border-radius:0;box-shadow:none}
+.hero-main{padding:14px 16px}.hero-main .eyebrow{font-size:8px}.hero h2{margin:4px 0 2px;font-size:16px}.hero p{font-size:9px}
+.hero-side{min-width:390px;padding:10px;background:#f8fafb;border-left:1px solid var(--line)}
+.stat{padding:10px;background:#fff;border:1px solid #edf1f4}.stat strong{margin-top:4px;font-size:18px}
+@media(max-width:950px){.hero{grid-template-columns:1fr}.hero-side{min-width:0;border-top:1px solid var(--line);border-left:0}}
+@media(max-width:820px){.page{padding:12px 12px 92px}}
+@media(max-width:650px){.hero-side{grid-template-columns:1fr 1fr 1fr}.hero-main{padding:14px}.hero h2{font-size:16px}}
 </style></head>
 <body>
   <header class="header"><div class="head header-inner"><div class="brand"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></div><div><h1>Registrar troca de toner</h1><p>Uma tela simples para localizar, confirmar e concluir a troca</p></div></div><div class="actions header-actions"></div></div></header>
   <main class="page">
+    <section class="intro"><div><span>Gestão de suprimentos</span><h2>Impressoras e toners</h2></div><p>Escolha abaixo o que deseja fazer. A tela mostra somente as informações necessárias para essa atividade.</p></section>
     <nav class="toner-module-nav" aria-label="Áreas de toner">
       <a href="/toner.html#toner-printers"><b>1</b><span><strong>Impressoras</strong><small>Níveis e disponibilidade</small></span></a>
       <a class="active" href="/toner-operacao.html" aria-current="page"><b>2</b><span><strong>Registrar troca</strong><small>Fluxo guiado do técnico</small></span></a>
