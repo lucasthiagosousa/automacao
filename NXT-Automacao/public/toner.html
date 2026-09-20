@@ -203,6 +203,10 @@ body :where(button,.btn,[role="button"]){font-weight:500!important}
 .toner-task-nav strong{font-size:10px}.toner-task-nav small{margin-top:2px;color:var(--muted);font-size:8px}
 @media(max-width:1050px){.toner-task-nav{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:650px){.toner-task-nav{grid-template-columns:1fr 1fr}.toner-task-nav a{min-height:58px}.toner-task-nav a:last-child{grid-column:1/-1}}
+</style><style id="toner-position-lock">
+main.page{padding-left:28px!important;padding-right:28px!important}
+@media(max-width:1180px){main.page{padding-left:20px!important;padding-right:20px!important}}
+@media(max-width:560px){main.page{padding-left:14px!important;padding-right:14px!important}}
 </style></head>
 <body>
   <header class="header"><div class="header-inner"><div class="brand"><div class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></div><div><h1>Controle de Toner</h1><p id="updatedText">Carregando a última leitura...</p></div></div><div class="header-actions"><button class="btn btn-header" id="tonerThresholdButton" hidden>Limite: 20%</button><button class="btn btn-header" id="managePrintersButton" hidden>Gerenciar IPs</button><button class="btn btn-header" id="refreshButton" hidden>Atualizar impressoras</button></div></div></header>
