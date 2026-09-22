@@ -46,6 +46,7 @@ const CARTRIDGES = {
 
 const OIDS = {
   hostname: "1.3.6.1.2.1.1.5.0",
+  serial: "1.3.6.1.2.1.43.5.1.1.17.1",
   description: "1.3.6.1.2.1.43.11.1.1.6.1",
   maximum: "1.3.6.1.2.1.43.11.1.1.8.1",
   level: "1.3.6.1.2.1.43.11.1.1.9.1",
@@ -178,7 +179,7 @@ function tonerSupply(description) {
 async function checkPrinter(printer, threshold, timeout) {
   const [ip, model, location = "", unit = ""] = printer;
   const hostname = await query(ip, OIDS.hostname, 0xa0, timeout, 1);
-  if (!hostname) return { ip, model, location, unit, hostname: "", online: false, supplies: [], status: "offline", totalPages: null,
+  if (!hostname) return { ip, model, location, unit, hostname: "", serial: "", online: false, supplies: [], status: "offline", totalPages: null,
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
   /*
    * Os índices de prtMarkerSuppliesTable variam entre fabricantes e até
@@ -187,6 +188,8 @@ async function checkPrinter(printer, threshold, timeout) {
    * As consultas são sequenciais para evitar descarte de pacotes em
    * impressoras que limitam requisições SNMP simultâneas.
    */
+  const serialResult = await query(ip, OIDS.serial, 0xa0, timeout, 2);
+  const serial = serialResult && serialResult.value != null ? String(serialResult.value).trim() : "";
   const descriptions = await walk(ip, OIDS.description, timeout);
   const maximums = await walk(ip, OIDS.maximum, timeout);
   const levels = await walk(ip, OIDS.level, timeout);
@@ -226,7 +229,7 @@ async function checkPrinter(printer, threshold, timeout) {
   const statuses = toner.map(function (item) { return item.status; });
   const status = statuses.includes("critical") ? "critical" : statuses.includes("warning") ? "warning"
     : statuses.includes("ok") ? "ok" : "online";
-  return { ip, model, location, unit, hostname: String(hostname.value || ""), online: true, supplies, status,
+  return { ip, model, location, unit, hostname: String(hostname.value || ""), serial, online: true, supplies, status,
     totalPages: totalPages >= 0 ? totalPages : null,
     cartridge: CARTRIDGES[model] || "Confirmar pelo consumível informado" };
 }
