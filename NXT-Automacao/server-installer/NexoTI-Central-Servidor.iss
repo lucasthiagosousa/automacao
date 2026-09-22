@@ -288,6 +288,8 @@ begin
     Exit;
   end;
 
+  { Grave a configuração antes de o script proteger ProgramData novamente. }
+  SaveServerConfiguration;
   Result := '';
 end;
 
@@ -306,12 +308,6 @@ begin
   ServerPage.Values[1] := 'public';
 
   LoadExistingConfiguration;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-    SaveServerConfiguration;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
