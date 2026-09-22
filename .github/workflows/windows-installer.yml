@@ -139,6 +139,14 @@ jobs:
 
           $service = Get-Service -Name "NexoTICentral" -ErrorAction Stop
           if ($service.Status -ne "Running") {
+            $serviceLogs = Join-Path $env:ProgramData "NexoTI\CentralOperacoes\logs"
+            if (Test-Path $serviceLogs) {
+              & icacls.exe $serviceLogs /grant "$($env:USERNAME):(OI)(CI)F" /T /C | Out-Null
+              Get-ChildItem $serviceLogs -File | ForEach-Object {
+                Write-Host "===== $($_.Name) ====="
+                Get-Content $_.FullName -Tail 120 -ErrorAction Continue
+              }
+            }
             throw "O serviço foi instalado, mas está $($service.Status)."
           }
 
