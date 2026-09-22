@@ -14,7 +14,6 @@ DefaultDirName={autopf}\Nexo TI\Central de Operacoes
 DefaultGroupName=Nexo TI
 OutputDir={#OutputDir}
 OutputBaseFilename=NexoTI-Central-Servidor-Setup
-SetupIconFile=
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
