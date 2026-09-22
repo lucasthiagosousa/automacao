@@ -69,10 +69,12 @@ jobs:
 
           $iconSvg = Join-Path $app "public\assets\nexo-ti-icon.svg"
           $iconIco = Join-Path $app "public\assets\nexo-ti-icon.ico"
+          $rootFavicon = Join-Path $app "public\favicon.ico"
           & magick $iconSvg -background none -define icon:auto-resize=256,128,64,48,32,16 $iconIco
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path $iconIco)) {
             throw "Falha ao gerar o ícone do Windows."
           }
+          Copy-Item $iconIco $rootFavicon -Force
 
           $env:PLAYWRIGHT_BROWSERS_PATH = $browsers
           npx playwright install chromium
