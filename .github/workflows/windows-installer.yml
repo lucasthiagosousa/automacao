@@ -198,6 +198,19 @@ jobs:
           if (Get-Service -Name "NexoTICentral" -ErrorAction SilentlyContinue) {
             throw "O serviço anterior permaneceu registrado após a desinstalação."
           }
+
+          # O desinstalador do Inno Setup pode encerrar o processo principal antes
+          # de concluir a remoção dos últimos arquivos. Reinstalar nesse intervalo
+          # cria um serviço aparentemente ativo, mas ainda preso ao wrapper antigo.
+          $oldInstallRoot = "C:\Program Files\Nexo TI\Central de Operacoes"
+          for ($attempt = 1; $attempt -le 60 -and (Test-Path $oldInstallRoot); $attempt++) {
+            Start-Sleep -Milliseconds 500
+          }
+          if (Test-Path $oldInstallRoot) {
+            throw "A pasta da versão anterior permaneceu em uso após a desinstalação."
+          }
+          Start-Sleep -Seconds 2
+
           if (-not (Test-Path $preservationMarker)) {
             throw "Os dados persistentes foram removidos durante a atualização."
           }
