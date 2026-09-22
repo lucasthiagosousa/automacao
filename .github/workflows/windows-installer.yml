@@ -123,8 +123,9 @@ jobs:
           $installer = Join-Path $env:NXT_OUTPUT_DIR "NexoTI-Central-Servidor-Setup.exe"
           $installLog = Join-Path $env:RUNNER_TEMP "nexo-ti-install.log"
 
-          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/LOG=$installLog"
-          if ($LASTEXITCODE -ne 0) {
+          $arguments = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=$installLog")
+          $installProcess = Start-Process -FilePath $installer -ArgumentList $arguments -Wait -PassThru
+          if ($installProcess.ExitCode -ne 0) {
             if (Test-Path $installLog) { Get-Content $installLog -Tail 160 }
             $serviceLogs = Join-Path $env:ProgramData "NexoTI\CentralOperacoes\logs"
             if (Test-Path $serviceLogs) {
@@ -133,7 +134,7 @@ jobs:
                 Get-Content $_.FullName -Tail 100
               }
             }
-            throw "A instalação de teste falhou com o código $LASTEXITCODE."
+            throw "A instalação de teste falhou com o código $($installProcess.ExitCode)."
           }
 
           $service = Get-Service -Name "NexoTICentral" -ErrorAction Stop
