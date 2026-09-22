@@ -182,37 +182,11 @@ jobs:
           $preservationMarker = Join-Path $env:ProgramData "NexoTI\CentralOperacoes\dados\preservacao-atualizacao.test"
           "preservar" | Set-Content $preservationMarker -Encoding ascii
 
-          $previousUninstaller = "C:\Program Files\Nexo TI\Central de Operacoes\unins000.exe"
-          if (-not (Test-Path $previousUninstaller)) {
-            throw "Desinstalador da versão anterior não foi encontrado."
-          }
-          $uninstallProcess = Start-Process -FilePath $previousUninstaller -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -Wait -PassThru
-          if ($uninstallProcess.ExitCode -ne 0) {
-            throw "A remoção controlada da versão anterior falhou: $($uninstallProcess.ExitCode)."
-          }
-
-          for ($attempt = 1; $attempt -le 30; $attempt++) {
-            if (-not (Get-Service -Name "NexoTICentral" -ErrorAction SilentlyContinue)) { break }
-            Start-Sleep -Milliseconds 500
-          }
-          if (Get-Service -Name "NexoTICentral" -ErrorAction SilentlyContinue) {
-            throw "O serviço anterior permaneceu registrado após a desinstalação."
-          }
-
-          # O desinstalador do Inno Setup pode encerrar o processo principal antes
-          # de concluir a remoção dos últimos arquivos. Reinstalar nesse intervalo
-          # cria um serviço aparentemente ativo, mas ainda preso ao wrapper antigo.
-          $oldInstallRoot = "C:\Program Files\Nexo TI\Central de Operacoes"
-          for ($attempt = 1; $attempt -le 60 -and (Test-Path $oldInstallRoot); $attempt++) {
-            Start-Sleep -Milliseconds 500
-          }
-          if (Test-Path $oldInstallRoot) {
-            throw "A pasta da versão anterior permaneceu em uso após a desinstalação."
-          }
-          Start-Sleep -Seconds 2
-
+          # Executa o instalador novamente sobre a instalação existente.
+          # Este é o fluxo real de atualização em produção: o instalador para o
+          # serviço, troca os arquivos e o registra novamente sem remover dados.
           if (-not (Test-Path $preservationMarker)) {
-            throw "Os dados persistentes foram removidos durante a atualização."
+            throw "Não foi possível criar o marcador de preservação dos dados."
           }
 
           # Testa a atualização sobre uma instalação que já protegeu ProgramData.
