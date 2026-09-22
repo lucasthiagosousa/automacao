@@ -14,6 +14,7 @@ DefaultDirName={autopf}\Nexo TI\Central de Operacoes
 DefaultGroupName=Nexo TI
 OutputDir={#OutputDir}
 OutputBaseFilename=NexoTI-Central-Servidor-Setup
+SetupIconFile={#StageDir}\app\public\assets\nexo-ti-icon.ico
 Compression=lzma2/fast
 SolidCompression=no
 WizardStyle=modern
@@ -42,10 +43,10 @@ Source: "{#StageDir}\browsers\*"; DestDir: "{app}\browsers"; Flags: ignoreversio
 Source: "{#StageDir}\service\*"; DestDir: "{app}\service"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Abrir Central de Operações"; Filename: "http://localhost:{code:GetPort}/login.html"
+Name: "{group}\Abrir Central de Operações"; Filename: "http://localhost:{code:GetPort}/login.html"; IconFilename: "{app}\app\public\assets\nexo-ti-icon.ico"
 Name: "{group}\Logs do servidor"; Filename: "{commonappdata}\NexoTI\CentralOperacoes\logs"
 Name: "{group}\Desinstalar servidor"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\Nexo TI - Central"; Filename: "http://localhost:{code:GetPort}/login.html"; Tasks: desktopicon
+Name: "{autodesktop}\Nexo TI - Central"; Filename: "http://localhost:{code:GetPort}/login.html"; IconFilename: "{app}\app\public\assets\nexo-ti-icon.ico"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDescription: "Atalhos:"; Flags: unchecked
