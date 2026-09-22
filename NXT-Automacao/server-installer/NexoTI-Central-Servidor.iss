@@ -1,5 +1,5 @@
 #define MyAppName "Nexo TI - Central de Operações"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.3.1"
 #define MyAppPublisher "Nexo TI"
 #define StageDir GetEnv("NXT_STAGE_DIR")
 #define OutputDir GetEnv("NXT_OUTPUT_DIR")
@@ -32,9 +32,9 @@ CloseApplications=yes
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Dirs]
-Name: "{commonappdata}\NexoTI\CentralOperacoes"
-Name: "{commonappdata}\NexoTI\CentralOperacoes\dados"
-Name: "{commonappdata}\NexoTI\CentralOperacoes\logs"
+Name: "{commonappdata}\NexoTI\CentralOperacoes"; Permissions: admins-full system-full
+Name: "{commonappdata}\NexoTI\CentralOperacoes\dados"; Permissions: admins-full system-full
+Name: "{commonappdata}\NexoTI\CentralOperacoes\logs"; Permissions: admins-full system-full
 
 [Files]
 Source: "{#StageDir}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -136,7 +136,7 @@ begin
 
   if not FileExists(ConfigPath) then
   begin
-    SaveStringToFile(
+    if not SaveStringToFile(
       ConfigPath,
       '# Configuração local do servidor Nexo TI' + #13#10 +
       'NXT_EMAIL=' + #13#10 +
@@ -145,7 +145,11 @@ begin
       'NXT_ALLOW_REMOTE_SETUP=0' + #13#10 +
       'NXT_JSON_LIMIT=32mb' + #13#10,
       False
-    );
+    ) then
+      RaiseException(
+        'Não foi possível criar a configuração em ' + ConfigPath + '. ' +
+        'Execute o instalador como administrador.'
+      );
   end;
 
   SetEnvironmentValue('NXT_HOST', '0.0.0.0');
@@ -231,9 +235,51 @@ begin
   Exec(ServiceExe, 'uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
+function EnsurePersistentDataAccess: Boolean;
+var
+  DataRoot, Params: string;
+  ResultCode: Integer;
+begin
+  DataRoot := ExpandConstant('{commonappdata}\NexoTI\CentralOperacoes');
+  ForceDirectories(DataRoot);
+
+  { Instalações anteriores podem ter deixado ProgramData acessível apenas ao SYSTEM. }
+  Params := '/F "' + DataRoot + '" /R /D Y';
+  Exec(
+    ExpandConstant('{sys}\takeown.exe'),
+    Params,
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode
+  );
+
+  Params :=
+    '"' + DataRoot + '" /inheritance:e ' +
+    '/grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" /T /C';
+  Result :=
+    Exec(
+      ExpandConstant('{sys}\icacls.exe'),
+      Params,
+      '',
+      SW_HIDE,
+      ewWaitUntilTerminated,
+      ResultCode
+    ) and (ResultCode = 0);
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): string;
 begin
   StopPreviousService;
+
+  if not EnsurePersistentDataAccess then
+  begin
+    Result :=
+      'Não foi possível preparar a pasta de dados persistentes. ' +
+      'Execute o instalador como administrador.';
+    Exit;
+  end;
+
   Result := '';
 end;
 
