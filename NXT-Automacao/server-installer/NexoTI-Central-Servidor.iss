@@ -231,8 +231,8 @@ end;
 
 procedure StopPreviousService;
 var
-  ServiceExe: string;
-  ResultCode: Integer;
+  ServiceExe, Port: string;
+  ResultCode, Attempt: Integer;
 begin
   ServiceExe := ExpandConstant('{app}\service\NexoTICentral.exe');
   if not FileExists(ServiceExe) then
@@ -241,6 +241,20 @@ begin
   { Na atualização, mantenha o registro do serviço para evitar o estado
     "marcado para exclusão" do Windows. A desinstalação real o remove. }
   Exec(ServiceExe, 'stop', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  { O wrapper pode terminar alguns instantes antes do processo Node liberar a porta. }
+  Port := GetPort('');
+  for Attempt := 1 to 60 do
+  begin
+    if not PortIsListening(Port) then
+      Exit;
+    Sleep(500);
+  end;
+
+  RaiseException(
+    'O serviço anterior foi parado, mas a porta ' + Port +
+    ' continua ocupada. Aguarde alguns segundos e execute o instalador novamente.'
+  );
 end;
 
 function EnsurePersistentDataAccess: Boolean;
