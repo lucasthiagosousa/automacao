@@ -116,6 +116,41 @@ jobs:
           if (-not (Test-Path $installer)) { throw "Instalador não foi criado." }
           (Get-FileHash $installer -Algorithm SHA256).Hash | Out-File "$installer.sha256" -Encoding ascii
 
+      - name: Testar instalação em Windows limpo
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Join-Path $env:NXT_OUTPUT_DIR "NexoTI-Central-Servidor-Setup.exe"
+          $installLog = Join-Path $env:RUNNER_TEMP "nexo-ti-install.log"
+
+          & $installer /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/LOG=$installLog"
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $installLog) { Get-Content $installLog -Tail 160 }
+            $serviceLogs = Join-Path $env:ProgramData "NexoTI\CentralOperacoes\logs"
+            if (Test-Path $serviceLogs) {
+              Get-ChildItem $serviceLogs -File | ForEach-Object {
+                Write-Host "===== $($_.Name) ====="
+                Get-Content $_.FullName -Tail 100
+              }
+            }
+            throw "A instalação de teste falhou com o código $LASTEXITCODE."
+          }
+
+          $service = Get-Service -Name "NexoTICentral" -ErrorAction Stop
+          if ($service.Status -ne "Running") {
+            throw "O serviço foi instalado, mas está $($service.Status)."
+          }
+
+          $response = Invoke-WebRequest "http://127.0.0.1:3000/login.html" -UseBasicParsing -TimeoutSec 15
+          if ($response.StatusCode -ne 200) {
+            throw "A aplicação respondeu com HTTP $($response.StatusCode)."
+          }
+
+          $uninstaller = "C:\Program Files\Nexo TI\Central de Operacoes\unins000.exe"
+          if (Test-Path $uninstaller) {
+            & $uninstaller /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          }
+
       - name: Publicar instalador
         shell: pwsh
         env:
