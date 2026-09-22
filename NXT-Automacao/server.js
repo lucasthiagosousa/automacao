@@ -1267,6 +1267,46 @@ app.get("/api/impressoras", auth.requirePermission("toner"), (req, res) => {
   });
 });
 
+app.get("/api/impressoras/:ip/detalhes", auth.requirePermission("toner"), function(req,res) {
+  const ip=String(req.params.ip||"").trim();
+  const printer=activePrinterByIp(ip);
+  if(!printer)return res.status(404).json({sucesso:false,mensagem:"Impressora não encontrada no cadastro ativo."});
+  const report=lerTonerAtual(),reading=(report.printers||[]).find(function(item){return item.ip===printer.ip;})||null;
+  const pageHistory=auth.database.prepare(
+    "SELECT total_pages AS totalPages,recorded_at AS recordedAt FROM printer_page_history WHERE printer_ip=? ORDER BY recorded_at DESC LIMIT 180"
+  ).all(printer.ip).reverse();
+  const tonerHistory=auth.database.prepare(
+    "SELECT supply_name AS supplyName,level,status,recorded_at AS recordedAt FROM toner_history WHERE printer_ip=? ORDER BY recorded_at DESC LIMIT 120"
+  ).all(printer.ip);
+  const exchanges=auth.database.prepare(
+    "SELECT e.id,e.toner_model AS tonerModel,e.color,e.previous_level AS previousLevel,e.current_level AS currentLevel,e.source,e.created_at AS createdAt,"
+    +"CASE WHEN e.source='automatic' THEN 'Sistema automático' ELSE COALESCE(u.username,'Sistema') END AS performedBy "
+    +"FROM toner_exchanges e LEFT JOIN users u ON u.id=e.performed_by WHERE e.printer_ip=? ORDER BY e.created_at DESC LIMIT 50"
+  ).all(printer.ip);
+  const maintenance=auth.database.prepare(
+    "SELECT id,maintenance_type AS type,interval_pages AS intervalPages,last_pages AS lastPages,next_due_pages AS nextDuePages,last_at AS lastAt,notes,created_at AS createdAt,updated_at AS updatedAt "
+    +"FROM printer_maintenance WHERE printer_ip=? ORDER BY next_due_pages"
+  ).all(printer.ip);
+  const supplies=reading&&Array.isArray(reading.supplies)?reading.supplies.filter(function(item){return item.isToner!==false;}):[];
+  const alerts=[];
+  if(!reading||reading.online===false)alerts.push({severity:"critical",title:"Impressora sem resposta",detail:"Não houve resposta na última consulta SNMP."});
+  supplies.forEach(function(item){
+    if(item.status==="critical")alerts.push({severity:"critical",title:"Toner crítico",detail:(item.description||"Suprimento")+" está com "+(item.percent==null?"nível indisponível":item.percent+"%")+"."});
+    else if(item.status==="warning")alerts.push({severity:"warning",title:"Toner em atenção",detail:(item.description||"Suprimento")+" está com "+(item.percent==null?"nível indisponível":item.percent+"%")+"."});
+  });
+  const lastReading=report.updatedAt||null,ageMinutes=lastReading?Math.max(0,Math.round((Date.now()-Date.parse(lastReading))/60000)):null;
+  if(ageMinutes!==null&&ageMinutes>120)alerts.push({severity:"warning",title:"Leitura desatualizada",detail:"A última leitura ocorreu há "+ageMinutes+" minutos."});
+  maintenance.forEach(function(item){if(reading&&Number(reading.totalPages)>=Number(item.nextDuePages))alerts.push({severity:"warning",title:"Manutenção pendente",detail:item.type+" atingiu o contador previsto."});});
+  if(!alerts.length)alerts.push({severity:"ok",title:"Operação normal",detail:"Nenhuma pendência identificada para esta impressora."});
+  const firstPage=pageHistory[0],lastPage=pageHistory[pageHistory.length-1],pageDelta=firstPage&&lastPage?Math.max(0,Number(lastPage.totalPages)-Number(firstPage.totalPages)):0;
+  return res.json({sucesso:true,printer:{
+    id:printer.id,ip:printer.ip,model:printer.model,location:printer.location||"",unit:printer.unit||"",active:Boolean(printer.active),
+    hostname:reading&&reading.hostname||"",serial:reading&&reading.serial||"",online:reading?reading.online:null,status:reading&&reading.status||"unknown",
+    totalPages:reading&&reading.totalPages!=null?Number(reading.totalPages):null,cartridge:reading&&reading.cartridge||"",lastReading:lastReading,
+    supplies:supplies
+  },counters:{periodPages:pageDelta,readings:pageHistory},tonerHistory:tonerHistory,exchanges:exchanges,maintenance:maintenance,alerts:alerts,podeEditar:["master","operator"].includes(req.user.role)});
+});
+
 app.post("/api/impressoras", auth.requirePermission("toner"), (req, res) => {
   try {
     const impressora = auth.savePrinter(req.body, Number(req.user.id));
