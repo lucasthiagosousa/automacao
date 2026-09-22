@@ -163,7 +163,8 @@ jobs:
           if ($service.Status -ne "Running") {
             $serviceLogs = Join-Path $env:ProgramData "NexoTI\CentralOperacoes\logs"
             if (Test-Path $serviceLogs) {
-              & icacls.exe $serviceLogs /grant "$($env:USERNAME):(OI)(CI)F" /T /C | Out-Null
+              & takeown.exe /F $serviceLogs /R /D Y | Out-Null
+              & icacls.exe $serviceLogs /inheritance:e /grant "$($env:USERNAME):(OI)(CI)F" /T /C | Out-Null
               Get-ChildItem $serviceLogs -File | ForEach-Object {
                 Write-Host "===== $($_.Name) ====="
                 Get-Content $_.FullName -Tail 120 -ErrorAction Continue
@@ -199,7 +200,8 @@ jobs:
             }
             $serviceLogs = Join-Path $env:ProgramData "NexoTI\\CentralOperacoes\\logs"
             if (Test-Path $serviceLogs) {
-              & icacls.exe $serviceLogs /grant "$($env:USERNAME):(OI)(CI)F" /T /C | Out-Null
+              & takeown.exe /F $serviceLogs /R /D Y | Out-Null
+              & icacls.exe $serviceLogs /inheritance:e /grant "$($env:USERNAME):(OI)(CI)F" /T /C | Out-Null
               Get-ChildItem $serviceLogs -File | ForEach-Object {
                 Write-Host "===== $($_.Name) ====="
                 Get-Content $_.FullName -Tail 160 -ErrorAction Continue
