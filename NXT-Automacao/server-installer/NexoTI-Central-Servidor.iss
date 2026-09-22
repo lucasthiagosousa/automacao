@@ -238,8 +238,9 @@ begin
   if not FileExists(ServiceExe) then
     Exit;
 
+  { Na atualização, mantenha o registro do serviço para evitar o estado
+    "marcado para exclusão" do Windows. A desinstalação real o remove. }
   Exec(ServiceExe, 'stop', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec(ServiceExe, 'uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
 function EnsurePersistentDataAccess: Boolean;
