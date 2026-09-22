@@ -178,6 +178,30 @@ jobs:
             throw "A aplicação respondeu com HTTP $($response.StatusCode)."
           }
 
+          # Testa atualização limpa, preservando todos os dados persistentes.
+          $preservationMarker = Join-Path $env:ProgramData "NexoTI\CentralOperacoes\dados\preservacao-atualizacao.test"
+          "preservar" | Set-Content $preservationMarker -Encoding ascii
+
+          $previousUninstaller = "C:\Program Files\Nexo TI\Central de Operacoes\unins000.exe"
+          if (-not (Test-Path $previousUninstaller)) {
+            throw "Desinstalador da versão anterior não foi encontrado."
+          }
+          $uninstallProcess = Start-Process -FilePath $previousUninstaller -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -Wait -PassThru
+          if ($uninstallProcess.ExitCode -ne 0) {
+            throw "A remoção controlada da versão anterior falhou: $($uninstallProcess.ExitCode)."
+          }
+
+          for ($attempt = 1; $attempt -le 30; $attempt++) {
+            if (-not (Get-Service -Name "NexoTICentral" -ErrorAction SilentlyContinue)) { break }
+            Start-Sleep -Milliseconds 500
+          }
+          if (Get-Service -Name "NexoTICentral" -ErrorAction SilentlyContinue) {
+            throw "O serviço anterior permaneceu registrado após a desinstalação."
+          }
+          if (-not (Test-Path $preservationMarker)) {
+            throw "Os dados persistentes foram removidos durante a atualização."
+          }
+
           # Testa a atualização sobre uma instalação que já protegeu ProgramData.
           $updateLog = Join-Path $env:RUNNER_TEMP "nexo-ti-update.log"
           $updateArgs = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=$updateLog")
