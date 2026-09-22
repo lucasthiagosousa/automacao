@@ -67,6 +67,13 @@ jobs:
 
           Copy-Item (Get-Command node).Source (Join-Path $runtime "node.exe") -Force
 
+          $iconSvg = Join-Path $app "public\assets\nexo-ti-icon.svg"
+          $iconIco = Join-Path $app "public\assets\nexo-ti-icon.ico"
+          & magick $iconSvg -background none -define icon:auto-resize=256,128,64,48,32,16 $iconIco
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $iconIco)) {
+            throw "Falha ao gerar o ícone do Windows."
+          }
+
           $env:PLAYWRIGHT_BROWSERS_PATH = $browsers
           npx playwright install chromium
           if ($LASTEXITCODE -ne 0) {
