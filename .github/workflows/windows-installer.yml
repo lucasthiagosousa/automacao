@@ -8,6 +8,10 @@ on:
       - "NXT-Automacao/**"
       - ".github/workflows/windows-installer.yml"
 
+concurrency:
+  group: windows-server-installer-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
