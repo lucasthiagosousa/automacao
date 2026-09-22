@@ -59,7 +59,15 @@ jobs:
           Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
           New-Item $app, $runtime, $service, $browsers -ItemType Directory -Force | Out-Null
 
-          $robocopyArgs = @(".", $app, "/E", "/R:2", "/W:2", "/XD", "dist", "dados", "build", "server-installer", "/XF", ".env")
+          # Caminhos absolutos evitam excluir pastas internas legítimas com o mesmo nome.
+          $source = (Get-Location).Path
+          $excludedDirs = @(
+            (Join-Path $source "dist"),
+            (Join-Path $source "dados"),
+            (Join-Path $source "build"),
+            (Join-Path $source "server-installer")
+          )
+          $robocopyArgs = @($source, $app, "/E", "/R:2", "/W:2", "/XD") + $excludedDirs + @("/XF", (Join-Path $source ".env"))
           & robocopy @robocopyArgs
           if ($LASTEXITCODE -gt 7) {
             throw "Falha ao copiar a aplicação. Robocopy: $LASTEXITCODE"
@@ -90,9 +98,23 @@ jobs:
           if (-not (Test-Path (Join-Path $app "server.js"))) { throw "server.js ausente no pacote." }
           if (-not (Test-Path (Join-Path $app "public\login.html"))) { throw "interface web ausente no pacote." }
           if (-not (Test-Path (Join-Path $app "node_modules\express"))) { throw "dependências ausentes no pacote." }
+          if (-not (Test-Path (Join-Path $app "node_modules\\type-is\\node_modules\\content-type\\dist\\index.js"))) {
+            throw "Dependência interna content-type ausente no pacote."
+          }
           if (-not (Test-Path (Join-Path $runtime "node.exe"))) { throw "Node.js ausente no pacote." }
           if (-not (Get-ChildItem $browsers -Directory | Where-Object Name -Match "chromium")) {
             throw "Chromium ausente no pacote."
+          }
+
+          # Valida com o mesmo Node portátil e a mesma árvore que serão instalados.
+          Push-Location $app
+          try {
+            & (Join-Path $runtime "node.exe") -e "require('express'); require('type-is'); require('playwright'); require('read-excel-file/node'); console.log('Dependencias do pacote validadas.')"
+            if ($LASTEXITCODE -ne 0) {
+              throw "O pacote portátil contém dependências inválidas ou incompletas."
+            }
+          } finally {
+            Pop-Location
           }
 
           "NXT_STAGE_DIR=$stage" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
