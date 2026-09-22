@@ -83,24 +83,41 @@ if ($existingService) {
   }
 }
 
-& $serviceExe install | Out-Null
-if ($LASTEXITCODE -ne 0) {
-  throw "Não foi possível registrar o serviço $serviceName. Código: $LASTEXITCODE"
-}
-
-& $serviceExe start | Out-Null
-if ($LASTEXITCODE -ne 0) {
-  throw "Não foi possível iniciar o serviço $serviceName. Código: $LASTEXITCODE"
+$installOutput = & $serviceExe install 2>&1
+$installExitCode = $LASTEXITCODE
+if ($installExitCode -ne 0) {
+  throw "Não foi possível registrar o serviço $serviceName. Código: $installExitCode. Detalhes: $($installOutput -join ' ')"
 }
 
 $installedService = Get-Service -Name $serviceName -ErrorAction Stop
-for ($attempt = 1; $attempt -le 20 -and $installedService.Status -ne "Running"; $attempt++) {
+
+# O Service Control Manager é a fonte de verdade para iniciar e validar o serviço.
+# O comando 'start' do wrapper pode retornar antes de o Windows estabilizar o processo.
+Start-Service -Name $serviceName -ErrorAction Stop
+
+for ($attempt = 1; $attempt -le 30; $attempt++) {
   Start-Sleep -Milliseconds 500
   $installedService.Refresh()
+  if ($installedService.Status -eq "Running") {
+    break
+  }
 }
 
 if ($installedService.Status -ne "Running") {
-  throw "O serviço $serviceName foi registrado, mas está $($installedService.Status)."
+  throw "O serviço $serviceName foi registrado, mas não iniciou. Estado: $($installedService.Status)."
+}
+
+# Confirma que o processo não iniciou e caiu imediatamente.
+Start-Sleep -Seconds 3
+$installedService.Refresh()
+if ($installedService.Status -ne "Running") {
+  $errorLog = Join-Path $DataRoot "logs\NexoTICentral.err.log"
+  $details = if (Test-Path $errorLog) {
+    (Get-Content $errorLog -Tail 20 -ErrorAction SilentlyContinue) -join " | "
+  } else {
+    "log de erro ainda não criado"
+  }
+  throw "O serviço $serviceName iniciou, mas foi encerrado. Estado: $($installedService.Status). Detalhes: $details"
 }
 
 Write-Host "Pasta persistente: $DataRoot"
