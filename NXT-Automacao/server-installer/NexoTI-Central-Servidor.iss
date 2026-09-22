@@ -188,8 +188,8 @@ begin
   if CurPageID <> ServerPage.ID then
     Exit;
 
-  if (not TryStrToInt(Trim(ServerPage.Values[0]), PortNumber)) or
-     (PortNumber < 1) or (PortNumber > 65535) then
+  PortNumber := StrToIntDef(Trim(ServerPage.Values[0]), 0);
+  if (PortNumber < 1) or (PortNumber > 65535) then
   begin
     MsgBox('Informe uma porta válida entre 1 e 65535.', mbError, MB_OK);
     Result := False;
