@@ -53,8 +53,6 @@ Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDesc
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\service\Configure-Server.ps1"" -Port {code:GetPort}"; StatusMsg: "Protegendo dados e configurando o firewall..."; Flags: runhidden waituntilterminated
-Filename: "{app}\service\NexoTICentral.exe"; Parameters: "install"; StatusMsg: "Instalando o serviço do Windows..."; Flags: runhidden waituntilterminated
-Filename: "{app}\service\NexoTICentral.exe"; Parameters: "start"; StatusMsg: "Iniciando a Central de Operações..."; Flags: runhidden waituntilterminated
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\service\Configure-Server.ps1"" -Port {code:GetPort} -VerifyOnly"; StatusMsg: "Validando o servidor..."; Flags: runhidden waituntilterminated
 Filename: "http://localhost:{code:GetPort}/setup.html"; Description: "Abrir configuração inicial"; Flags: shellexec postinstall nowait skipifsilent
 
