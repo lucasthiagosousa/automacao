@@ -54,5 +54,54 @@ Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue
 
 New-NetFirewallRule -DisplayName $firewallRuleName -Direction Inbound -Action Allow -Enabled True -Profile Private -Protocol TCP -LocalPort $Port -RemoteAddress LocalSubnet | Out-Null
 
+# Recria o registro do serviço de forma idempotente. Ao atualizar o executável
+# do wrapper, o Windows precisa concluir a exclusão anterior antes do novo registro.
+$serviceName = "NexoTICentral"
+$serviceExe = Join-Path $PSScriptRoot "NexoTICentral.exe"
+if (-not (Test-Path $serviceExe)) {
+  throw "Executável do serviço não encontrado em $serviceExe."
+}
+
+$existingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+if ($existingService) {
+  if ($existingService.Status -ne "Stopped") {
+    & $serviceExe stop | Out-Null
+    Start-Sleep -Seconds 1
+  }
+
+  & $serviceExe uninstall | Out-Null
+
+  for ($attempt = 1; $attempt -le 30; $attempt++) {
+    if (-not (Get-Service -Name $serviceName -ErrorAction SilentlyContinue)) {
+      break
+    }
+    Start-Sleep -Milliseconds 500
+  }
+
+  if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+    throw "O Windows não concluiu a remoção do registro anterior do serviço."
+  }
+}
+
+& $serviceExe install | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw "Não foi possível registrar o serviço $serviceName. Código: $LASTEXITCODE"
+}
+
+& $serviceExe start | Out-Null
+if ($LASTEXITCODE -ne 0) {
+  throw "Não foi possível iniciar o serviço $serviceName. Código: $LASTEXITCODE"
+}
+
+$installedService = Get-Service -Name $serviceName -ErrorAction Stop
+for ($attempt = 1; $attempt -le 20 -and $installedService.Status -ne "Running"; $attempt++) {
+  Start-Sleep -Milliseconds 500
+  $installedService.Refresh()
+}
+
+if ($installedService.Status -ne "Running") {
+  throw "O serviço $serviceName foi registrado, mas está $($installedService.Status)."
+}
+
 Write-Host "Pasta persistente: $DataRoot"
 Write-Host "Firewall privado liberado na porta: $Port"
