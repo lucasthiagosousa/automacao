@@ -448,7 +448,6 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
       const fileName = "relatorio-toner-" + date.toISOString().slice(0, 10) + ".pdf";
       const root = document.createElement("main");
       root.id = "printTonerRoot";
-      root.hidden = true;
       const unit = document.getElementById("unit");
       const status = document.getElementById("status");
       const search = document.getElementById("search");
