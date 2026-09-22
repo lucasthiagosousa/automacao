@@ -210,6 +210,13 @@ begin
 
   if PortIsListening(IntToStr(PortNumber)) then
   begin
+    { Em atualização silenciosa, a porta pertence ao próprio serviço instalado. }
+    if WizardSilent then
+    begin
+      Result := True;
+      Exit;
+    end;
+
     Result :=
       MsgBox(
         'A porta ' + IntToStr(PortNumber) + ' já está sendo usada.' + #13#10 + #13#10 +
