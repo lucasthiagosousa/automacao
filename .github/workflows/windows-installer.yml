@@ -249,6 +249,17 @@ jobs:
             }
           }
           if ($null -eq $response) {
+            Stop-Service -Name "NexoTICentral" -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+            $serviceLogs = Join-Path $env:ProgramData "NexoTI\\CentralOperacoes\\logs"
+            if (Test-Path $serviceLogs) {
+              & takeown.exe /F $serviceLogs /R /D Y | Out-Null
+              & icacls.exe $serviceLogs /inheritance:e /grant "$($env:USERNAME):(OI)(CI)F" /T /C | Out-Null
+              Get-ChildItem $serviceLogs -File | ForEach-Object {
+                Write-Host "===== $($_.Name) ====="
+                Get-Content $_.FullName -Tail 200 -ErrorAction Continue
+              }
+            }
             throw "Após a atualização, a aplicação não respondeu na porta 3000. Erro: $lastWebError"
           }
 
