@@ -177,6 +177,25 @@ jobs:
             throw "A aplicação respondeu com HTTP $($response.StatusCode)."
           }
 
+          # Testa a atualização sobre uma instalação que já protegeu ProgramData.
+          $updateLog = Join-Path $env:RUNNER_TEMP "nexo-ti-update.log"
+          $updateArgs = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=$updateLog")
+          $updateProcess = Start-Process -FilePath $installer -ArgumentList $updateArgs -Wait -PassThru
+          if ($updateProcess.ExitCode -ne 0) {
+            if (Test-Path $updateLog) { Get-Content $updateLog -Tail 180 }
+            throw "A atualização de teste falhou com o código $($updateProcess.ExitCode)."
+          }
+
+          $service = Get-Service -Name "NexoTICentral" -ErrorAction Stop
+          if ($service.Status -ne "Running") {
+            throw "Após a atualização, o serviço está $($service.Status)."
+          }
+
+          $response = Invoke-WebRequest "http://127.0.0.1:3000/login.html" -UseBasicParsing -TimeoutSec 15
+          if ($response.StatusCode -ne 200) {
+            throw "Após a atualização, a aplicação respondeu com HTTP $($response.StatusCode)."
+          }
+
           $uninstaller = "C:\Program Files\Nexo TI\Central de Operacoes\unins000.exe"
           if (Test-Path $uninstaller) {
             & $uninstaller /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
