@@ -208,9 +208,22 @@ jobs:
             throw "Após a atualização, o serviço está $($service.Status)."
           }
 
-          $response = Invoke-WebRequest "http://127.0.0.1:3000/login.html" -UseBasicParsing -TimeoutSec 15
-          if ($response.StatusCode -ne 200) {
-            throw "Após a atualização, a aplicação respondeu com HTTP $($response.StatusCode)."
+          $response = $null
+          $lastWebError = $null
+          for ($attempt = 1; $attempt -le 15 -and $null -eq $response; $attempt++) {
+            try {
+              $candidate = Invoke-WebRequest "http://127.0.0.1:3000/login.html" -UseBasicParsing -TimeoutSec 5
+              if ($candidate.StatusCode -eq 200) {
+                $response = $candidate
+              }
+            }
+            catch {
+              $lastWebError = $_
+              Start-Sleep -Seconds 2
+            }
+          }
+          if ($null -eq $response) {
+            throw "Após a atualização, a aplicação não respondeu na porta 3000. Erro: $lastWebError"
           }
 
           $uninstaller = "C:\Program Files\Nexo TI\Central de Operacoes\unins000.exe"
