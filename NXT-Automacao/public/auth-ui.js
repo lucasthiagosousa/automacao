@@ -2,18 +2,18 @@
   "use strict";
 
   function ensureGlobalFavicon() {
-    var iconPath = "/assets/nexo-ti-icon.svg";
+    var iconPath = "/favicon.ico?v=1.3.1";
     var links = document.querySelectorAll('link[rel="icon"],link[rel="shortcut icon"]');
     if (!links.length) {
       var icon = document.createElement("link");
       icon.rel = "icon";
-      icon.type = "image/svg+xml";
+      icon.type = "image/x-icon";
       document.head.appendChild(icon);
       links = [icon];
     }
     Array.from(links).forEach(function (link) {
       link.href = iconPath;
-      if (!link.type) link.type = "image/svg+xml";
+      link.type = "image/x-icon";
     });
     var apple = document.querySelector('link[rel="apple-touch-icon"]');
     if (!apple) {
@@ -21,7 +21,7 @@
       apple.rel = "apple-touch-icon";
       document.head.appendChild(apple);
     }
-    apple.href = iconPath;
+    apple.href = "/assets/nexo-ti-icon.svg";
   }
   ensureGlobalFavicon();
 
