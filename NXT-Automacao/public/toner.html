@@ -28,6 +28,43 @@
     .grid{grid-template-columns:repeat(3,1fr)}.bar span,.badge{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
   @media print{
+    body.print-toner{background:#fff!important}
+    body.print-toner> *:not(#printTonerRoot){display:none!important}
+    body.print-toner #printTonerRoot{display:block!important;width:100%;margin:0;padding:0;color:#172b3f;background:#fff}
+    body.print-toner #printTonerRoot .print-report-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:12px;padding:0 0 11px;border-bottom:2px solid #0aad63}
+    body.print-toner #printTonerRoot .print-report-kicker{margin:0 0 4px;color:#078b4e;font-size:8px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+    body.print-toner #printTonerRoot h1{margin:0;color:#0b3654;font-size:21px;line-height:1.15}
+    body.print-toner #printTonerRoot .print-report-meta{color:#5f7387;font-size:8px;line-height:1.55;text-align:right}
+    body.print-toner #printTonerRoot .print-report-filters{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 11px}
+    body.print-toner #printTonerRoot .print-report-filter{padding:5px 8px;border:1px solid #dce5ee;border-radius:999px;background:#f6f9fb;color:#405c74;font-size:8px}
+    body.print-toner #printTonerRoot .kpis{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:7px!important;margin-bottom:11px!important}
+    body.print-toner #printTonerRoot .kpi{min-height:0!important;padding:9px!important;border:1px solid #dce5ee!important;border-radius:9px!important;box-shadow:none!important;break-inside:avoid}
+    body.print-toner #printTonerRoot .kpi span{font-size:7px!important}
+    body.print-toner #printTonerRoot .kpi strong{margin-top:3px!important;font-size:17px!important}
+    body.print-toner #printTonerRoot .kpi small{font-size:7px!important}
+    body.print-toner #printTonerRoot .panel{border:0!important;box-shadow:none!important;overflow:visible!important}
+    body.print-toner #printTonerRoot .panel-head{padding:0 0 9px!important;border-bottom:1px solid #dce5ee!important}
+    body.print-toner #printTonerRoot .panel-head h2{font-size:14px!important;color:#0b3654!important}
+    body.print-toner #printTonerRoot .panel-head p,
+    body.print-toner #printTonerRoot .panel-head span{font-size:8px!important}
+    body.print-toner #printTonerRoot .grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;padding-top:10px!important}
+    body.print-toner #printTonerRoot .unit-section{display:block!important;grid-column:1/-1!important;break-inside:auto}
+    body.print-toner #printTonerRoot .unit-heading{margin:3px 0 7px!important}
+    body.print-toner #printTonerRoot .unit-heading h3{font-size:12px!important}
+    body.print-toner #printTonerRoot .unit-cards{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important}
+    body.print-toner #printTonerRoot .card{padding:9px!important;border:1px solid #d6e1e9!important;border-radius:10px!important;box-shadow:none!important;break-inside:avoid!important;page-break-inside:avoid!important}
+    body.print-toner #printTonerRoot .card h3{font-size:10px!important}
+    body.print-toner #printTonerRoot .printer-model,
+    body.print-toner #printTonerRoot .printer-address,
+    body.print-toner #printTonerRoot .printer-unit{font-size:7px!important}
+    body.print-toner #printTonerRoot .supply{padding:7px 0!important}
+    body.print-toner #printTonerRoot .supply-name,
+    body.print-toner #printTonerRoot .supply-percent{font-size:8px!important}
+    body.print-toner #printTonerRoot button,
+    body.print-toner #printTonerRoot .no-print{display:none!important}
+    body.print-toner #printTonerRoot .print-report-footer{margin-top:10px;padding-top:7px;border-top:1px solid #dce5ee;color:#718096;font-size:7px;text-align:right;break-inside:avoid}
+  }
+  @media print{
     body.print-analytics{background:#fff!important}
     body.print-analytics> *:not(#printAnalyticsRoot){display:none!important}
     body.print-analytics #printAnalyticsRoot{display:block!important;width:100%;margin:0;padding:0;color:#172b3f;background:#fff}
@@ -409,8 +446,34 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
       const originalText = button.textContent;
       const date = new Date();
       const fileName = "relatorio-toner-" + date.toISOString().slice(0, 10) + ".pdf";
+      const root = document.createElement("main");
+      root.id = "printTonerRoot";
+      root.hidden = true;
+      const unit = document.getElementById("unit");
+      const status = document.getElementById("status");
+      const search = document.getElementById("search");
+      const unitLabel = unit.options[unit.selectedIndex] ? unit.options[unit.selectedIndex].text : "Todas as unidades";
+      const statusLabel = status.options[status.selectedIndex] ? status.options[status.selectedIndex].text : "Todos os status";
+      const sourceKpis = document.querySelector(".kpis");
+      const sourcePanel = document.getElementById("toner-printers");
+      root.innerHTML = '<header class="print-report-header"><div><p class="print-report-kicker">Gestão de suprimentos</p><h1>Relatório de impressoras e toners</h1></div><div class="print-report-meta">Gerado em '+date.toLocaleString("pt-BR")+'<br>Dados obtidos por monitoramento SNMP</div></header>'
+        +'<div class="print-report-filters"><span class="print-report-filter">Unidade: '+unitLabel.replace(/[&<>"]/g,function(x){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[x]})+'</span><span class="print-report-filter">Status: '+statusLabel.replace(/[&<>"]/g,function(x){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[x]})+'</span>'+(search.value?'<span class="print-report-filter">Busca: '+search.value.replace(/[&<>"]/g,function(x){return({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[x]})+'</span>':'')+'</div>';
+      if (sourceKpis) root.appendChild(sourceKpis.cloneNode(true));
+      if (sourcePanel) {
+        const panel = sourcePanel.cloneNode(true);
+        panel.removeAttribute("id");
+        panel.querySelectorAll("[id]").forEach(function(element){element.removeAttribute("id")});
+        root.appendChild(panel);
+      }
+      const footer = document.createElement("footer");
+      footer.className = "print-report-footer";
+      footer.textContent = "Nexo TI · Relatório operacional de impressão";
+      root.appendChild(footer);
+      document.body.appendChild(root);
+      document.body.classList.add("print-toner");
       button.disabled = true;
       button.textContent = "Preparando PDF...";
+      await new Promise(function(resolve){requestAnimationFrame(function(){requestAnimationFrame(resolve)})});
       try {
         if (window.desktopReports && typeof window.desktopReports.savePdf === "function") {
           const result = await window.desktopReports.savePdf({ fileName: fileName });
@@ -424,11 +487,13 @@ async function load(){const response=await fetch("/api/toner?t="+Date.now(),{cac
           const originalTitle = document.title;
           document.title = "Relatório de Toner - " + date.toLocaleDateString("pt-BR");
           window.print();
-          setTimeout(function () { document.title = originalTitle; }, 500);
+          document.title = originalTitle;
         }
       } catch (error) {
         alert("Não foi possível salvar o PDF: " + error.message);
       } finally {
+        document.body.classList.remove("print-toner");
+        root.remove();
         button.disabled = false;
         button.textContent = originalText;
       }
