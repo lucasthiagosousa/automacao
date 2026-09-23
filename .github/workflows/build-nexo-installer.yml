@@ -3,7 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/build-nexo-installer.yml'
-      - 'downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.3.zip'
+      - 'downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.4.zip'
   workflow_dispatch:
 permissions:
   contents: write
@@ -14,7 +14,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract installer source
         shell: pwsh
-        run: Expand-Archive downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.3.zip -DestinationPath staging
+        run: Expand-Archive downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.4.zip -DestinationPath staging
+      - name: Verify Node version parsing in Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $node = (Get-Command node.exe).Source
+          $version = (& $node --version).Trim()
+          if ($version -notmatch '^v(\d+)\.' -or [int]$Matches[1] -lt 20) { throw "Invalid Node version: $version" }
+          Write-Host "Detected Node.js $version"
       - name: Install Inno Setup compiler
         shell: pwsh
         run: choco install innosetup --yes --no-progress
@@ -27,9 +34,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $file = 'staging\NXT-Painel-Estoque\NexoTI-Painel-Estoque-Setup.exe'
-          gh release view v1.0.3-painel-estoque 2>$null
+          gh release view v1.0.4-painel-estoque 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload v1.0.3-painel-estoque $file --clobber
+            gh release upload v1.0.4-painel-estoque $file --clobber
           } else {
-            gh release create v1.0.3-painel-estoque $file --title 'Nexo TI - Painel de Estoque 1.0.3' --notes 'Corrige a reutilizacao de Node.js antigo em instalacoes anteriores. Baixa Node.js, dependencias npm e Chromium; inicia com o Windows e mostra icone na bandeja.' --latest=false
+            gh release create v1.0.4-painel-estoque $file --title 'Nexo TI - Painel de Estoque 1.0.4' --notes 'Corrige a leitura da versao Node.js no PowerShell 5.1. Baixa dependencias npm e Chromium; inicia com o Windows e mostra icone na bandeja.' --latest=false
           }
