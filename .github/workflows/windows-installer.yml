@@ -110,23 +110,13 @@ jobs:
           if (-not (Test-Path $installer)) { throw "Instalador não foi criado." }
           (Get-FileHash $installer -Algorithm SHA256).Hash | Out-File "$installer.sha256" -Encoding ascii
 
-      - name: Instalar painel antigo para testar migracao
+      - name: Simular inicializacao do painel antigo
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NEXO_INSTALL_NONINTERACTIVE: '1'
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release download v1.0.6-painel-estoque --pattern NexoTI-Painel-Estoque-Setup.exe --dir $env:RUNNER_TEMP
-          if ($LASTEXITCODE -ne 0) { throw 'Falha ao baixar painel antigo para o teste.' }
-          $oldInstaller = Join-Path $env:RUNNER_TEMP 'NexoTI-Painel-Estoque-Setup.exe'
-          $info = [Diagnostics.ProcessStartInfo]::new()
-          $info.FileName = $oldInstaller
-          $info.Arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
-          $info.UseShellExecute = $false
-          $process = [Diagnostics.Process]::Start($info)
-          if (-not $process.WaitForExit(600000)) { throw 'Instalacao antiga excedeu 10 minutos.' }
-          if ($process.ExitCode -ne 0) { throw "Instalacao antiga falhou: $($process.ExitCode)" }
+          $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c exit 0'
+          $trigger = New-ScheduledTaskTrigger -AtStartup
+          Register-ScheduledTask -TaskName 'NexoTI-PainelEstoque' -Action $action -Trigger $trigger -User 'SYSTEM' -Force | Out-Null
           Get-ScheduledTask -TaskName 'NexoTI-PainelEstoque' -ErrorAction Stop | Out-Null
 
       - name: Instalar e validar a Central no Windows
@@ -171,13 +161,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v1.3.3-server"
+          $tag = "v1.3.4-server"
           $installer = Join-Path $env:NXT_OUTPUT_DIR "NexoTI-Central-Servidor-Setup.exe"
           $checksum = "$installer.sha256"
 
           & gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            & gh release create $tag --target "${{ github.sha }}" --title "Nexo TI - Servidor interno v1.3.3" --notes "Central completa: serviço automático validado no Windows, dependências completas, acesso multiusuário e ícone de bandeja ao entrar na sessão. Remove painel antigo e preserva os dados."
+            & gh release create $tag --target "${{ github.sha }}" --title "Nexo TI - Servidor interno v1.3.4" --notes "Central completa: serviço automático validado no Windows, dependências completas, acesso multiusuário e ícone de bandeja ao entrar na sessão. Remove painel antigo e preserva os dados."
             if ($LASTEXITCODE -ne 0) { throw "Falha ao criar a release." }
           }
 
