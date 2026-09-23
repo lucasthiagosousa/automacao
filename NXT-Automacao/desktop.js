@@ -1,3 +1,14 @@
+if (process.argv.includes("--nexo-server")) {
+  const path = require("node:path");
+  const root = process.env.ProgramData || "C:\\ProgramData";
+  const base = path.join(root, "NexoTI", "CentralOperacoes");
+  process.env.NXT_DATA_DIR = path.join(base, "dados");
+  process.env.NXT_ENV_FILE = path.join(base, ".env");
+  process.env.NXT_HOST = "0.0.0.0";
+  process.env.NXT_BROWSER_CHANNEL = process.env.NXT_BROWSER_CHANNEL || "msedge";
+  process.env.NXT_AUTOMATION_HEADLESS = "1";
+  require("./server");
+} else {
 const { app, BrowserWindow, Menu, Tray, ipcMain, nativeImage, shell, dialog } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -140,8 +151,10 @@ function criarTray() {
 
 function iniciarSistema() {
   if (janelaPrincipal) return;
-  configurarAmbiente();
-  ({ servidor } = require("./server"));
+  if (!servidor) {
+    configurarAmbiente();
+    ({ servidor } = require("./server"));
+  }
   const abrir = () => {
     const endereco = servidor.address();
     const porta = typeof endereco === "object" && endereco ? endereco.port : portaConfigurada();
@@ -221,7 +234,21 @@ app.on("second-instance", () => {
   }
   iniciarSistema();
 });
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const net = require("node:net");
+  const port = 3000;
+  const running = await new Promise((resolve) => {
+    const socket = net.connect({ host: "127.0.0.1", port });
+    socket.once("connect", () => { socket.destroy(); resolve(true); });
+    socket.once("error", () => resolve(false));
+    socket.setTimeout(1200, () => { socket.destroy(); resolve(false); });
+  });
+  if (running) {
+    process.env.PORT = String(port);
+    servidor = { listening: true, address: () => ({ port }), close: () => {} };
+    iniciarSistema();
+    return;
+  }
   app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
   configurarAmbiente();
   const config = carregarConfiguracao();
@@ -232,3 +259,4 @@ app.whenReady().then(() => {
 });
 app.on("before-quit", () => { encerrando = true; if (servidor?.listening) servidor.close(); });
 app.on("window-all-closed", () => {});
+}

@@ -4,6 +4,13 @@ copyright: Copyright © 2026
 asar: true
 asarUnpack:
   - automacao.js
+extraResources:
+  - from: build/install-service.ps1
+    to: install-service.ps1
+  - from: build/uninstall-service.ps1
+    to: uninstall-service.ps1
+  - from: build/configure-server.ps1
+    to: configure-server.ps1
 directories:
   output: dist
   buildResources: build
@@ -32,4 +39,4 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: Central de Operações de TI
   uninstallDisplayName: Central de Operações de TI
-  runAfterFinish: true
+  runAfterFinish: false

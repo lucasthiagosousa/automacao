@@ -3,10 +3,9 @@
 !macroend
 
 !macro customInstall
-  nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="Central de Operações de TI"'
-  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="Central de Operações de TI" dir=in action=allow program="$INSTDIR\Central de Operações de TI.exe" enable=yes profile=domain,private'
+  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\install-service.ps1" -Executable "$INSTDIR\Central de Operações de TI.exe"'
 !macroend
 
 !macro customUnInstall
-  nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="Central de Operações de TI"'
+  nsExec::ExecToLog 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\resources\uninstall-service.ps1"'
 !macroend

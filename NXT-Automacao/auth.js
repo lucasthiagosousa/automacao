@@ -553,6 +553,9 @@ function createAuth(options) {
   });
 
   router.post("/setup", function (request, response) {
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.socket.remoteAddress)) {
+      return response.status(403).json({ sucesso: false, mensagem: "Crie o administrador no próprio servidor." });
+    }
     if (!setupRequired()) {
       return response.status(409).json({
         sucesso: false,
