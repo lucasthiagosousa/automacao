@@ -3,7 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/build-nexo-installer.yml'
-      - 'downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.4.zip'
+      - 'downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.5.zip'
   workflow_dispatch:
 permissions:
   contents: write
@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract installer source
         shell: pwsh
-        run: Expand-Archive downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.4.zip -DestinationPath staging
+        run: Expand-Archive downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.5.zip -DestinationPath staging
       - name: Verify Node version parsing in Windows PowerShell 5.1
         shell: powershell
         run: |
@@ -28,15 +28,45 @@ jobs:
       - name: Compile Windows installer
         shell: pwsh
         run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "staging\NXT-Painel-Estoque\NexoTI-PainelEstoque.iss"'
+      - name: Install and verify on Windows
+        shell: powershell
+        env:
+          NEXO_INSTALL_NONINTERACTIVE: '1'
+        run: |
+          $installer = Join-Path $PWD 'staging\NXT-Painel-Estoque\NexoTI-Painel-Estoque-Setup.exe'
+          $process = Start-Process $installer -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait
+          if ($process.ExitCode -ne 0) {
+            Get-Content "$env:ProgramData\NexoTI\PainelEstoque\logs\instalacao.log" -Tail 100 -ErrorAction SilentlyContinue
+            throw "Installer exit code: $($process.ExitCode)"
+          }
+          $base = "$env:ProgramData\NexoTI\PainelEstoque"
+          if (-not (Test-Path "$base\app\node_modules\express")) { throw 'npm dependencies missing' }
+          if (-not (Get-ChildItem "$base\browsers" -Recurse -Filter chrome.exe -ErrorAction SilentlyContinue)) { throw 'Chromium missing' }
+          $task = Get-ScheduledTask -TaskName 'NexoTI-PainelEstoque'
+          if ($task.Triggers[0].CimClass.CimClassName -notlike '*BootTrigger*') { throw 'Startup task trigger missing' }
+          Get-ScheduledTask -TaskName 'NexoTI-PainelEstoque-Bandeja' | Out-Null
+          $responding = $false
+          for ($i=0; $i -lt 20; $i++) {
+            try { $r = Invoke-WebRequest 'http://127.0.0.1:3000/' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200) { $responding = $true; break } } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $responding) { Get-Content "$base\logs\servidor.log" -Tail 50 -ErrorAction SilentlyContinue; throw 'Dashboard not responding' }
+          Write-Host 'Windows installer: dependencies, browser, startup tasks, and dashboard verified.'
+      - name: Save installation diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installation-diagnostics
+          path: C:\ProgramData\NexoTI\PainelEstoque\logs\*.log
       - name: Upload release asset
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $file = 'staging\NXT-Painel-Estoque\NexoTI-Painel-Estoque-Setup.exe'
-          gh release view v1.0.4-painel-estoque 2>$null
+          gh release view v1.0.5-painel-estoque 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload v1.0.4-painel-estoque $file --clobber
+            gh release upload v1.0.5-painel-estoque $file --clobber
           } else {
-            gh release create v1.0.4-painel-estoque $file --title 'Nexo TI - Painel de Estoque 1.0.4' --notes 'Corrige a leitura da versao Node.js no PowerShell 5.1. Baixa dependencias npm e Chromium; inicia com o Windows e mostra icone na bandeja.' --latest=false
+            gh release create v1.0.5-painel-estoque $file --title 'Nexo TI - Painel de Estoque 1.0.5' --notes 'Instalador validado em Windows: Node.js, npm, Chromium, tarefas de inicializacao e painel HTTP.' --latest=false
           }
