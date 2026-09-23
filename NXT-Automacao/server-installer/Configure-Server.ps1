@@ -44,7 +44,11 @@ foreach ($directory in $directories) {
 }
 
 # Somente SYSTEM e administradores locais acessam banco, credenciais e logs.
-& icacls.exe $DataRoot /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" /T /C | Out-Null
+& icacls.exe $DataRoot /inheritance:r /T /C | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Não foi possível remover permissões herdadas em $DataRoot." }
+& icacls.exe $DataRoot /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Não foi possível configurar permissões da pasta $DataRoot." }
+& icacls.exe $DataRoot /grant:r "*S-1-5-18:F" "*S-1-5-32-544:F" /T /C | Out-Null
 if ($LASTEXITCODE -ne 0) {
   throw "Não foi possível proteger a pasta de dados $DataRoot."
 }
@@ -52,10 +56,10 @@ if ($LASTEXITCODE -ne 0) {
 Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue |
   Remove-NetFirewallRule -ErrorAction SilentlyContinue
 
-New-NetFirewallRule -DisplayName $firewallRuleName -Direction Inbound -Action Allow -Enabled True -Profile Private -Protocol TCP -LocalPort $Port -RemoteAddress LocalSubnet | Out-Null
+New-NetFirewallRule -DisplayName $firewallRuleName -Direction Inbound -Action Allow -Enabled True -Profile Domain,Private -Protocol TCP -LocalPort $Port -RemoteAddress LocalSubnet | Out-Null
 
 Write-Host "Pasta persistente: $DataRoot"
-Write-Host "Firewall privado liberado na porta: $Port"
+Write-Host "Firewall da rede corporativa liberado na porta: $Port"
 
 $trayName = "NexoTI-Central-Bandeja"
 $trayPath = Join-Path $PSScriptRoot "Bandeja-Central.ps1"
@@ -70,4 +74,3 @@ if ([Environment]::UserInteractive -and (Get-Process -Id $PID).SessionId -gt 0) 
   Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-STA", "-WindowStyle", "Hidden", "-File", ('"' + $trayPath + '"'))
 }
 Write-Host "Icone da Central configurado para sessoes de usuario."
-

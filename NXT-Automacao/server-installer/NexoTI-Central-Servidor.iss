@@ -1,5 +1,5 @@
 #define MyAppName "Nexo TI - Central de Operações"
-#define MyAppVersion "1.3.3"
+#define MyAppVersion "1.3.5"
 #define MyAppPublisher "Nexo TI"
 #define StageDir GetEnv("NXT_STAGE_DIR")
 #define OutputDir GetEnv("NXT_OUTPUT_DIR")
@@ -232,6 +232,26 @@ begin
   Exec(ServiceExe, 'uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
+procedure RepairExistingPermissions;
+var
+  DataRoot: string;
+  ResultCode: Integer;
+begin
+  DataRoot := ExpandConstant('{commonappdata}\NexoTI\CentralOperacoes');
+  if not DirExists(DataRoot) then
+    Exit;
+
+  if not Exec(ExpandConstant('{sys}\takeown.exe'),
+    '/F "' + DataRoot + '" /A /R /D Y', '', SW_HIDE,
+    ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+    RaiseException('Não foi possível recuperar a propriedade da pasta de configuração.');
+
+  if not Exec(ExpandConstant('{sys}\icacls.exe'),
+    '"' + DataRoot + '" /grant:r "*S-1-5-18:F" "*S-1-5-32-544:F" /T /C',
+    '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+    RaiseException('Não foi possível recuperar o acesso à configuração do servidor.');
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): string;
 begin
   StopPreviousService;
@@ -240,11 +260,12 @@ end;
 
 procedure InitializeWizard;
 begin
+  RepairExistingPermissions;
   ServerPage := CreateInputQueryPage(
     wpSelectDir,
     'Configuração do servidor',
     'Defina como os colaboradores acessarão a Central.',
-    'A porta será liberada somente na rede privada. A comunidade SNMP é usada para consultar as impressoras.'
+    'A porta será liberada na rede corporativa. A comunidade SNMP é usada para consultar as impressoras.'
   );
 
   ServerPage.Add('Porta HTTP:', False);

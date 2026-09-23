@@ -119,6 +119,17 @@ jobs:
           Register-ScheduledTask -TaskName 'NexoTI-PainelEstoque' -Action $action -Trigger $trigger -User 'SYSTEM' -Force | Out-Null
           Get-ScheduledTask -TaskName 'NexoTI-PainelEstoque' -ErrorAction Stop | Out-Null
 
+      - name: Simular configuracao antiga com permissoes restritas
+        shell: pwsh
+        run: |
+          $dataRoot = Join-Path $env:ProgramData 'NexoTI\CentralOperacoes'
+          New-Item $dataRoot -ItemType Directory -Force | Out-Null
+          $envFile = Join-Path $dataRoot '.env'
+          "PORT=3000`nNXT_ENV_REPAIR_MARKER=preserve-me" | Set-Content $envFile
+          & icacls.exe $envFile /inheritance:r /grant:r '*S-1-5-18:F' | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao bloquear configuracao de teste.' }
+          if (Get-Content $envFile -ErrorAction SilentlyContinue) { throw 'Configuracao de teste ainda legivel.' }
+
       - name: Instalar e validar a Central no Windows
         shell: pwsh
         run: |
@@ -130,9 +141,15 @@ jobs:
           $info.UseShellExecute = $false
           $process = [Diagnostics.Process]::Start($info)
           if (-not $process.WaitForExit(240000)) { throw "Instalador nao encerrou em 4 minutos." }
+          if ($process.ExitCode -ne 0) { throw "Instalador falhou: $($process.ExitCode)" }
+          $installed = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object DisplayName -eq 'Nexo TI - Central de Operações' | Select-Object -First 1
+          if ($installed.DisplayVersion -ne '1.3.5') { throw "Versao incorreta do instalador: $($installed.DisplayVersion)" }
           $service = Get-Service NexoTICentral -ErrorAction Stop
           if ($service.Status -ne "Running") { throw "Servico NexoTICentral nao iniciou: $($service.Status)" }
           if ($service.StartType -ne "Automatic") { throw "Servico nao esta configurado para iniciar automaticamente." }
+          if (-not (Select-String (Join-Path $env:ProgramData 'NexoTI\CentralOperacoes\.env') -Pattern '^NXT_ENV_REPAIR_MARKER=preserve-me$')) { throw 'Configuracao existente nao foi preservada.' }
+          $firewall = Get-NetFirewallRule -DisplayName 'Nexo TI - Central de Operacoes' -ErrorAction Stop
+          if ($firewall.Profile -notmatch 'Domain' -or $firewall.Profile -notmatch 'Private') { throw 'Firewall corporativo nao configurado.' }
           Get-ScheduledTask -TaskName "NexoTI-Central-Bandeja" -ErrorAction Stop | Out-Null
           if (Get-ScheduledTask -TaskName 'NexoTI-PainelEstoque' -ErrorAction SilentlyContinue) { throw 'Tarefa do painel antigo ainda ativa.' }
           if (Test-Path "${env:ProgramFiles(x86)}\Nexo TI\Painel de Estoque\unins000.exe") { throw 'Painel antigo continua instalado.' }
@@ -161,13 +178,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v1.3.4-server"
+          $tag = "v1.3.5-server"
           $installer = Join-Path $env:NXT_OUTPUT_DIR "NexoTI-Central-Servidor-Setup.exe"
           $checksum = "$installer.sha256"
 
           & gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            & gh release create $tag --target "${{ github.sha }}" --title "Nexo TI - Servidor interno v1.3.4" --notes "Central completa: serviço automático validado no Windows, dependências completas, acesso multiusuário e ícone de bandeja ao entrar na sessão. Remove painel antigo e preserva os dados."
+            & gh release create $tag --target "${{ github.sha }}" --title "Nexo TI - Servidor interno v1.3.5" --notes "Central completa: corrige atualização com configuração protegida, preserva dados e libera a rede corporativa nas portas autorizadas. Serviço automático, dependências e ícone de bandeja validados no Windows."
             if ($LASTEXITCODE -ne 0) { throw "Falha ao criar a release." }
           }
 
