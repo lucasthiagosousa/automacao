@@ -56,3 +56,18 @@ New-NetFirewallRule -DisplayName $firewallRuleName -Direction Inbound -Action Al
 
 Write-Host "Pasta persistente: $DataRoot"
 Write-Host "Firewall privado liberado na porta: $Port"
+
+$trayName = "NexoTI-Central-Bandeja"
+$trayPath = Join-Path $PSScriptRoot "Bandeja-Central.ps1"
+$oldTray = Get-ScheduledTask -TaskName $trayName -ErrorAction SilentlyContinue
+if ($oldTray) { Unregister-ScheduledTask -TaskName $trayName -Confirm:$false }
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument ('-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File "' + $trayPath + '"')
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$principal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545" -RunLevel Limited
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew
+Register-ScheduledTask -TaskName $trayName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+if ([Environment]::UserInteractive -and (Get-Process -Id $PID).SessionId -gt 0) {
+  Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-STA", "-WindowStyle", "Hidden", "-File", ('"' + $trayPath + '"'))
+}
+Write-Host "Icone da Central configurado para sessoes de usuario."
+

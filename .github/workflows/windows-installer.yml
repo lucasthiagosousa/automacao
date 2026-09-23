@@ -78,6 +78,7 @@ jobs:
           Copy-Item "server-installer\NexoTICentral.xml" $service -Force
           Copy-Item "server-installer\Configure-Server.ps1" $service -Force
           Copy-Item "server-installer\Remove-LegacyPanel.ps1" $service -Force
+          Copy-Item "server-installer\Bandeja-Central.ps1" $service -Force
 
           if (-not (Test-Path (Join-Path $app "server.js"))) { throw "server.js ausente no pacote." }
           if (-not (Test-Path (Join-Path $app "public\login.html"))) { throw "interface web ausente no pacote." }
@@ -123,6 +124,7 @@ jobs:
           $service = Get-Service NexoTICentral -ErrorAction Stop
           if ($service.Status -ne "Running") { throw "Servico NexoTICentral nao iniciou: $($service.Status)" }
           if ($service.StartType -ne "Automatic") { throw "Servico nao esta configurado para iniciar automaticamente." }
+          Get-ScheduledTask -TaskName "NexoTI-Central-Bandeja" -ErrorAction Stop | Out-Null
           $app = Join-Path $env:ProgramFiles "Nexo TI\Central de Operacoes\app"
           if (-not (Test-Path (Join-Path $app "public\toner.html"))) { throw "Interface de toner ausente." }
           if (-not (Test-Path (Join-Path $app "node_modules\type-is\node_modules\content-type\dist\index.js"))) { throw "Dependencia aninhada ausente." }
@@ -148,13 +150,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v1.3.1-server"
+          $tag = "v1.3.2-server"
           $installer = Join-Path $env:NXT_OUTPUT_DIR "NexoTI-Central-Servidor-Setup.exe"
           $checksum = "$installer.sha256"
 
           & gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            & gh release create $tag --target "${{ github.sha }}" --title "Nexo TI - Servidor interno v1.3.1" --notes "Instalador para Windows Server. Executa como serviço, inicia com o Windows, aceita acesso multiusuário pela rede privada e preserva banco/configurações em atualizações."
+            & gh release create $tag --target "${{ github.sha }}" --title "Nexo TI - Servidor interno v1.3.2" --notes "Central completa: serviço automático validado no Windows, dependências completas, acesso multiusuário e ícone de bandeja ao entrar na sessão. Preserva banco e configurações."
             if ($LASTEXITCODE -ne 0) { throw "Falha ao criar a release." }
           }
 

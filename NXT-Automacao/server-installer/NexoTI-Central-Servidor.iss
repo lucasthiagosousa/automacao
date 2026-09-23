@@ -1,5 +1,5 @@
 #define MyAppName "Nexo TI - Central de Operações"
-#define MyAppVersion "1.3.1"
+#define MyAppVersion "1.3.2"
 #define MyAppPublisher "Nexo TI"
 #define StageDir GetEnv("NXT_STAGE_DIR")
 #define OutputDir GetEnv("NXT_OUTPUT_DIR")
@@ -59,6 +59,7 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 Filename: "http://localhost:{code:GetPort}/setup.html"; Description: "Abrir configuração inicial"; Flags: shellexec postinstall nowait skipifsilent
 
 [UninstallRun]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ""Get-ScheduledTask -TaskName 'NexoTI-Central-Bandeja' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false"""; Flags: runhidden waituntilterminated
 Filename: "{app}\service\NexoTICentral.exe"; Parameters: "stop"; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "{app}\service\NexoTICentral.exe"; Parameters: "uninstall"; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ""Get-NetFirewallRule -DisplayName 'Nexo TI - Central de Operacoes' -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue"""; Flags: runhidden waituntilterminated
@@ -271,4 +272,3 @@ begin
       'Os dados permanecem em C:\ProgramData\NexoTI\CentralOperacoes.';
   end;
 end;
-
