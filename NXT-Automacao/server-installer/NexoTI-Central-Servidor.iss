@@ -1,5 +1,5 @@
 #define MyAppName "Nexo TI - Central de Operações"
-#define MyAppVersion "1.3.2"
+#define MyAppVersion "1.3.3"
 #define MyAppPublisher "Nexo TI"
 #define StageDir GetEnv("NXT_STAGE_DIR")
 #define OutputDir GetEnv("NXT_OUTPUT_DIR")

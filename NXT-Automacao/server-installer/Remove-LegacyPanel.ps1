@@ -14,4 +14,14 @@ Get-CimInstance Win32_Process | Where-Object {
 } | ForEach-Object {
   Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
 }
-Write-Host 'Tarefas do painel antigo removidas. Dados antigos preservados.'
+$legacyUninstaller = Join-Path ${env:ProgramFiles(x86)} 'Nexo TI\Painel de Estoque\unins000.exe'
+if (Test-Path $legacyUninstaller) {
+  $info = New-Object System.Diagnostics.ProcessStartInfo
+  $info.FileName = $legacyUninstaller
+  $info.Arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
+  $info.UseShellExecute = $false
+  $process = [System.Diagnostics.Process]::Start($info)
+  if (-not $process.WaitForExit(120000)) { throw 'Desinstalacao do painel antigo excedeu dois minutos.' }
+  if ($process.ExitCode -ne 0) { throw "Falha ao remover painel antigo: $($process.ExitCode)." }
+}
+Write-Host 'Painel antigo removido. Dados antigos preservados.'
