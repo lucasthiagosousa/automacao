@@ -3,7 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/build-nexo-installer.yml'
-      - 'downloads/NexoTI-Painel-Estoque-Fonte-Instalador.zip'
+      - 'downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.2.zip'
   workflow_dispatch:
 permissions:
   contents: write
@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract installer source
         shell: pwsh
-        run: Expand-Archive downloads/NexoTI-Painel-Estoque-Fonte-Instalador.zip -DestinationPath staging
+        run: Expand-Archive downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.2.zip -DestinationPath staging
       - name: Install Inno Setup compiler
         shell: pwsh
         run: choco install innosetup --yes --no-progress
@@ -27,9 +27,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $file = 'staging\NXT-Painel-Estoque\NexoTI-Painel-Estoque-Setup.exe'
-          gh release view v1.0.1-painel-estoque 2>$null
+          gh release view v1.0.2-painel-estoque 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload v1.0.1-painel-estoque $file --clobber
+            gh release upload v1.0.2-painel-estoque $file --clobber
           } else {
-            gh release create v1.0.1-painel-estoque $file --title 'Nexo TI - Painel de Estoque 1.0.1' --notes 'Instalador Windows. Baixa Node.js, dependencias npm e Chromium; inicia com o Windows e disponibiliza icone na bandeja ao entrar na sessao.' --latest=false
+            gh release create v1.0.2-painel-estoque $file --title 'Nexo TI - Painel de Estoque 1.0.2' --notes 'Instalador Windows com log de diagnostico em ProgramData. Baixa Node.js, dependencias npm e Chromium; inicia com o Windows e mostra icone na bandeja.' --latest=false
           }
