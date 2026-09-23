@@ -3,7 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/build-nexo-installer.yml'
-      - 'downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.5.zip'
+      - 'downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.6.zip'
   workflow_dispatch:
 permissions:
   contents: write
@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract installer source
         shell: pwsh
-        run: Expand-Archive downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.5.zip -DestinationPath staging
+        run: Expand-Archive downloads/NexoTI-Painel-Estoque-Fonte-Instalador-v1.0.6.zip -DestinationPath staging
       - name: Verify Node version parsing in Windows PowerShell 5.1
         shell: powershell
         run: |
@@ -34,7 +34,12 @@ jobs:
           NEXO_INSTALL_NONINTERACTIVE: '1'
         run: |
           $installer = Join-Path $PWD 'staging\NXT-Painel-Estoque\NexoTI-Painel-Estoque-Setup.exe'
-          $process = Start-Process $installer -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait
+          $info = New-Object System.Diagnostics.ProcessStartInfo
+          $info.FileName = $installer
+          $info.Arguments = '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART'
+          $info.UseShellExecute = $false
+          $process = [System.Diagnostics.Process]::Start($info)
+          if (-not $process.WaitForExit(600000)) { throw 'Installer did not finish within 10 minutes' }
           if ($process.ExitCode -ne 0) {
             Get-Content "$env:ProgramData\NexoTI\PainelEstoque\logs\instalacao.log" -Tail 100 -ErrorAction SilentlyContinue
             throw "Installer exit code: $($process.ExitCode)"
@@ -64,9 +69,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $file = 'staging\NXT-Painel-Estoque\NexoTI-Painel-Estoque-Setup.exe'
-          gh release view v1.0.5-painel-estoque 2>$null
+          gh release view v1.0.6-painel-estoque 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload v1.0.5-painel-estoque $file --clobber
+            gh release upload v1.0.6-painel-estoque $file --clobber
           } else {
-            gh release create v1.0.5-painel-estoque $file --title 'Nexo TI - Painel de Estoque 1.0.5' --notes 'Instalador validado em Windows: Node.js, npm, Chromium, tarefas de inicializacao e painel HTTP.' --latest=false
+            gh release create v1.0.6-painel-estoque $file --title 'Nexo TI - Painel de Estoque 1.0.6' --notes 'Instalador validado em Windows: Node.js, npm, Chromium, tarefas de inicializacao e painel HTTP.' --latest=false
           }
