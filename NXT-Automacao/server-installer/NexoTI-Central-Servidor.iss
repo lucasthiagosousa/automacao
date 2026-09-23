@@ -1,5 +1,5 @@
 #define MyAppName "Nexo TI - Central de Operações"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.3.1"
 #define MyAppPublisher "Nexo TI"
 #define StageDir GetEnv("NXT_STAGE_DIR")
 #define OutputDir GetEnv("NXT_OUTPUT_DIR")
@@ -51,6 +51,7 @@ Name: "{autodesktop}\Nexo TI - Central"; Filename: "http://localhost:{code:GetPo
 Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDescription: "Atalhos:"; Flags: unchecked
 
 [Run]
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\service\Remove-LegacyPanel.ps1"""; StatusMsg: "Removendo inicializacao da versao antiga..."; Flags: runhidden waituntilterminated
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ""{app}\service\Configure-Server.ps1"" -Port {code:GetPort}"; StatusMsg: "Protegendo dados e configurando o firewall..."; Flags: runhidden waituntilterminated
 Filename: "{app}\service\NexoTICentral.exe"; Parameters: "install"; StatusMsg: "Instalando o serviço do Windows..."; Flags: runhidden waituntilterminated
 Filename: "{app}\service\NexoTICentral.exe"; Parameters: "start"; StatusMsg: "Iniciando a Central de Operações..."; Flags: runhidden waituntilterminated
@@ -270,3 +271,4 @@ begin
       'Os dados permanecem em C:\ProgramData\NexoTI\CentralOperacoes.';
   end;
 end;
+

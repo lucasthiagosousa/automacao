@@ -3,7 +3,7 @@ name: Gerar instalador Windows Server
 on:
   workflow_dispatch:
   push:
-    branches: [main, ferias-acessos-local]
+    branches: [main, ferias-acessos-local, fix/nexo-central-server-installer]
     paths:
       - "NXT-Automacao/**"
       - ".github/workflows/windows-installer.yml"
@@ -59,7 +59,7 @@ jobs:
           Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
           New-Item $app, $runtime, $service, $browsers -ItemType Directory -Force | Out-Null
 
-          $robocopyArgs = @(".", $app, "/E", "/R:2", "/W:2", "/XD", "dist", "dados", "build", "server-installer", "/XF", ".env")
+          $robocopyArgs = @(".", $app, "/E", "/R:2", "/W:2", "/XD", (Join-Path $PWD "dist"), (Join-Path $PWD "dados"), (Join-Path $PWD "build"), (Join-Path $PWD "server-installer"), "/XF", ".env")
           & robocopy @robocopyArgs
           if ($LASTEXITCODE -gt 7) {
             throw "Falha ao copiar a aplicação. Robocopy: $LASTEXITCODE"
@@ -77,10 +77,12 @@ jobs:
 
           Copy-Item "server-installer\NexoTICentral.xml" $service -Force
           Copy-Item "server-installer\Configure-Server.ps1" $service -Force
+          Copy-Item "server-installer\Remove-LegacyPanel.ps1" $service -Force
 
           if (-not (Test-Path (Join-Path $app "server.js"))) { throw "server.js ausente no pacote." }
           if (-not (Test-Path (Join-Path $app "public\login.html"))) { throw "interface web ausente no pacote." }
           if (-not (Test-Path (Join-Path $app "node_modules\express"))) { throw "dependências ausentes no pacote." }
+          if (-not (Test-Path (Join-Path $app "node_modules\type-is\node_modules\content-type\dist\index.js"))) { throw "content-type/dist ausente no pacote." }
           if (-not (Test-Path (Join-Path $runtime "node.exe"))) { throw "Node.js ausente no pacote." }
           if (-not (Get-ChildItem $browsers -Directory | Where-Object Name -Match "chromium")) {
             throw "Chromium ausente no pacote."
@@ -107,19 +109,52 @@ jobs:
           if (-not (Test-Path $installer)) { throw "Instalador não foi criado." }
           (Get-FileHash $installer -Algorithm SHA256).Hash | Out-File "$installer.sha256" -Encoding ascii
 
+      - name: Instalar e validar a Central no Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $installer = Join-Path $env:NXT_OUTPUT_DIR "NexoTI-Central-Servidor-Setup.exe"
+          $info = [Diagnostics.ProcessStartInfo]::new()
+          $info.FileName = $installer
+          $info.Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"
+          $info.UseShellExecute = $false
+          $process = [Diagnostics.Process]::Start($info)
+          if (-not $process.WaitForExit(240000)) { throw "Instalador nao encerrou em 4 minutos." }
+          $service = Get-Service NexoTICentral -ErrorAction Stop
+          if ($service.Status -ne "Running") { throw "Servico NexoTICentral nao iniciou: $($service.Status)" }
+          if ($service.StartType -ne "Automatic") { throw "Servico nao esta configurado para iniciar automaticamente." }
+          $app = Join-Path $env:ProgramFiles "Nexo TI\Central de Operacoes\app"
+          if (-not (Test-Path (Join-Path $app "public\toner.html"))) { throw "Interface de toner ausente." }
+          if (-not (Test-Path (Join-Path $app "node_modules\type-is\node_modules\content-type\dist\index.js"))) { throw "Dependencia aninhada ausente." }
+          $ok = $false
+          for ($i=0; $i -lt 20; $i++) {
+            try {
+              $r = Invoke-WebRequest "http://127.0.0.1:3000/login.html" -UseBasicParsing -TimeoutSec 3
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) { throw "Central nao respondeu na porta 3000." }
+          Write-Host "Central completa, servico automatico e pagina de login validados."
+      - name: Guardar diagnostico de instalacao em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexo-server-install-logs
+          path: C:\ProgramData\NexoTI\CentralOperacoes\logs\*
       - name: Publicar instalador
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $tag = "v1.3.0-server"
+          $tag = "v1.3.1-server"
           $installer = Join-Path $env:NXT_OUTPUT_DIR "NexoTI-Central-Servidor-Setup.exe"
           $checksum = "$installer.sha256"
 
           & gh release view $tag 2>$null
           if ($LASTEXITCODE -ne 0) {
-            & gh release create $tag --target "${{ github.sha }}" --title "Nexo TI - Servidor interno v1.3.0" --notes "Instalador para Windows Server. Executa como serviço, inicia com o Windows, aceita acesso multiusuário pela rede privada e preserva banco/configurações em atualizações."
+            & gh release create $tag --target "${{ github.sha }}" --title "Nexo TI - Servidor interno v1.3.1" --notes "Instalador para Windows Server. Executa como serviço, inicia com o Windows, aceita acesso multiusuário pela rede privada e preserva banco/configurações em atualizações."
             if ($LASTEXITCODE -ne 0) { throw "Falha ao criar a release." }
           }
 
