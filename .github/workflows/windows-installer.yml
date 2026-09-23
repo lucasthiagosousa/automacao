@@ -59,9 +59,18 @@ jobs:
           $executavel = Get-ChildItem -Path "dist\win-unpacked" -Filter "*.exe" | Select-Object -First 1
           if (-not $executavel) { throw "Executavel principal ausente." }
 
-      - name: Disponibilizar instalador para teste
-        uses: actions/upload-artifact@v4
-        with:
-          name: NexoTI-Central-Operacoes-Setup
-          path: NXT-Automacao/dist/*Setup*.exe
-          if-no-files-found: error
+      - name: Salvar instalador em release privada de rascunho
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "nexo-server-installer-20260923"
+          $file = Get-ChildItem -Path dist -Filter '*Setup*.exe' | Select-Object -First 1
+          if (-not $file) { throw 'Instalador não encontrado.' }
+          & gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            & gh release create $tag --draft --target "${{ github.sha }}" --title 'Nexo TI - instalador Windows para teste' --notes 'Build da Central de Operações de TI com início automático no Windows, acesso por IP e banco novo.'
+            if ($LASTEXITCODE -ne 0) { throw 'Falha ao criar release de rascunho.' }
+          }
+          & gh release upload $tag "$($file.FullName)" --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao enviar instalador.' }
