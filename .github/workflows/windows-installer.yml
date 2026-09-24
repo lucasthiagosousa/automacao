@@ -1,9 +1,6 @@
 name: Gerar instalador Windows
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ["NXT-Automacao/**", ".github/workflows/windows-installer.yml"]
 permissions:
   contents: write
 jobs:
