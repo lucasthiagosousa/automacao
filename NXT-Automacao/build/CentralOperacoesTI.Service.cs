@@ -62,7 +62,7 @@ namespace CentralOperacoesTIService
             var startInfo = new ProcessStartInfo
             {
                 FileName = electronExe,
-                Arguments = "\\\"" + serviceScript + "\\\"",
+                Arguments = "\"" + serviceScript + "\"",
                 WorkingDirectory = appDir,
                 UseShellExecute = false,
                 CreateNoWindow = true,
