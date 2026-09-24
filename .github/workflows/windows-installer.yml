@@ -26,13 +26,20 @@ jobs:
         run: npm ci
       - name: Instalar empacotador desktop
         run: npm install --no-save --package-lock=false electron@39.2.7 electron-builder@26.0.12
-      - name: Baixar wrapper do serviço Windows
+      - name: Compilar serviço Windows nativo
         shell: powershell
         run: |
-          $url = "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe"
-          Invoke-WebRequest -Uri $url -OutFile "build\CentralOperacoesTI-Service.exe"
+          $candidatos = @(
+            "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
+            "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
+          )
+          $csc = $candidatos | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $csc) { throw "Compilador C# do .NET Framework não encontrado." }
+
+          & $csc /nologo /target:exe /optimize+ /out:"build\CentralOperacoesTI-Service.exe" /reference:System.ServiceProcess.dll "build\CentralOperacoesTI.Service.cs"
+          if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar o serviço Windows." }
           if (-not (Test-Path "build\CentralOperacoesTI-Service.exe")) {
-            throw "WinSW não foi baixado."
+            throw "Executável do serviço Windows não foi gerado."
           }
       - name: Criar ícone do Windows
         shell: powershell
@@ -46,11 +53,11 @@ jobs:
           node --check server.js
           node --check service.js
           node --check desktop.js
-          if (-not (Test-Path "build\CentralOperacoesTI-Service.xml")) {
-            throw "Configuração do serviço Windows não encontrada."
+          if (-not (Test-Path "build\CentralOperacoesTI.Service.cs")) {
+            throw "Código-fonte do serviço Windows não encontrado."
           }
           if (-not (Test-Path "build\CentralOperacoesTI-Service.exe")) {
-            throw "Wrapper do serviço Windows não encontrado."
+            throw "Executável do serviço Windows não encontrado."
           }
           if (-not (Test-Path "public\\assets\\login-background.mp4")) {
             throw "Video do login nao encontrado."
@@ -110,8 +117,7 @@ jobs:
             "$app\server.js",
             "$app\service.js",
             "$app\desktop.js",
-            "dist\win-unpacked\CentralOperacoesTI-Service.exe",
-            "dist\win-unpacked\CentralOperacoesTI-Service.xml"
+            "dist\win-unpacked\CentralOperacoesTI-Service.exe"
           )
           foreach ($arquivo in $arquivos) {
             if (-not (Test-Path $arquivo)) { throw "Arquivo obrigatório ausente: $arquivo" }
