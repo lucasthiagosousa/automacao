@@ -16,6 +16,7 @@
   <onfailure action="restart" delay="60 sec" />
   <resetfailure>1 hour</resetfailure>
   <stoptimeout>15 sec</stoptimeout>
+  <hidewindow>true</hidewindow>
 
   <logpath>%ProgramData%\NexoTI\CentralOperacoes\logs</logpath>
   <log mode="roll-by-size">
