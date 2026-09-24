@@ -403,7 +403,7 @@ app.on("second-instance", () => {
 });
 
 app.whenReady().then(() => {
-  app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true });
+  app.setLoginItemSettings({ openAtLogin: false });
   configurarAmbiente();
   criarTray();
 
