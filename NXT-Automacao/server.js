@@ -31,6 +31,17 @@ const arquivoToner = path.join(pastaDados, "toner-atual.json");
 app.use(express.json());
 app.use("/assets", express.static(path.join(pastaPublica, "assets")));
 
+app.get("/api/health", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({
+    sucesso: true,
+    servico: process.env.NXT_SERVICE_MODE === "1" ? "windows-service" : "processo-local",
+    porta: PORTA,
+    host: HOST,
+    agora: new Date().toISOString(),
+  });
+});
+
 const auth = createAuth({
   databasePath: arquivoBanco,
 });
@@ -458,6 +469,19 @@ function lerConfiguracaoEnv() {
   }
 }
 
+function recarregarConfiguracaoNxt() {
+  const config = lerConfiguracaoEnv();
+
+  if (Object.prototype.hasOwnProperty.call(config, "NXT_EMAIL")) {
+    process.env.NXT_EMAIL = config.NXT_EMAIL;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "NXT_PASSWORD")) {
+    process.env.NXT_PASSWORD = config.NXT_PASSWORD;
+  }
+
+  return config;
+}
+
 function salvarConfiguracaoEnv(changes) {
   const current = { ...lerConfiguracaoEnv(), ...changes };
   const content = Object.entries(current)
@@ -470,18 +494,20 @@ function salvarConfiguracaoEnv(changes) {
 }
 
 app.get("/api/configuracao/nxt", auth.requireMaster, (req, res) => {
+  const config = recarregarConfiguracaoNxt();
   res.json({
     sucesso: true,
-    email: process.env.NXT_EMAIL || "",
-    senhaConfigurada: Boolean(process.env.NXT_PASSWORD),
+    email: config.NXT_EMAIL || process.env.NXT_EMAIL || "",
+    senhaConfigurada: Boolean(config.NXT_PASSWORD || process.env.NXT_PASSWORD),
   });
 });
 
 app.put("/api/configuracao/nxt", auth.requireMaster, (req, res) => {
+  const configAtual = recarregarConfiguracaoNxt();
   const email = String(req.body.email || "").trim();
   const password = String(req.body.password || "");
   if (!email) return res.status(400).json({ sucesso: false, mensagem: "Informe o usuário ou e-mail do NXT." });
-  if (!password && !process.env.NXT_PASSWORD) {
+  if (!password && !configAtual.NXT_PASSWORD && !process.env.NXT_PASSWORD) {
     return res.status(400).json({ sucesso: false, mensagem: "Informe a senha do NXT." });
   }
   const changes = { NXT_EMAIL: email };
@@ -780,6 +806,8 @@ app.post(
     });
   }
 
+  recarregarConfiguracaoNxt();
+
   if (
     !process.env.NXT_EMAIL ||
     !process.env.NXT_PASSWORD
@@ -787,7 +815,7 @@ app.post(
     return res.status(400).json({
       sucesso: false,
       mensagem:
-        "As credenciais do NXT não estão carregadas nesta janela do PowerShell.",
+        "As credenciais do NXT não estão configuradas no servidor.",
     });
   }
 
