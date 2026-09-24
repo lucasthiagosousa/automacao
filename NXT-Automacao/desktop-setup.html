@@ -25,7 +25,7 @@
     <form id="form">
       <div class="grid">
         <div class="field"><label for="email">Usuário ou e-mail NXT</label><input id="email" autocomplete="username" required></div>
-        <div class="field"><label for="port">Porta</label><input id="port" type="number" min="1024" max="65535" value="3000" required><div class="hint">Recomendado: 3000</div></div>
+        <div class="field"><label for="port">Porta do serviço</label><input id="port" type="number" value="3000" readonly><div class="hint">Fixa em 3000 para o serviço 24/7</div></div>
         <div class="field full"><label for="password">Senha NXT</label><input id="password" type="password" autocomplete="current-password" required></div>
       </div>
       <button id="submit" type="submit">Salvar e criar Master Admin</button>

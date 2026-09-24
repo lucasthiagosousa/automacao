@@ -26,6 +26,21 @@ jobs:
         run: npm ci
       - name: Instalar empacotador desktop
         run: npm install --no-save --package-lock=false electron@39.2.7 electron-builder@26.0.12
+      - name: Compilar serviço Windows nativo
+        shell: powershell
+        run: |
+          $candidatos = @(
+            "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
+            "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
+          )
+          $csc = $candidatos | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $csc) { throw "Compilador C# do .NET Framework não encontrado." }
+
+          & $csc /nologo /target:exe /optimize+ /out:"build\CentralOperacoesTI-Service.exe" /reference:System.ServiceProcess.dll "build\CentralOperacoesTI.Service.cs"
+          if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar o serviço Windows." }
+          if (-not (Test-Path "build\CentralOperacoesTI-Service.exe")) {
+            throw "Executável do serviço Windows não foi gerado."
+          }
       - name: Criar ícone do Windows
         shell: powershell
         run: magick build/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
@@ -36,13 +51,60 @@ jobs:
         shell: powershell
         run: |
           node --check server.js
+          node --check service.js
           node --check desktop.js
+          if (-not (Test-Path "build\CentralOperacoesTI.Service.cs")) {
+            throw "Código-fonte do serviço Windows não encontrado."
+          }
+          if (-not (Test-Path "build\CentralOperacoesTI-Service.exe")) {
+            throw "Executável do serviço Windows não encontrado."
+          }
           if (-not (Test-Path "public\\assets\\login-background.mp4")) {
             throw "Video do login nao encontrado."
           }
 
       - name: Gerar Setup.exe
         run: npx electron-builder --config electron-builder.yml --win nsis
+      - name: Testar instalação e serviço 24x7
+        shell: powershell
+        run: |
+          $arquivo = Get-ChildItem "dist\*Setup*.exe" | Select-Object -First 1
+          if (-not $arquivo) { throw "Instalador não encontrado para teste." }
+
+          $processo = Start-Process -FilePath $arquivo.FullName -ArgumentList "/S" -Wait -PassThru
+          if ($processo.ExitCode -ne 0) {
+            throw "Instalador retornou código $($processo.ExitCode)."
+          }
+
+          $servico = Get-Service -Name "CentralOperacoesTI" -ErrorAction Stop
+          if ($servico.Status -ne "Running") {
+            Start-Service -Name "CentralOperacoesTI"
+          }
+
+          $inicioAutomatico = (Get-CimInstance Win32_Service -Filter "Name='CentralOperacoesTI'").StartMode
+          if ($inicioAutomatico -ne "Auto") {
+            throw "Serviço não está configurado para início automático: $inicioAutomatico"
+          }
+
+          $respondendo = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $health = Invoke-RestMethod "http://127.0.0.1:3000/api/health" -TimeoutSec 3
+              if ($health.sucesso -eq $true) {
+                $respondendo = $true
+                break
+              }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+
+          if (-not $respondendo) {
+            Get-ChildItem "$env:ProgramData\NexoTI\CentralOperacoes\logs" -ErrorAction SilentlyContinue
+            Get-Content "$env:ProgramData\NexoTI\CentralOperacoes\logs\service-wrapper.log" -Tail 120 -ErrorAction SilentlyContinue
+            throw "Serviço instalado, mas o painel não respondeu na porta 3000."
+          }
+
+          Write-Host "Serviço CentralOperacoesTI instalado, automático e respondendo na porta 3000."
       - name: Validar dependências empacotadas
         shell: powershell
         run: |
@@ -52,13 +114,16 @@ jobs:
             "$app\node_modules\get-proto\index.js",
             "$app\node_modules\express\index.js",
             "$app\server.js",
-            "$app\desktop.js"
+            "$app\service.js",
+            "$app\desktop.js",
+            "dist\win-unpacked\CentralOperacoesTI-Service.exe"
           )
           foreach ($arquivo in $arquivos) {
             if (-not (Test-Path $arquivo)) { throw "Arquivo obrigatório ausente: $arquivo" }
           }
 
       - name: Publicar versão permanente
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         shell: powershell
         env:
@@ -66,11 +131,13 @@ jobs:
         run: |
           $arquivo = Get-ChildItem "dist\*Setup*.exe" | Select-Object -First 1
           if (-not $arquivo) { throw "Instalador não encontrado." }
-          gh release view "v1.1.6-server" *> $null
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "v$version-service"
+          gh release view $tag *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create "v1.1.6-server" --target "${{ github.sha }}" --title "Central de Operações de TI — Servidor v1.1.6" --notes "Instalador Windows em modo servidor, com acesso multiusuário pela rede, banco centralizado e histórico administrativo de solicitações."
+            gh release create $tag --target "${{ github.sha }}" --title "Central de Operações de TI — Serviço $version" --notes "Instalador Windows com backend 24/7 como serviço automático, recuperação em caso de falha, acesso pela rede na porta 3000 e dados persistentes em ProgramData."
           }
-          gh release upload "v1.1.6-server" $arquivo.FullName --clobber
+          gh release upload $tag $arquivo.FullName --clobber
 
       - name: Publicar instalador temporário
         uses: actions/upload-artifact@v4
