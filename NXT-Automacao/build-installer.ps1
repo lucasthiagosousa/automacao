@@ -1,0 +1,94 @@
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$raiz = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $raiz
+
+Write-Host ""
+Write-Host "Central de Operações de TI - Build local do instalador" -ForegroundColor Cyan
+Write-Host "======================================================" -ForegroundColor Cyan
+Write-Host ""
+
+function Executar([string]$Comando, [string[]]$Argumentos) {
+    Write-Host "> $Comando $($Argumentos -join ' ')" -ForegroundColor DarkGray
+    & $Comando @Argumentos
+    if ($LASTEXITCODE -ne 0) {
+        throw "Comando falhou com código $LASTEXITCODE - $Comando"
+    }
+}
+
+$node = Get-Command node.exe -ErrorAction Stop
+$npm = Get-Command npm.cmd -ErrorAction Stop
+$npx = Get-Command npx.cmd -ErrorAction Stop
+
+$nodeVersion = (& $node.Source --version).Trim()
+if ($nodeVersion -notmatch '^v(\d+)\.') {
+    throw "Não foi possível identificar a versão do Node.js: $nodeVersion"
+}
+
+if ([int]$Matches[1] -lt 20) {
+    throw "Node.js 20 ou superior é obrigatório. Versão encontrada: $nodeVersion"
+}
+
+Write-Host "Node.js detectado: $nodeVersion" -ForegroundColor Green
+
+$candidatosCsc = @(
+    "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
+    "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
+)
+
+$csc = $candidatosCsc | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $csc) {
+    throw "Compilador C# do .NET Framework não encontrado nesta máquina."
+}
+
+Write-Host "Compilador do serviço: $csc" -ForegroundColor Green
+
+Executar $npm.Source @("ci")
+Executar $npm.Source @(
+    "install",
+    "--no-save",
+    "--package-lock=false",
+    "electron@39.2.7",
+    "electron-builder@26.0.12"
+)
+
+Write-Host "Compilando serviço Windows..." -ForegroundColor Cyan
+& $csc /nologo /target:exe /optimize+ /out:"build\CentralOperacoesTI-Service.exe" /reference:System.ServiceProcess.dll "build\CentralOperacoesTI.Service.cs"
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Falha ao compilar o serviço Windows."
+}
+
+if (-not (Test-Path "build\CentralOperacoesTI-Service.exe")) {
+    throw "O executável do serviço Windows não foi gerado."
+}
+
+Executar $node.Source @("--check", "server.js")
+Executar $node.Source @("--check", "service.js")
+Executar $node.Source @("--check", "desktop.js")
+
+Write-Host "Gerando Setup.exe..." -ForegroundColor Cyan
+Executar $npx.Source @(
+    "electron-builder",
+    "--config",
+    "electron-builder.yml",
+    "--win",
+    "nsis"
+)
+
+$setup = Get-ChildItem "dist\*Setup*.exe" -ErrorAction Stop |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+if (-not $setup) {
+    throw "O Setup.exe não foi encontrado na pasta dist."
+}
+
+Write-Host ""
+Write-Host "Build concluído com sucesso." -ForegroundColor Green
+Write-Host "Instalador:" -ForegroundColor Green
+Write-Host $setup.FullName -ForegroundColor White
+Write-Host ""
+Write-Host "Após a instalação, o serviço esperado é: CentralOperacoesTI" -ForegroundColor DarkGray
+Write-Host "Painel de saúde local: http://127.0.0.1:3000/api/health" -ForegroundColor DarkGray
