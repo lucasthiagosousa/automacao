@@ -23,20 +23,15 @@ jobs:
         run: npm ci
       - name: Instalar empacotador desktop
         run: npm install --no-save --package-lock=false electron@39.2.7 electron-builder@26.0.12
-      - name: Compilar serviço Windows nativo
+      - name: Preparar serviço Windows
         shell: powershell
         run: |
-          $candidatos = @(
-            "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
-            "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
-          )
-          $csc = $candidatos | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $csc) { throw "Compilador C# do .NET Framework não encontrado." }
-
-          & $csc /nologo /target:exe /optimize+ /out:"build\CentralOperacoesTI-Service.exe" /reference:System.ServiceProcess.dll "build\CentralOperacoesTI.Service.cs"
-          if ($LASTEXITCODE -ne 0) { throw "Falha ao compilar o serviço Windows." }
+          Invoke-WebRequest -Uri "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe" -OutFile "build\CentralOperacoesTI-Service.exe"
           if (-not (Test-Path "build\CentralOperacoesTI-Service.exe")) {
-            throw "Executável do serviço Windows não foi gerado."
+            throw "Executável do serviço Windows não foi baixado."
+          }
+          if (-not (Test-Path "build\CentralOperacoesTI-Service.xml")) {
+            throw "Configuração do serviço Windows não encontrada."
           }
       - name: Validar banco local e permissões
         shell: powershell
@@ -47,11 +42,11 @@ jobs:
           node --check server.js
           node --check service.js
           node --check desktop.js
-          if (-not (Test-Path "build\CentralOperacoesTI.Service.cs")) {
-            throw "Código-fonte do serviço Windows não encontrado."
-          }
           if (-not (Test-Path "build\CentralOperacoesTI-Service.exe")) {
             throw "Executável do serviço Windows não encontrado."
+          }
+          if (-not (Test-Path "build\CentralOperacoesTI-Service.xml")) {
+            throw "Configuração do serviço Windows não encontrada."
           }
           if (-not (Test-Path "public\\assets\\login-background.mp4")) {
             throw "Video do login nao encontrado."
@@ -94,7 +89,8 @@ jobs:
 
           if (-not $respondendo) {
             Get-ChildItem "$env:ProgramData\NexoTI\CentralOperacoes\logs" -ErrorAction SilentlyContinue
-            Get-Content "$env:ProgramData\NexoTI\CentralOperacoes\logs\service-wrapper.log" -Tail 120 -ErrorAction SilentlyContinue
+            Get-Content "$env:ProgramData\NexoTI\CentralOperacoes\logs\*.out.log" -Tail 120 -ErrorAction SilentlyContinue
+            Get-Content "$env:ProgramData\NexoTI\CentralOperacoes\logs\*.err.log" -Tail 120 -ErrorAction SilentlyContinue
             throw "Serviço instalado, mas o painel não respondeu na porta 3000."
           }
 
@@ -110,7 +106,8 @@ jobs:
             "$app\server.js",
             "$app\service.js",
             "$app\desktop.js",
-            "dist\win-unpacked\CentralOperacoesTI-Service.exe"
+            "dist\win-unpacked\CentralOperacoesTI-Service.exe",
+            "dist\win-unpacked\CentralOperacoesTI-Service.xml"
           )
           foreach ($arquivo in $arquivos) {
             if (-not (Test-Path $arquivo)) { throw "Arquivo obrigatório ausente: $arquivo" }
