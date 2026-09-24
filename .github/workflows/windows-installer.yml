@@ -2,7 +2,7 @@ name: Gerar instalador Windows
 on:
   workflow_dispatch:
   push:
-    branches: [main, service-24x7-20260924]
+    branches: [main]
     paths: ["NXT-Automacao/**", ".github/workflows/windows-installer.yml"]
 permissions:
   contents: write
@@ -123,6 +123,7 @@ jobs:
           }
 
       - name: Publicar versão permanente
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         shell: powershell
         env:
