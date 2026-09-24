@@ -15,6 +15,11 @@ files:
   - "!.github/**"
 extraMetadata:
   main: desktop.js
+extraFiles:
+  - from: build/CentralOperacoesTI-Service.exe
+    to: CentralOperacoesTI-Service.exe
+  - from: build/CentralOperacoesTI-Service.xml
+    to: CentralOperacoesTI-Service.xml
 win:
   target:
     - target: nsis
