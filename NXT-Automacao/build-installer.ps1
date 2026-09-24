@@ -32,17 +32,19 @@ if ([int]$Matches[1] -lt 20) {
 
 Write-Host "Node.js detectado: $nodeVersion" -ForegroundColor Green
 
-$candidatosCsc = @(
-    "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
-    "$env:WINDIR\Microsoft.NET\Framework\v4.0.30319\csc.exe"
-)
+$winsw = "build\CentralOperacoesTI-Service.exe"
+$winswUrl = "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe"
 
-$csc = $candidatosCsc | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $csc) {
-    throw "Compilador C# do .NET Framework não encontrado nesta máquina."
+Write-Host "Baixando o host do serviço Windows..." -ForegroundColor Cyan
+Invoke-WebRequest -Uri $winswUrl -OutFile $winsw -UseBasicParsing
+
+if (-not (Test-Path $winsw)) {
+    throw "O host do serviço Windows não foi baixado."
 }
 
-Write-Host "Compilador do serviço: $csc" -ForegroundColor Green
+if (-not (Test-Path "build\CentralOperacoesTI-Service.xml")) {
+    throw "A configuração CentralOperacoesTI-Service.xml não foi encontrada."
+}
 
 Executar $npm.Source @("ci")
 Executar $npm.Source @(
@@ -52,17 +54,6 @@ Executar $npm.Source @(
     "electron@39.2.7",
     "electron-builder@26.0.12"
 )
-
-Write-Host "Compilando serviço Windows..." -ForegroundColor Cyan
-& $csc /nologo /target:exe /optimize+ /out:"build\CentralOperacoesTI-Service.exe" /reference:System.ServiceProcess.dll "build\CentralOperacoesTI.Service.cs"
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Falha ao compilar o serviço Windows."
-}
-
-if (-not (Test-Path "build\CentralOperacoesTI-Service.exe")) {
-    throw "O executável do serviço Windows não foi gerado."
-}
 
 Executar $node.Source @("--check", "server.js")
 Executar $node.Source @("--check", "service.js")
@@ -85,10 +76,14 @@ if (-not $setup) {
     throw "O Setup.exe não foi encontrado na pasta dist."
 }
 
+$hash = (Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -Path ($setup.FullName + ".sha256") -Value ($hash + "  " + $setup.Name) -Encoding ASCII
+
 Write-Host ""
 Write-Host "Build concluído com sucesso." -ForegroundColor Green
 Write-Host "Instalador:" -ForegroundColor Green
 Write-Host $setup.FullName -ForegroundColor White
+Write-Host "SHA256: $hash" -ForegroundColor White
 Write-Host ""
 Write-Host "Após a instalação, o serviço esperado é: CentralOperacoesTI" -ForegroundColor DarkGray
 Write-Host "Painel de saúde local: http://127.0.0.1:3000/api/health" -ForegroundColor DarkGray
