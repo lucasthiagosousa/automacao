@@ -1,0 +1,107 @@
+name: Gerar instalador Windows via Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "NXT-Automacao/**"
+      - ".github/workflows/windows-installer-linux.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Preparar serviço Windows
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3             "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe"             -o "NXT-Automacao/build/CentralOperacoesTI-Service.exe"
+
+          test -s "NXT-Automacao/build/CentralOperacoesTI-Service.exe"
+          test -s "NXT-Automacao/build/CentralOperacoesTI-Service.xml"
+          file "NXT-Automacao/build/CentralOperacoesTI-Service.exe"
+
+      - name: Gerar Setup Windows com Wine
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker run --rm             -e CI=true             -e CSC_IDENTITY_AUTO_DISCOVERY=false             -v "$GITHUB_WORKSPACE/NXT-Automacao:/project"             -w /project             electronuserland/builder:wine             bash -lc '
+              set -euo pipefail
+              npm ci
+              npm install --no-save --package-lock=false electron@39.2.7 electron-builder@26.0.12
+              node --check server.js
+              node --check service.js
+              node --check desktop.js
+              npx electron-builder --config electron-builder.yml --win nsis
+            '
+
+      - name: Validar conteúdo empacotado
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app="NXT-Automacao/dist/win-unpacked/resources/app"
+
+          test -f "$app/server.js"
+          test -f "$app/service.js"
+          test -f "$app/desktop.js"
+          test -f "$app/node_modules/express/index.js"
+          test -f "NXT-Automacao/dist/win-unpacked/CentralOperacoesTI-Service.exe"
+          test -f "NXT-Automacao/dist/win-unpacked/CentralOperacoesTI-Service.xml"
+
+          setup="$(find NXT-Automacao/dist -maxdepth 1 -type f -name '*Setup*.exe' -print -quit)"
+          test -n "$setup"
+          test -s "$setup"
+
+          echo "Instalador gerado: $setup"
+          ls -lh "$setup"
+
+      - name: Gerar SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd NXT-Automacao
+          setup="$(find dist -maxdepth 1 -type f -name '*Setup*.exe' -print -quit)"
+          sha256sum "$setup" > "$setup.sha256"
+          cat "$setup.sha256"
+
+      - name: Publicar release
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          version="$(node -p "require('./NXT-Automacao/package.json').version")"
+          tag="v${version}-service"
+          setup="$(find NXT-Automacao/dist -maxdepth 1 -type f -name '*Setup*.exe' -print -quit)"
+          checksum="$setup.sha256"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$setup" "$checksum" --clobber
+          else
+            gh release create "$tag" "$setup" "$checksum"               --target "$GITHUB_SHA"               --title "Central de Operações de TI — Serviço ${version}"               --notes "Instalador Windows com serviço 24/7. Inicia automaticamente no boot sem depender de login, reinicia após falhas, mantém dados em ProgramData e disponibiliza o painel na porta 3000."
+          fi
+
+          gh release edit "$tag" --latest
+
+      - name: Publicar artefato do build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Central-Operacoes-TI-v1.4.0-Windows
+          path: |
+            NXT-Automacao/dist/*Setup*.exe
+            NXT-Automacao/dist/*Setup*.exe.sha256
+          if-no-files-found: error
+          retention-days: 30
