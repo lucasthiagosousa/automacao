@@ -1,0 +1,25 @@
+<service>
+  <id>CentralOperacoesTI</id>
+  <name>Central de Operações de TI</name>
+  <description>Servidor 24/7 da Central de Operações de TI.</description>
+
+  <executable>%BASE%\Central de Operações de TI.exe</executable>
+  <arguments>resources\app\service.js</arguments>
+  <workingdirectory>%BASE%\resources\app</workingdirectory>
+
+  <env name="ELECTRON_RUN_AS_NODE" value="1" />
+  <env name="NXT_SERVICE_MODE" value="1" />
+
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <onfailure action="restart" delay="60 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>15 sec</stoptimeout>
+
+  <logpath>%ProgramData%\NexoTI\CentralOperacoes\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+</service>
