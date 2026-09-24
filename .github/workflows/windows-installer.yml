@@ -2,7 +2,7 @@ name: Gerar instalador Windows
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, service-24x7-20260924]
     paths: ["NXT-Automacao/**", ".github/workflows/windows-installer.yml"]
 permissions:
   contents: write
@@ -100,8 +100,7 @@ jobs:
 
           if (-not $respondendo) {
             Get-ChildItem "$env:ProgramData\NexoTI\CentralOperacoes\logs" -ErrorAction SilentlyContinue
-            Get-Content "$env:ProgramData\NexoTI\CentralOperacoes\logs\*.out.log" -Tail 80 -ErrorAction SilentlyContinue
-            Get-Content "$env:ProgramData\NexoTI\CentralOperacoes\logs\*.err.log" -Tail 80 -ErrorAction SilentlyContinue
+            Get-Content "$env:ProgramData\NexoTI\CentralOperacoes\logs\service-wrapper.log" -Tail 120 -ErrorAction SilentlyContinue
             throw "Serviço instalado, mas o painel não respondeu na porta 3000."
           }
 
