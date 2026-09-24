@@ -4,7 +4,7 @@
   <description>Servidor 24/7 da Central de Operações de TI.</description>
 
   <executable>%BASE%\Central de Operações de TI.exe</executable>
-  <arguments>resources\app\service.js</arguments>
+  <arguments>service.js</arguments>
   <workingdirectory>%BASE%\resources\app</workingdirectory>
 
   <env name="ELECTRON_RUN_AS_NODE" value="1" />
