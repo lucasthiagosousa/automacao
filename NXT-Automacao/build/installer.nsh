@@ -7,12 +7,13 @@
 !macroend
 
 !macro customInstall
-  CreateDirectory "$PROGRAMDATA\NexoTI"
-  CreateDirectory "$PROGRAMDATA\NexoTI\CentralOperacoes"
-  CreateDirectory "$PROGRAMDATA\NexoTI\CentralOperacoes\dados"
-  CreateDirectory "$PROGRAMDATA\NexoTI\CentralOperacoes\logs"
+  ReadEnvStr $0 "ProgramData"
+  CreateDirectory "$0\NexoTI"
+  CreateDirectory "$0\NexoTI\CentralOperacoes"
+  CreateDirectory "$0\NexoTI\CentralOperacoes\dados"
+  CreateDirectory "$0\NexoTI\CentralOperacoes\logs"
 
-  nsExec::ExecToLog 'icacls "$PROGRAMDATA\NexoTI\CentralOperacoes" /grant *S-1-5-32-545:(OI)(CI)M /T /C'
+  nsExec::ExecToLog 'icacls "$0\NexoTI\CentralOperacoes" /grant *S-1-5-32-545:(OI)(CI)M /T /C'
 
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="Central de Operações de TI"'
   nsExec::ExecToLog 'netsh advfirewall firewall add rule name="Central de Operações de TI" dir=in action=allow protocol=TCP localport=3000 profile=domain,private'
