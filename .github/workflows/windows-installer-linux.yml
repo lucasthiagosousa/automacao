@@ -1,4 +1,4 @@
-name: Gerar instalador Windows via Linux
+name: Gerar instalador Windows
 
 on:
   workflow_dispatch:
@@ -20,28 +20,38 @@ jobs:
       - name: Baixar projeto
         uses: actions/checkout@v4
 
-      - name: Preparar serviço Windows
+      - name: Preparar serviço e ícone
         shell: bash
         run: |
           set -euo pipefail
+
           curl -fL --retry 3             "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe"             -o "NXT-Automacao/build/CentralOperacoesTI-Service.exe"
 
           test -s "NXT-Automacao/build/CentralOperacoesTI-Service.exe"
           test -s "NXT-Automacao/build/CentralOperacoesTI-Service.xml"
-          file "NXT-Automacao/build/CentralOperacoesTI-Service.exe"
 
-      - name: Gerar Setup Windows com Wine
+      - name: Gerar Setup Windows
         shell: bash
         run: |
           set -euo pipefail
 
           docker run --rm             -e CI=true             -e CSC_IDENTITY_AUTO_DISCOVERY=false             -v "$GITHUB_WORKSPACE/NXT-Automacao:/project"             -w /project             electronuserland/builder:wine             bash -lc '
               set -euo pipefail
+
+              apt-get update
+              apt-get install -y --no-install-recommends imagemagick librsvg2-bin
+              rm -rf /var/lib/apt/lists/*
+
+              rsvg-convert -w 256 -h 256 build/icon.svg > build/icon.png
+              convert build/icon.png -define icon:auto-resize=256,128,64,48,32,16 build/icon.ico
+
               npm ci
               npm install --no-save --package-lock=false electron@39.2.7 electron-builder@26.0.12
+
               node --check server.js
               node --check service.js
               node --check desktop.js
+
               npx electron-builder --config electron-builder.yml --win nsis
             '
 
@@ -59,7 +69,7 @@ jobs:
           test -f "NXT-Automacao/dist/win-unpacked/CentralOperacoesTI-Service.exe"
           test -f "NXT-Automacao/dist/win-unpacked/CentralOperacoesTI-Service.xml"
 
-          setup="$(find NXT-Automacao/dist -maxdepth 1 -type f -name '*Setup*.exe' -print -quit)"
+          setup="$(find NXT-Automacao/dist -maxdepth 1 -type f -name 'Central-Operacoes-TI-Setup-*.exe' -print -quit)"
           test -n "$setup"
           test -s "$setup"
 
@@ -71,11 +81,12 @@ jobs:
         run: |
           set -euo pipefail
           cd NXT-Automacao
-          setup="$(find dist -maxdepth 1 -type f -name '*Setup*.exe' -print -quit)"
+
+          setup="$(find dist -maxdepth 1 -type f -name 'Central-Operacoes-TI-Setup-*.exe' -print -quit)"
           sha256sum "$setup" > "$setup.sha256"
           cat "$setup.sha256"
 
-      - name: Publicar release
+      - name: Publicar release oficial
         if: github.ref == 'refs/heads/main'
         shell: bash
         env:
@@ -85,23 +96,23 @@ jobs:
 
           version="$(node -p "require('./NXT-Automacao/package.json').version")"
           tag="v${version}-service"
-          setup="$(find NXT-Automacao/dist -maxdepth 1 -type f -name '*Setup*.exe' -print -quit)"
+          setup="$(find NXT-Automacao/dist -maxdepth 1 -type f -name 'Central-Operacoes-TI-Setup-*.exe' -print -quit)"
           checksum="$setup.sha256"
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "$setup" "$checksum" --clobber
           else
-            gh release create "$tag" "$setup" "$checksum"               --target "$GITHUB_SHA"               --title "Central de Operações de TI — Serviço ${version}"               --notes "Instalador Windows com serviço 24/7. Inicia automaticamente no boot sem depender de login, reinicia após falhas, mantém dados em ProgramData e disponibiliza o painel na porta 3000."
+            gh release create "$tag" "$setup" "$checksum"               --target "$GITHUB_SHA"               --title "Central de Operações de TI — v${version}"               --notes "Instalador oficial único da Central de Operações de TI. Serviço 24/7, início automático com o Windows, recuperação após falhas, dados persistentes em ProgramData e acesso pela rede na porta 3000."
           fi
 
           gh release edit "$tag" --latest
 
-      - name: Publicar artefato do build
+      - name: Publicar artefato temporário
         uses: actions/upload-artifact@v4
         with:
-          name: Central-Operacoes-TI-v1.4.0-Windows
+          name: Central-Operacoes-TI-v1.4.1-Windows
           path: |
-            NXT-Automacao/dist/*Setup*.exe
-            NXT-Automacao/dist/*Setup*.exe.sha256
+            NXT-Automacao/dist/Central-Operacoes-TI-Setup-*.exe
+            NXT-Automacao/dist/Central-Operacoes-TI-Setup-*.exe.sha256
           if-no-files-found: error
           retention-days: 30
