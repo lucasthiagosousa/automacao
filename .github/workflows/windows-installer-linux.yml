@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   build:
@@ -85,6 +86,32 @@ jobs:
           setup="$(find dist -maxdepth 1 -type f -name 'Central-Operacoes-TI-Setup-*.exe' -print -quit)"
           sha256sum "$setup" > "$setup.sha256"
           cat "$setup.sha256"
+
+      - name: Remover instaladores antigos do GitHub
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          echo "Removendo releases antigas..."
+          mapfile -t tags < <(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name')
+          for tag in "${tags[@]}"; do
+            if [ -n "$tag" ]; then
+              echo "Excluindo release: $tag"
+              gh release delete "$tag" --cleanup-tag -y || true
+            fi
+          done
+
+          echo "Removendo artifacts antigos..."
+          mapfile -t artifact_ids < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" --jq '.artifacts[].id')
+          for artifact_id in "${artifact_ids[@]}"; do
+            if [ -n "$artifact_id" ]; then
+              echo "Excluindo artifact: $artifact_id"
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id" || true
+            fi
+          done
 
       - name: Publicar release oficial
         if: github.ref == 'refs/heads/main'
